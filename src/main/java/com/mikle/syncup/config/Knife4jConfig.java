@@ -8,18 +8,18 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
 /**
- * OpenAPI interface document configuration.
+ * Knife4j API document configuration.
  */
 @Configuration
 @Profile({"dev", "test"})
-public class SwaggerConfig {
+public class Knife4jConfig {
 
     @Bean
     public OpenAPI syncupOpenApi() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("搭子星球接口文档")
-                        .description("搭子星球后端接口")
+                        .title("Sync Up API")
+                        .description("Sync Up backend API document")
                         .version("1.0")
                         .contact(new Contact()
                                 .name("mikle")

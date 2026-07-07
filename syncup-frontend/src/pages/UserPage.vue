@@ -19,7 +19,7 @@
           <span>星球编号</span>
         </div>
         <div>
-          <strong>{{ user.gender ?? '-' }}</strong>
+          <strong>{{ getGenderText(user.gender) }}</strong>
           <span>性别</span>
         </div>
       </section>
@@ -41,6 +41,12 @@
           </template>
         </van-cell>
       </section>
+
+      <div class="profile-actions">
+        <van-button block round plain type="danger" :loading="loggingOut" @click="confirmLogout">
+          退出登录
+        </van-button>
+      </div>
     </template>
 
     <template v-else-if="loading">
@@ -55,11 +61,16 @@
 
 <script setup lang="ts">
 import {computed, onMounted, ref} from "vue";
-import {getCurrentUser} from "../services/user";
+import {useRouter} from "vue-router";
+import {showConfirmDialog, showFailToast, showSuccessToast} from "vant";
+import {getCurrentUser, logout} from "../services/user";
 import {UserType} from "../models/user";
+import {getGenderText} from "../constants/user";
 
 const user = ref<UserType | null>(null);
 const loading = ref(true);
+const loggingOut = ref(false);
+const router = useRouter();
 
 const avatarText = computed(() => {
   const name = user.value?.username || user.value?.userAccount || '?';
@@ -73,6 +84,30 @@ onMounted(async () => {
     loading.value = false;
   }
 })
+
+const confirmLogout = async () => {
+  try {
+    await showConfirmDialog({
+      title: '确认退出登录',
+      message: '退出后需要重新登录才能继续使用账号相关功能。',
+    });
+  } catch (error) {
+    return;
+  }
+
+  loggingOut.value = true;
+  try {
+    await logout();
+    showSuccessToast('已退出登录');
+    router.replace('/user/login');
+  } catch (error) {
+    console.error('/user/logout error', error);
+    showFailToast('退出登录失败');
+    router.replace('/user/login');
+  } finally {
+    loggingOut.value = false;
+  }
+}
 </script>
 
 <style scoped>
@@ -213,5 +248,14 @@ onMounted(async () => {
   color: var(--app-primary-deep);
   background: rgba(24, 165, 143, 0.1);
   border-radius: 10px;
+}
+
+.profile-actions {
+  margin-top: 18px;
+}
+
+.profile-actions :deep(.van-button) {
+  height: 42px;
+  background: rgba(255, 255, 255, 0.94);
 }
 </style>

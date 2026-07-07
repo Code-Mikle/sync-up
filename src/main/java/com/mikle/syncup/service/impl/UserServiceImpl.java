@@ -4,6 +4,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.constant.UserConstant;
@@ -52,6 +53,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword, planetCode)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
         }
+        userAccount = userAccount.trim();
+        planetCode = planetCode.trim();
         if (userAccount.length() < 4) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户账号过短");
         }
@@ -65,11 +68,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String validPattern = "[`~!@#$%^&*()+=|{}':;',\\\\[\\\\].<>/?~！@#￥%……&*（）——+|{}【】‘；：”“’。，、？]";
         Matcher matcher = Pattern.compile(validPattern).matcher(userAccount);
         if (matcher.find()) {
-            return -1;
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号不能包含特殊字符");
         }
         // 密码和校验密码相同
         if (!userPassword.equals(checkPassword)) {
-            return -1;
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "两次输入的密码不一致");
         }
         // 账户不能重复
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
@@ -94,7 +97,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         user.setPlanetCode(planetCode);
         boolean saveResult = this.save(user);
         if (!saveResult) {
-            return -1;
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "注册失败");
         }
         return user.getId();
     }
@@ -191,23 +194,54 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (CollectionUtils.isEmpty(tagNameList)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
+        List<String> normalizedTagNameList = tagNameList.stream()
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(normalizedTagNameList)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
         // 1. 先查询所有用户
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         List<User> userList = userMapper.selectList(queryWrapper);
-        Gson gson = new Gson();
         // 2. 在内存中判断是否包含要求的标签
         return userList.stream().filter(user -> {
-            String tagsStr = user.getTags();
-            Set<String> tempTagNameSet = gson.fromJson(tagsStr, new TypeToken<Set<String>>() {
-            }.getType());
-            tempTagNameSet = Optional.ofNullable(tempTagNameSet).orElse(new HashSet<>());
-            for (String tagName : tagNameList) {
+            Set<String> tempTagNameSet = parseTagNameSet(user.getTags());
+            for (String tagName : normalizedTagNameList) {
                 if (!tempTagNameSet.contains(tagName)) {
                     return false;
                 }
             }
             return true;
         }).map(this::getSafetyUser).collect(Collectors.toList());
+    }
+
+    private Set<String> parseTagNameSet(String tagsStr) {
+        if (StringUtils.isBlank(tagsStr)) {
+            return Collections.emptySet();
+        }
+        String trimmedTags = tagsStr.trim();
+        Gson gson = new Gson();
+        try {
+            if (trimmedTags.startsWith("[")) {
+                Set<String> tagNameSet = gson.fromJson(trimmedTags, new TypeToken<Set<String>>() {
+                }.getType());
+                return Optional.ofNullable(tagNameSet).orElse(Collections.emptySet());
+            }
+            if (trimmedTags.startsWith("\"")) {
+                String tagName = gson.fromJson(trimmedTags, String.class);
+                return StringUtils.isBlank(tagName)
+                        ? Collections.emptySet()
+                        : Collections.singleton(tagName.trim());
+            }
+        } catch (JsonSyntaxException e) {
+            log.warn("parse user tags failed, tags={}", tagsStr, e);
+            return Collections.emptySet();
+        }
+        return Arrays.stream(trimmedTags.split("[,，]"))
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .collect(Collectors.toSet());
     }
 
     @Override
@@ -221,6 +255,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 如果不是管理员，只允许更新当前（自己的）信息
         if (!isAdmin(loginUser) && userId != loginUser.getId()) {
             throw new BusinessException(ErrorCode.NO_AUTH);
+        }
+        if (user.getGender() != null && (user.getGender() < 0 || user.getGender() > 2)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "性别参数错误");
         }
         User oldUser = userMapper.selectById(userId);
         if (oldUser == null) {
@@ -339,6 +376,3 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
 }
-
-
-

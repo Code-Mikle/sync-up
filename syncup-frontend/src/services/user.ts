@@ -1,5 +1,6 @@
 import myAxios from "../plugins/myAxios";
-import { setCurrentUserState } from "../states/user";
+import {clearLoginToken} from "../plugins/myAxios";
+import { clearCurrentUserState, setCurrentUserState } from "../states/user";
 
 export const getCurrentUser = async () => {
     // const currentUser = getCurrentUserState();
@@ -15,3 +16,11 @@ export const getCurrentUser = async () => {
     return null;
 }
 
+export const logout = async () => {
+    try {
+        await myAxios.post('/user/logout');
+    } finally {
+        clearLoginToken();
+        clearCurrentUserState();
+    }
+}

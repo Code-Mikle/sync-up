@@ -88,7 +88,6 @@ public class TeamController {
 
     @GetMapping("/list")
     public BaseResponse<List<TeamUserVO>> listTeams(TeamQuery teamQuery, HttpServletRequest request) {
-        System.out.println(teamQuery.getIdList().toString());
 
         if (teamQuery == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);

@@ -8,7 +8,17 @@
 
     <van-form class="app-form" @submit="onSubmit">
       <van-cell-group inset>
+        <van-field v-if="isGenderEdit" name="gender" label="性别">
+          <template #input>
+            <van-radio-group v-model="editUser.currentValue" direction="horizontal">
+              <van-radio v-for="option in genderOptions" :key="option.value" :name="option.value">
+                {{ option.text }}
+              </van-radio>
+            </van-radio-group>
+          </template>
+        </van-field>
         <van-field
+            v-else
             v-model="editUser.currentValue"
             :name="editUser.editKey"
             :label="editUser.editName"
@@ -27,10 +37,11 @@
 
 <script setup lang="ts">
 import {useRoute, useRouter} from "vue-router";
-import { ref } from "vue";
+import {computed, ref} from "vue";
 import myAxios from "../plugins/myAxios";
 import {showFailToast, showSuccessToast} from "vant";
 import {getCurrentUser} from "../services/user";
+import {genderOptions} from "../constants/user";
 
 const route = useRoute();
 const router = useRouter();
@@ -49,6 +60,19 @@ const editUser = ref({
   editName: String(getQueryValue(route.query.editName)),
 })
 
+const isGenderEdit = computed(() => editUser.value.editKey === 'gender');
+
+if (isGenderEdit.value && !['0', '1', '2'].includes(String(editUser.value.currentValue))) {
+  editUser.value.currentValue = '2';
+}
+
+const getSubmitValue = () => {
+  if (isGenderEdit.value) {
+    return Number(editUser.value.currentValue);
+  }
+  return editUser.value.currentValue;
+}
+
 const onSubmit = async () => {
   submitting.value = true;
   try {
@@ -63,7 +87,7 @@ const onSubmit = async () => {
 
     const res = await myAxios.post('/user/update', {
       'id': currentUser.id,
-      [editUser.value.editKey as string]: editUser.value.currentValue,
+      [editUser.value.editKey as string]: getSubmitValue(),
     })
     console.log(res, '更新请求');
     if (res.code === 0 && res.data > 0) {

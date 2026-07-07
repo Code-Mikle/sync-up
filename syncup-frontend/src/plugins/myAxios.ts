@@ -3,6 +3,7 @@ import axios, {type AxiosInstance, type AxiosRequestConfig} from "axios";
 const isDev = import.meta.env.DEV;
 const TOKEN_STORAGE_KEY = 'syncup_token';
 const TOKEN_PREFIX_STORAGE_KEY = 'syncup_token_prefix';
+const TOKEN_COOKIE_NAME = 'Authorization';
 
 export type BaseResponse<T = any> = {
     code: number;
@@ -22,12 +23,19 @@ const myAxios = axios.create({
     baseURL: isDev ? 'http://localhost:8080/api' : '线上地址',
 }) as BackendAxiosInstance;
 
-myAxios.defaults.withCredentials = false;
+myAxios.defaults.withCredentials = true;
+
+const getCookieValue = (name: string) => {
+    const cookie = document.cookie
+        .split('; ')
+        .find((item) => item.startsWith(`${name}=`));
+    return cookie ? decodeURIComponent(cookie.substring(name.length + 1)) : '';
+};
 
 // Add a request interceptor
 myAxios.interceptors.request.use(function (config) {
     console.log('我要发请求啦', config)
-    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    const token = getCookieValue(TOKEN_COOKIE_NAME) || localStorage.getItem(TOKEN_STORAGE_KEY);
     if (token) {
         const tokenPrefix = localStorage.getItem(TOKEN_PREFIX_STORAGE_KEY) || 'Bearer';
         config.headers.set('Authorization', `${tokenPrefix} ${token}`);

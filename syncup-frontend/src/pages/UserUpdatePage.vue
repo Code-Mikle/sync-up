@@ -24,7 +24,7 @@
       </section>
 
       <section class="user-field-group">
-        <van-cell title="性别" is-link :value="formatValue(user.gender)" @click="toEdit('gender', '性别', user.gender)"/>
+        <van-cell title="性别" is-link :value="getGenderText(user.gender)" @click="toEdit('gender', '性别', user.gender)"/>
         <van-cell title="电话" is-link :value="user.phone || '-'" @click="toEdit('phone', '电话', user.phone)"/>
         <van-cell title="邮箱" is-link :value="user.email || '-'" @click="toEdit('email', '邮箱', user.email)"/>
       </section>
@@ -47,6 +47,7 @@ import {useRouter} from "vue-router";
 import {computed, onMounted, ref} from "vue";
 import {getCurrentUser} from "../services/user";
 import {UserType} from "../models/user";
+import {getGenderText} from "../constants/user";
 
 const user = ref<UserType | null>(null);
 const loading = ref(true);

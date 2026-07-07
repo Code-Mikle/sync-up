@@ -38,18 +38,28 @@
             readonly
             name="datetimePicker"
             label="过期时间"
-            :placeholder="formatDate(addTeamData.expireTime) || '点击选择过期时间'"
-            @click="showPicker = true"
+            :model-value="formatDateTime(addTeamData.expireTime)"
+            placeholder="点击选择过期时间"
+            @click="openExpireTimePicker"
         />
         <van-popup v-model:show="showPicker" position="bottom">
-          <van-datetime-picker
-              v-model="addTeamData.expireTime"
-              @confirm="showPicker = false"
-              @cancel="showPicker = false"
-              type="datetime"
+          <van-picker-group
               title="请选择过期时间"
+              :tabs="['选择日期', '选择时间']"
+              next-step-text="下一步"
+              @confirm="confirmExpireTime"
+              @cancel="showPicker = false"
+          >
+            <van-date-picker
+              v-model="expireDatePickerValue"
+              :show-toolbar="false"
               :min-date="minDate"
-          />
+            />
+            <van-time-picker
+              v-model="expireTimePickerValue"
+              :show-toolbar="false"
+            />
+          </van-picker-group>
         </van-popup>
         <van-field name="radio" label="队伍状态">
           <template #input>
@@ -90,6 +100,7 @@ import {onMounted, ref} from "vue";
 import myAxios from "../plugins/myAxios";
 import {showFailToast, showSuccessToast} from "vant";
 import {TeamType} from "../models/team";
+import {composeDateTime, formatDateTime, toDatePickerValue, toTimePickerValue} from "../utils/date";
 
 const router = useRouter();
 const route = useRoute();
@@ -101,6 +112,8 @@ const minDate = new Date();
 const loading = ref(true);
 const loaded = ref(false);
 const submitting = ref(false);
+const expireDatePickerValue = ref<string[]>(toDatePickerValue(new Date()));
+const expireTimePickerValue = ref<string[]>(toTimePickerValue(new Date()));
 
 const id = Number(route.query.id ?? 0);
 
@@ -134,12 +147,21 @@ onMounted(async () => {
   }
 })
 
-const formatDate = (value: unknown) => {
-  if (!value) {
-    return '';
+const openExpireTimePicker = () => {
+  const fallback = new Date();
+  expireDatePickerValue.value = toDatePickerValue(addTeamData.value.expireTime, fallback);
+  expireTimePickerValue.value = toTimePickerValue(addTeamData.value.expireTime, fallback);
+  showPicker.value = true;
+}
+
+const confirmExpireTime = () => {
+  const expireTime = composeDateTime(expireDatePickerValue.value, expireTimePickerValue.value);
+  if (expireTime <= new Date()) {
+    showFailToast('过期时间必须晚于当前时间');
+    return;
   }
-  const dateText = String(value);
-  return dateText.length > 16 ? dateText.slice(0, 16).replace('T', ' ') : dateText;
+  addTeamData.value.expireTime = expireTime;
+  showPicker.value = false;
 }
 
 // 提交

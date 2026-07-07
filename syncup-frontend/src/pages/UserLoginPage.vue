@@ -33,18 +33,31 @@
         </van-button>
       </div>
     </van-form>
+
+    <div class="auth-switch">
+      还没有账号？
+      <button type="button" @click="toRegister">去注册</button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import {useRoute} from "vue-router";
+import {useRoute, useRouter} from "vue-router";
 import {ref} from "vue";
 import myAxios, {setLoginToken} from "../plugins/myAxios";
 import {showFailToast, showSuccessToast} from "vant";
 
 const route = useRoute();
+const router = useRouter();
 
-const userAccount = ref('');
+const getQueryValue = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return value[0] ?? '';
+  }
+  return value ?? '';
+};
+
+const userAccount = ref(String(getQueryValue(route.query.userAccount)));
 const userPassword = ref('');
 const submitting = ref(false);
 
@@ -72,6 +85,10 @@ const onSubmit = async () => {
     submitting.value = false;
   }
 };
+
+const toRegister = () => {
+  router.push('/user/register');
+}
 
 </script>
 
@@ -144,5 +161,20 @@ const onSubmit = async () => {
 
 .login-form {
   margin-top: 18px;
+}
+
+.auth-switch {
+  margin-top: 16px;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.auth-switch button {
+  padding: 0;
+  color: var(--app-primary-deep);
+  font-weight: 800;
+  background: transparent;
+  border: 0;
 }
 </style>
