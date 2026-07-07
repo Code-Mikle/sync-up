@@ -1,51 +1,217 @@
 <template>
-  <template v-if="user">
-    <van-cell title="当前用户" :value="user?.username" />
-    <van-cell title="修改信息" is-link to="/user/update" />
-    <van-cell title="我创建的队伍" is-link to="/user/team/create" />
-    <van-cell title="我加入的队伍" is-link to="/user/team/join" />
-  </template>
+  <div class="profile-page">
+    <template v-if="user">
+      <section class="profile-card">
+        <div class="profile-card__avatar">
+          <img v-if="user.avatarUrl" :src="user.avatarUrl" :alt="user.username"/>
+          <span v-else>{{ avatarText }}</span>
+        </div>
+        <div class="profile-card__body">
+          <p class="profile-card__eyebrow">当前用户</p>
+          <h1>{{ user.username || '未命名用户' }}</h1>
+          <p>账号 {{ user.userAccount || '-' }}</p>
+        </div>
+      </section>
+
+      <section class="profile-stats">
+        <div>
+          <strong>{{ user.planetCode || '-' }}</strong>
+          <span>星球编号</span>
+        </div>
+        <div>
+          <strong>{{ user.gender ?? '-' }}</strong>
+          <span>性别</span>
+        </div>
+      </section>
+
+      <section class="profile-menu">
+        <van-cell title="修改信息" label="昵称、头像、联系方式" is-link to="/user/update">
+          <template #icon>
+            <van-icon class="profile-menu__icon" name="edit"/>
+          </template>
+        </van-cell>
+        <van-cell title="我创建的队伍" label="管理自己发起的队伍" is-link to="/user/team/create">
+          <template #icon>
+            <van-icon class="profile-menu__icon" name="cluster-o"/>
+          </template>
+        </van-cell>
+        <van-cell title="我加入的队伍" label="查看已经加入的队伍" is-link to="/user/team/join">
+          <template #icon>
+            <van-icon class="profile-menu__icon" name="friends-o"/>
+          </template>
+        </van-cell>
+      </section>
+    </template>
+
+    <template v-else-if="loading">
+      <section class="profile-card profile-card--loading">
+        <van-skeleton avatar title :row="3"/>
+      </section>
+    </template>
+
+    <van-empty v-else image-size="88" description="暂未获取到用户信息"/>
+  </div>
 </template>
 
 <script setup lang="ts">
-import {useRouter} from "vue-router";
-import {onMounted, ref} from "vue";
-import myAxios from "../plugins/myAxios";
-import {showFailToast, showSuccessToast} from "vant";
+import {computed, onMounted, ref} from "vue";
 import {getCurrentUser} from "../services/user";
+import {UserType} from "../models/user";
 
-// const user = {
-//   id: 1,
-//   username: 'tom',
-//   userAccount: 'tom',
-//   avatarUrl: '',
-//   gender: '男',
-//   phone: '123112312',
-//   email: '12345@qq.com',
-//   planetCode: '1234',
-//   createTime: new Date(),
-// }
+const user = ref<UserType | null>(null);
+const loading = ref(true);
 
-const user = ref();
-
-const router = useRouter();
+const avatarText = computed(() => {
+  const name = user.value?.username || user.value?.userAccount || '?';
+  return name.trim().slice(0, 1).toUpperCase();
+});
 
 onMounted(async () => {
-  user.value = await getCurrentUser();
+  try {
+    user.value = await getCurrentUser();
+  } finally {
+    loading.value = false;
+  }
 })
-
-const toEdit = (editKey: string, editName: string, currentValue: string) => {
-  router.push({
-    path: '/user/edit',
-    query: {
-      editKey,
-      editName,
-      currentValue,
-    }
-  })
-}
 </script>
 
 <style scoped>
+.profile-page {
+  padding: 14px var(--app-page-x) 0;
+}
 
+.profile-card {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  padding: 18px;
+  overflow: hidden;
+  color: #ffffff;
+  background:
+      radial-gradient(circle at 86% 18%, rgba(255, 184, 77, 0.34), transparent 7rem),
+      linear-gradient(135deg, #0b7d72 0%, #18a58f 56%, #70c69d 100%);
+  border-radius: 24px;
+  box-shadow: 0 18px 34px rgba(16, 113, 101, 0.22);
+}
+
+.profile-card--loading {
+  display: block;
+  min-height: 132px;
+  color: var(--app-text);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.profile-card__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 68px;
+  width: 68px;
+  height: 68px;
+  overflow: hidden;
+  color: var(--app-primary-deep);
+  font-size: 26px;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.9);
+  border: 3px solid rgba(255, 255, 255, 0.36);
+  border-radius: 22px;
+}
+
+.profile-card__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-card__body {
+  min-width: 0;
+}
+
+.profile-card__eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.profile-card h1 {
+  max-width: 210px;
+  margin: 0;
+  overflow: hidden;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.profile-card p:last-child {
+  margin: 7px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.profile-stats div {
+  min-width: 0;
+  padding: 13px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  box-shadow: var(--app-shadow);
+}
+
+.profile-stats strong,
+.profile-stats span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-stats strong {
+  font-size: 17px;
+  font-weight: 900;
+  color: var(--app-text);
+}
+
+.profile-stats span {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+
+.profile-menu {
+  margin-top: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  box-shadow: var(--app-shadow);
+}
+
+.profile-menu :deep(.van-cell) {
+  align-items: center;
+  padding: 15px;
+}
+
+.profile-menu__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 10px;
+  color: var(--app-primary-deep);
+  background: rgba(24, 165, 143, 0.1);
+  border-radius: 10px;
+}
 </style>

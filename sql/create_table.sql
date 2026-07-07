@@ -69,3 +69,5 @@ create table tag
 
 # 在 tag 这张表的 userId 这一列上，建一个名叫 idx_userId 的索引。
 create index idx_userId on tag (userId);
+
+TRUNCATE TABLE user;

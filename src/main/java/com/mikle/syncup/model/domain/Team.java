@@ -1,7 +1,10 @@
 package com.mikle.syncup.model.domain;
 
 import com.baomidou.mybatisplus.annotation.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.util.Date;
@@ -11,6 +14,9 @@ import java.util.Date;
  */
 @TableName(value = "team")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Team implements Serializable {
     /**
      * id

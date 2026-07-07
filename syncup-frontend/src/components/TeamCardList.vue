@@ -1,53 +1,98 @@
 <template>
-  <div
-      id="teamCardList"
-  >
-    <van-card
-        v-for="team in props.teamList"
-        :thumb="ikun"
-        :desc="team.description"
-        :title="`${team.name}`"
+  <div class="team-list">
+    <article class="team-card team-card--loading" v-if="props.loading" v-for="item in 3" :key="item">
+      <van-skeleton title :row="4" />
+    </article>
+
+    <article class="team-card" v-else v-for="team in props.teamList" :key="team.id">
+      <div class="team-card__cover">
+        <img :src="ikun" alt="队伍封面"/>
+      </div>
+
+      <div class="team-card__body">
+        <div class="team-card__header">
+          <div class="team-card__title-block">
+            <h3>{{ team.name || '未命名队伍' }}</h3>
+            <span>{{ getCreatorName(team) }}</span>
+          </div>
+          <van-tag class="team-card__status" :class="getStatusClass(team.status)" round>
+            {{ teamStatusEnum[team.status] || '未知' }}
+          </van-tag>
+        </div>
+
+        <p class="team-card__desc">{{ team.description || '这个队伍暂时还没有描述。' }}</p>
+
+        <div class="team-card__meta">
+          <div class="team-card__meta-item">
+            <strong>{{ team.hasJoinNum ?? 0 }}/{{ team.maxNum }}</strong>
+            <span>人数</span>
+          </div>
+          <div class="team-card__meta-item">
+            <strong>{{ formatDate(team.expireTime) }}</strong>
+            <span>过期</span>
+          </div>
+          <div class="team-card__meta-item">
+            <strong>{{ formatDate(team.createTime) }}</strong>
+            <span>创建</span>
+          </div>
+        </div>
+
+        <div class="team-card__actions">
+          <van-button
+              v-if="team.userId !== currentUser?.id && !team.hasJoin"
+              class="team-card__button"
+              size="small"
+              type="primary"
+              round
+              @click="preJoinTeam(team)"
+          >
+            加入队伍
+          </van-button>
+          <van-button
+              v-if="team.userId === currentUser?.id"
+              class="team-card__button"
+              size="small"
+              plain
+              round
+              @click="doUpdateTeam(team.id)"
+          >
+            更新
+          </van-button>
+          <van-button
+              v-if="team.userId !== currentUser?.id && team.hasJoin"
+              class="team-card__button"
+              size="small"
+              plain
+              round
+              @click="doQuitTeam(team.id)"
+          >
+            退出
+          </van-button>
+          <van-button
+              v-if="team.userId === currentUser?.id"
+              class="team-card__button"
+              size="small"
+              type="danger"
+              plain
+              round
+              @click="doDeleteTeam(team.id)"
+          >
+            解散
+          </van-button>
+        </div>
+      </div>
+    </article>
+
+    <van-dialog
+        v-model:show="showPasswordDialog"
+        title="请输入队伍密码"
+        show-cancel-button
+        @confirm="doJoinTeam"
+        @cancel="doJoinCancel"
     >
-      <template #tags>
-        <van-tag plain type="danger" style="margin-right: 8px; margin-top: 8px">
-          {{
-            teamStatusEnum[team.status]
-          }}
-        </van-tag>
-      </template>
-      <template #bottom>
-        <div>
-          {{ `队伍人数: ${team.hasJoinNum}/${team.maxNum}` }}
-        </div>
-        <div v-if="team.expireTime">
-          {{ '过期时间: ' + team.expireTime }}
-        </div>
-        <div>
-          {{ '创建时间: ' + team.createTime }}
-        </div>
-      </template>
-      <template #footer>
-        <van-button size="small" type="primary" v-if="team.userId !== currentUser?.id && !team.hasJoin" plain
-                    @click="preJoinTeam(team)">
-          加入队伍
-        </van-button>
-        <van-button v-if="team.userId === currentUser?.id" size="small" plain
-                    @click="doUpdateTeam(team.id)">更新队伍
-        </van-button>
-        <!-- 仅加入队伍可见 -->
-        <van-button v-if="team.userId !== currentUser?.id && team.hasJoin" size="small" plain
-                    @click="doQuitTeam(team.id)">退出队伍
-        </van-button>
-        <van-button v-if="team.userId === currentUser?.id" size="small" type="danger" plain
-                    @click="doDeleteTeam(team.id)">解散队伍
-        </van-button>
-      </template>
-    </van-card>
-    <van-dialog v-model:show="showPasswordDialog" title="请输入密码" show-cancel-button @confirm="doJoinTeam" @cancel="doJoinCancel">
-      <van-field v-model="password" placeholder="请输入密码"/>
+      <van-field v-model="password" type="password" placeholder="请输入密码"/>
     </van-dialog>
   </div>
-
 </template>
 
 <script setup lang="ts">
@@ -55,19 +100,24 @@ import {TeamType} from "../models/team";
 import {teamStatusEnum} from "../constants/team";
 import ikun from '../assets/ikun.png';
 import myAxios from "../plugins/myAxios";
-import {showFailToast, showSuccessToast} from "vant";
+import {showConfirmDialog, showFailToast, showSuccessToast} from "vant";
 import {onMounted, ref} from "vue";
 import {getCurrentUser} from "../services/user";
 import {useRouter} from "vue-router";
 
 interface TeamCardListProps {
+  loading?: boolean;
   teamList: TeamType[];
 }
 
 const props = withDefaults(defineProps<TeamCardListProps>(), {
-  // @ts-ignore
-  teamList: [] as TeamType[],
+  loading: false,
+  teamList: () => [],
 });
+
+const emit = defineEmits<{
+  (event: 'action-success'): void;
+}>();
 
 const showPasswordDialog = ref(false);
 const password = ref('');
@@ -79,6 +129,26 @@ const router = useRouter();
 onMounted(async () => {
   currentUser.value = await getCurrentUser();
 })
+
+const getCreatorName = (team: TeamType) => {
+  return team.createUser?.username ? `由 ${team.createUser.username} 创建` : '等待更多伙伴加入';
+}
+
+const getStatusClass = (status: number) => {
+  return {
+    'team-card__status--public': status === 0,
+    'team-card__status--private': status === 1,
+    'team-card__status--locked': status === 2,
+  };
+}
+
+const formatDate = (value?: Date | string) => {
+  if (!value) {
+    return '长期';
+  }
+  const dateText = String(value);
+  return dateText.length > 10 ? dateText.slice(0, 10) : dateText;
+}
 
 const preJoinTeam = (team: TeamType) => {
   joinTeamId.value = team.id;
@@ -108,6 +178,7 @@ const doJoinTeam = async () => {
   if (res?.code === 0) {
     showSuccessToast('加入成功');
     doJoinCancel();
+    emit('action-success');
   } else {
     showFailToast('加入失败' + (res.description ? `，${res.description}` : ''));
   }
@@ -115,7 +186,6 @@ const doJoinTeam = async () => {
 
 /**
  * 跳转至更新队伍页
- * @param id
  */
 const doUpdateTeam = (id: number) => {
   router.push({
@@ -128,7 +198,6 @@ const doUpdateTeam = (id: number) => {
 
 /**
  * 退出队伍
- * @param id
  */
 const doQuitTeam = async (id: number) => {
   const res = await myAxios.post('/team/quit', {
@@ -136,6 +205,7 @@ const doQuitTeam = async (id: number) => {
   });
   if (res?.code === 0) {
     showSuccessToast('操作成功');
+    emit('action-success');
   } else {
     showFailToast('操作失败' + (res.description ? `，${res.description}` : ''));
   }
@@ -143,14 +213,23 @@ const doQuitTeam = async (id: number) => {
 
 /**
  * 解散队伍
- * @param id
  */
 const doDeleteTeam = async (id: number) => {
+  try {
+    await showConfirmDialog({
+      title: '确认解散队伍',
+      message: '解散后队伍成员将无法继续加入，确定要继续吗？',
+    });
+  } catch (error) {
+    return;
+  }
+
   const res = await myAxios.post('/team/delete', {
     id,
   });
   if (res?.code === 0) {
     showSuccessToast('操作成功');
+    emit('action-success');
   } else {
     showFailToast('操作失败' + (res.description ? `，${res.description}` : ''));
   }
@@ -159,8 +238,165 @@ const doDeleteTeam = async (id: number) => {
 </script>
 
 <style scoped>
-#teamCardList :deep(.van-image__img) {
-  height: 128px;
-  object-fit: unset;
+.team-list {
+  display: grid;
+  gap: 12px;
+}
+
+.team-card {
+  display: flex;
+  gap: 13px;
+  padding: 13px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  box-shadow: var(--app-shadow);
+}
+
+.team-card--loading {
+  display: block;
+  min-height: 144px;
+}
+
+.team-card__cover {
+  position: relative;
+  flex: 0 0 72px;
+  width: 72px;
+  height: 88px;
+  overflow: hidden;
+  background:
+      radial-gradient(circle at 35% 20%, rgba(255, 184, 77, 0.35), transparent 3rem),
+      linear-gradient(145deg, rgba(24, 165, 143, 0.2), rgba(11, 125, 114, 0.08));
+  border-radius: 16px;
+}
+
+.team-card__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.team-card__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.team-card__header {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.team-card__title-block {
+  min-width: 0;
+}
+
+.team-card__title-block h3 {
+  max-width: 150px;
+  margin: 1px 0 3px;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--app-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.team-card__title-block span {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--app-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-card__status {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  border: 0;
+}
+
+.team-card__status--public {
+  color: var(--app-primary-deep);
+  background: rgba(24, 165, 143, 0.1);
+}
+
+.team-card__status--private {
+  color: #7b5b18;
+  background: rgba(255, 184, 77, 0.18);
+}
+
+.team-card__status--locked {
+  color: #6b4b12;
+  background: rgba(255, 184, 77, 0.22);
+}
+
+.team-card__desc {
+  display: -webkit-box;
+  margin: 9px 0 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #40504e;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.team-card__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.team-card__meta-item {
+  min-width: 0;
+  padding: 7px 6px;
+  background: rgba(245, 247, 243, 0.85);
+  border: 1px solid rgba(28, 61, 58, 0.05);
+  border-radius: 12px;
+}
+
+.team-card__meta-item strong,
+.team-card__meta-item span {
+  display: block;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-card__meta-item strong {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--app-text);
+}
+
+.team-card__meta-item span {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--app-text-muted);
+}
+
+.team-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.team-card__button {
+  height: 30px;
+  padding: 0 12px;
+  font-weight: 700;
 }
 </style>

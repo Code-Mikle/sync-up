@@ -1,30 +1,61 @@
 <template>
-  <form action="/">
-    <van-search
-        v-model="searchText"
-        show-action
-        placeholder="请输入要搜索的标签"
-        @search="onSearch"
-        @cancel="onCancel"
-    />
-  </form>
-  <van-divider content-position="left">已选标签</van-divider>
-  <div v-if="activeIds.length === 0">请选择标签</div>
-  <van-row gutter="16" style="padding: 0 16px">
-    <van-col v-for="tag in activeIds">
-      <van-tag closeable size="medium" type="primary" @close="doClose(tag)">
-        {{ tag }}
-      </van-tag>
-    </van-col>
-  </van-row>
-  <van-divider content-position="left">选择标签</van-divider>
-  <van-tree-select
-      v-model:active-id="activeIds"
-      v-model:main-active-index="activeIndex"
-      :items="tagList"
-  />
-  <div style="padding: 12px">
-    <van-button block type="primary" @click="doSearchResult">搜索</van-button>
+  <div class="app-page">
+    <section class="app-panel-heading">
+      <p>标签筛选</p>
+      <h1>找到同频的搭子</h1>
+      <span>选择几个你关心的标签，系统会按标签搜索用户。</span>
+    </section>
+
+    <section class="search-panel">
+      <van-search
+          v-model="searchText"
+          show-action
+          placeholder="搜索标签"
+          shape="round"
+          @search="onSearch"
+          @cancel="onCancel"
+          @clear="onCancel"
+      />
+
+      <div class="selected-tags">
+        <div class="selected-tags__header">
+          <h2>已选标签</h2>
+          <span>{{ activeIds.length }} 个</span>
+        </div>
+        <div class="app-tags" v-if="activeIds.length > 0">
+          <van-tag
+              v-for="tag in activeIds"
+              :key="tag"
+              closeable
+              round
+              class="app-tag"
+              @close="doClose(tag)"
+          >
+            {{ tag }}
+          </van-tag>
+        </div>
+        <p class="selected-tags__empty" v-else>先选择一个标签，再开始搜索。</p>
+      </div>
+
+      <div class="tag-picker">
+        <div class="tag-picker__header">
+          <h2>选择标签</h2>
+          <span>{{ searchText ? '筛选结果' : '全部标签' }}</span>
+        </div>
+        <van-tree-select
+            v-model:active-id="activeIds"
+            v-model:main-active-index="activeIndex"
+            :items="tagList"
+            height="320"
+        />
+      </div>
+    </section>
+
+    <div class="search-submit">
+      <van-button block type="primary" round :disabled="activeIds.length === 0" @click="doSearchResult">
+        搜索搭子
+      </van-button>
+    </div>
   </div>
 </template>
 
@@ -103,5 +134,83 @@ const doSearchResult = () => {
 </script>
 
 <style scoped>
+.search-panel {
+  margin-top: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  box-shadow: var(--app-shadow);
+}
 
+.search-panel :deep(.van-search) {
+  padding: 10px;
+}
+
+.selected-tags,
+.tag-picker {
+  padding: 14px;
+  border-top: 1px solid var(--app-border);
+}
+
+.selected-tags__header,
+.tag-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 11px;
+}
+
+.selected-tags__header h2,
+.tag-picker__header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.selected-tags__header span,
+.tag-picker__header span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--app-text-muted);
+}
+
+.selected-tags__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--app-text-muted);
+}
+
+.tag-picker {
+  padding-bottom: 0;
+}
+
+.tag-picker :deep(.van-tree-select) {
+  border-radius: 14px 14px 0 0;
+}
+
+.tag-picker :deep(.van-tree-select__nav),
+.tag-picker :deep(.van-tree-select__content) {
+  background: rgba(245, 247, 243, 0.8);
+}
+
+.tag-picker :deep(.van-sidebar-item--select) {
+  color: var(--app-primary-deep);
+  font-weight: 800;
+}
+
+.tag-picker :deep(.van-tree-select__item--active) {
+  color: var(--app-primary-deep);
+  font-weight: 800;
+}
+
+.search-submit {
+  margin: 18px 0 0;
+}
+
+.search-submit :deep(.van-button) {
+  height: 44px;
+  box-shadow: 0 12px 24px rgba(24, 165, 143, 0.22);
+}
 </style>
