@@ -3,7 +3,10 @@ package com.mikle.syncup.service;
 import com.mikle.syncup.mapper.TeamMapper;
 import com.mikle.syncup.mapper.UserMapper;
 import com.mikle.syncup.mapper.UserTeamMapper;
+import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
+import com.mikle.syncup.model.vo.UserSearchResultVO;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -164,6 +167,59 @@ class UserServiceTest {
     }
 
     @Test
+    void searchUsersByKeywords_shouldReturnPagedPublicUsers() {
+        User loginUser = null;
+        User matchedUser = null;
+        User unmatchedUser = null;
+        try {
+            loginUser = createTestUser();
+            matchedUser = createTestUser();
+            unmatchedUser = createTestUser();
+
+            User updateMatchedUser = new User();
+            updateMatchedUser.setId(matchedUser.getId());
+            updateMatchedUser.setUsername("badminton_" + randomSuffix());
+            updateMatchedUser.setTags("[\"Java\",\"羽毛球\",\"健身\"]");
+            userService.updateById(updateMatchedUser);
+
+            User updateUnmatchedUser = new User();
+            updateUnmatchedUser.setId(unmatchedUser.getId());
+            updateUnmatchedUser.setUsername("reading_" + randomSuffix());
+            updateUnmatchedUser.setTags("[\"Java\",\"阅读\"]");
+            userService.updateById(updateUnmatchedUser);
+
+            Page<UserSearchResultVO> userPage = userService.searchUsersByKeywords(
+                    Arrays.asList("Java", "羽毛球"),
+                    1,
+                    5,
+                    loginUser.getId()
+            );
+            List<Long> idList = userPage.getRecords()
+                    .stream()
+                    .map(UserSearchResultVO::getId)
+                    .collect(Collectors.toList());
+
+            Assertions.assertTrue(idList.contains(matchedUser.getId()));
+            Assertions.assertFalse(idList.contains(unmatchedUser.getId()));
+            Assertions.assertFalse(idList.contains(loginUser.getId()));
+        } finally {
+            deletePhysically(loginUser);
+            deletePhysically(matchedUser);
+            deletePhysically(unmatchedUser);
+        }
+    }
+
+    @Test
+    void searchUsersByKeywords_shouldRejectOversizedPageSize() {
+        BusinessException exception = Assertions.assertThrows(
+                BusinessException.class,
+                () -> userService.searchUsersByKeywords(Arrays.asList("Java"), 1, 11, null)
+        );
+
+        Assertions.assertNotNull(exception);
+    }
+
+    @Test
     void matchUsers_shouldSupportPlainStringTags() {
         User currentUser = null;
         User matchedUser = null;
@@ -196,6 +252,7 @@ class UserServiceTest {
         user.setUserPassword(PASSWORD_ENCODER.encode("Password123"));
         user.setPlanetCode(planetCode());
         user.setUserRole(0);
+        user.setUserStatus(0);
         boolean saved = userService.save(user);
         Assertions.assertTrue(saved, "test user should be created");
         return user;

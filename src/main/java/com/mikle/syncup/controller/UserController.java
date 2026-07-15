@@ -10,6 +10,7 @@ import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.request.UserLoginRequest;
 import com.mikle.syncup.model.request.UserRegisterRequest;
 import com.mikle.syncup.model.vo.UserLoginVO;
+import com.mikle.syncup.model.vo.UserSearchResultVO;
 import com.mikle.syncup.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -105,6 +106,16 @@ public class UserController {
         }
         List<User> userList = userService.searchUsersByTags(tagNameList);
         return ResultUtils.success(userList);
+    }
+
+    @GetMapping("/search/keywords")
+    public BaseResponse<Page<UserSearchResultVO>> searchUsersByKeywords(@RequestParam(required = false) List<String> keywords,
+                                                                        @RequestParam(defaultValue = "1") long pageNum,
+                                                                        @RequestParam(defaultValue = "5") long pageSize,
+                                                                        HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        Page<UserSearchResultVO> userPage = userService.searchUsersByKeywords(keywords, pageNum, pageSize, loginUser.getId());
+        return ResultUtils.success(userPage);
     }
 
     // todo 推荐多个，未实现

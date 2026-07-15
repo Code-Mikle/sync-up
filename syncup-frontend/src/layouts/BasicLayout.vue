@@ -3,12 +3,31 @@
     <van-nav-bar
         class="app-nav"
         :title="title"
-        :left-arrow="canGoBack"
-        @click-left="onClickLeft"
         @click-right="onClickRight"
     >
+      <template #left>
+        <button
+            v-if="showAiEntry"
+            class="nav-icon-button nav-icon-button--ai"
+            type="button"
+            aria-label="AI 搭子助手"
+            @click="goAIChat"
+        >
+          <van-icon name="service-o" size="19"/>
+        </button>
+        <button
+            v-else-if="canGoBack"
+            class="nav-icon-button"
+            type="button"
+            aria-label="返回"
+            @click="onClickLeft"
+        >
+          <van-icon name="arrow-left" size="20"/>
+        </button>
+      </template>
+
       <template #right>
-        <button class="nav-search-button" type="button" aria-label="搜索">
+        <button class="nav-icon-button" type="button" aria-label="搜索" @click="onClickRight">
           <van-icon name="search" size="19"/>
         </button>
       </template>
@@ -41,6 +60,7 @@ const title = computed(() => {
 });
 
 const canGoBack = computed(() => route.path !== '/');
+const showAiEntry = computed(() => route.path === '/');
 
 const onClickLeft = () => {
   if (canGoBack.value) {
@@ -52,8 +72,11 @@ const onClickRight = () => {
   router.push('/search');
 };
 
-const onChange = () => {};
+const goAIChat = () => {
+  router.push('/ai/chat');
+};
 
+const onChange = () => {};
 </script>
 
 <style scoped>
@@ -80,7 +103,7 @@ const onChange = () => {};
   color: var(--app-primary-deep);
 }
 
-.nav-search-button {
+.nav-icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -92,6 +115,12 @@ const onChange = () => {};
   background: rgba(24, 165, 143, 0.1);
   border: 1px solid rgba(24, 165, 143, 0.1);
   border-radius: 50%;
+}
+
+.nav-icon-button--ai {
+  background:
+      radial-gradient(circle at 70% 22%, rgba(255, 232, 186, 0.9), transparent 0.7rem),
+      rgba(24, 165, 143, 0.12);
 }
 
 .app-content {

@@ -3,6 +3,8 @@ package com.mikle.syncup.service;
 import com.mikle.syncup.model.domain.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.mikle.syncup.model.vo.UserLoginVO;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mikle.syncup.model.vo.UserSearchResultVO;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -56,6 +58,17 @@ public interface UserService extends IService<User> {
      * @return
      */
     List<User> searchUsersByTags(List<String> tagNameList);
+
+    /**
+     * Keyword search for public user information.
+     *
+     * @param keywords      keywords split from user input
+     * @param pageNum       current page number
+     * @param pageSize      page size
+     * @param excludeUserId user id that should not appear in results
+     * @return paged public search results
+     */
+    Page<UserSearchResultVO> searchUsersByKeywords(List<String> keywords, long pageNum, long pageSize, Long excludeUserId);
 
     /**
      * 更新用户信息

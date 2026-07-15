@@ -2,6 +2,7 @@ package com.mikle.syncup.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
@@ -11,6 +12,7 @@ import com.mikle.syncup.constant.UserConstant;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.vo.UserLoginVO;
+import com.mikle.syncup.model.vo.UserSearchResultVO;
 import com.mikle.syncup.service.UserService;
 import com.mikle.syncup.mapper.UserMapper;
 import com.mikle.syncup.utils.AlgorithmUtils;
@@ -231,6 +233,63 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             }
             return true;
         }).map(this::getSafetyUser).collect(Collectors.toList());
+    }
+
+    @Override
+    public Page<UserSearchResultVO> searchUsersByKeywords(List<String> keywords, long pageNum, long pageSize, Long excludeUserId) {
+        if (pageNum <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "pageNum must be greater than 0");
+        }
+        if (pageSize <= 0 || pageSize > 10) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "pageSize must be between 1 and 10");
+        }
+        List<String> normalizedKeywords = Optional.ofNullable(keywords)
+                .orElse(Collections.emptyList())
+                .stream()
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .distinct()
+                .limit(5)
+                .collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(normalizedKeywords)) {
+            return new Page<>(pageNum, pageSize, 0);
+        }
+
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "tags", "createTime", "planetCode");
+        if (excludeUserId != null && excludeUserId > 0) {
+            queryWrapper.ne("id", excludeUserId);
+        }
+        queryWrapper.and(qw -> qw.eq("userStatus", 0).or().isNull("userStatus"));
+        for (String keyword : normalizedKeywords) {
+            queryWrapper.and(qw -> qw.like("username", keyword)
+                    .or().like("planetCode", keyword)
+                    .or().like("tags", keyword));
+        }
+        queryWrapper.orderByDesc("updateTime");
+
+        Page<User> userPage = this.page(new Page<>(pageNum, pageSize), queryWrapper);
+        Page<UserSearchResultVO> resultPage = new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
+        resultPage.setRecords(userPage.getRecords()
+                .stream()
+                .map(this::getUserSearchResultVO)
+                .collect(Collectors.toList()));
+        return resultPage;
+    }
+
+    private UserSearchResultVO getUserSearchResultVO(User originUser) {
+        if (originUser == null) {
+            return null;
+        }
+        UserSearchResultVO userSearchResultVO = new UserSearchResultVO();
+        userSearchResultVO.setId(originUser.getId());
+        userSearchResultVO.setUsername(originUser.getUsername());
+        userSearchResultVO.setAvatarUrl(originUser.getAvatarUrl());
+        userSearchResultVO.setGender(originUser.getGender());
+        userSearchResultVO.setTags(originUser.getTags());
+        userSearchResultVO.setCreateTime(originUser.getCreateTime());
+        userSearchResultVO.setPlanetCode(originUser.getPlanetCode());
+        return userSearchResultVO;
     }
 
     private Set<String> parseTagNameSet(String tagsStr) {
