@@ -11,7 +11,8 @@ import org.apache.ibatis.annotations.Select;
  */
 public interface TeamMapper extends BaseMapper<Team> {
 
-    @Select("SELECT id, name, description, maxNum, expireTime, userId, status, password, createTime, updateTime, isDelete " +
+    @Select("SELECT id, name, description, maxNum, expireTime, activityType, city, district, startTime, " +
+            "durationMinutes, budgetPerPerson, skillLevel, userId, status, password, createTime, updateTime, isDelete " +
             "FROM team WHERE id = #{teamId} AND isDelete = 0 FOR UPDATE")
     Team lockTeamById(@Param("teamId") Long teamId);
 

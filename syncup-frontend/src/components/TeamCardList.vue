@@ -22,18 +22,24 @@
 
         <p class="team-card__desc">{{ team.description || '这个队伍暂时还没有描述。' }}</p>
 
+        <div class="team-card__chips" v-if="hasStructuredInfo(team)">
+          <van-tag v-if="team.activityType" plain round>{{ team.activityType }}</van-tag>
+          <van-tag v-if="team.city || team.district" plain round>{{ formatLocation(team) }}</van-tag>
+          <van-tag v-if="team.skillLevel" plain round>{{ team.skillLevel }}</van-tag>
+        </div>
+
         <div class="team-card__meta">
           <div class="team-card__meta-item">
             <strong>{{ team.hasJoinNum ?? 0 }}/{{ team.maxNum }}</strong>
             <span>人数</span>
           </div>
           <div class="team-card__meta-item">
-            <strong>{{ formatDate(team.expireTime) }}</strong>
-            <span>过期</span>
+            <strong>{{ formatDate(team.startTime) }}</strong>
+            <span>活动</span>
           </div>
           <div class="team-card__meta-item">
-            <strong>{{ formatDate(team.createTime) }}</strong>
-            <span>创建</span>
+            <strong>{{ formatBudget(team.budgetPerPerson) }}</strong>
+            <span>预算</span>
           </div>
         </div>
 
@@ -98,7 +104,7 @@
 <script setup lang="ts">
 import {TeamType} from "../models/team";
 import {teamStatusEnum} from "../constants/team";
-import ikun from '../assets/ikun.png';
+import ikun from "../assets/ikun.png";
 import myAxios from "../plugins/myAxios";
 import {showConfirmDialog, showFailToast, showSuccessToast} from "vant";
 import {onMounted, ref} from "vue";
@@ -116,125 +122,121 @@ const props = withDefaults(defineProps<TeamCardListProps>(), {
 });
 
 const emit = defineEmits<{
-  (event: 'action-success'): void;
+  (event: "action-success"): void;
 }>();
 
 const showPasswordDialog = ref(false);
-const password = ref('');
+const password = ref("");
 const joinTeamId = ref(0);
 const currentUser = ref();
-
 const router = useRouter();
 
 onMounted(async () => {
   currentUser.value = await getCurrentUser();
-})
+});
 
 const getCreatorName = (team: TeamType) => {
-  return team.createUser?.username ? `由 ${team.createUser.username} 创建` : '等待更多伙伴加入';
-}
+  return team.createUser?.username ? `由 ${team.createUser.username} 创建` : "等待更多伙伴加入";
+};
 
 const getStatusClass = (status: number) => {
   return {
-    'team-card__status--public': status === 0,
-    'team-card__status--private': status === 1,
-    'team-card__status--locked': status === 2,
+    "team-card__status--public": status === 0,
+    "team-card__status--private": status === 1,
+    "team-card__status--locked": status === 2,
   };
-}
+};
 
 const formatDate = (value?: Date | string) => {
   if (!value) {
-    return '长期';
+    return "未定";
   }
   const dateText = String(value);
   return dateText.length > 10 ? dateText.slice(0, 10) : dateText;
-}
+};
+
+const hasStructuredInfo = (team: TeamType) => {
+  return Boolean(team.activityType || team.city || team.district || team.skillLevel);
+};
+
+const formatLocation = (team: TeamType) => {
+  return [team.city, team.district].filter(Boolean).join("·");
+};
+
+const formatBudget = (value?: number) => {
+  return value === undefined || value === null ? "未定" : `${value}元`;
+};
 
 const preJoinTeam = (team: TeamType) => {
   joinTeamId.value = team.id;
   if (team.status === 0) {
-    doJoinTeam()
+    doJoinTeam();
   } else {
     showPasswordDialog.value = true;
   }
-}
+};
 
 const doJoinCancel = () => {
   joinTeamId.value = 0;
-  password.value = '';
-}
+  password.value = "";
+};
 
-/**
- * 加入队伍
- */
 const doJoinTeam = async () => {
   if (!joinTeamId.value) {
     return;
   }
-  const res = await myAxios.post('/team/join', {
+  const res = await myAxios.post("/team/join", {
     teamId: joinTeamId.value,
-    password: password.value
+    password: password.value,
   });
   if (res?.code === 0) {
-    showSuccessToast('加入成功');
+    showSuccessToast("加入成功");
     doJoinCancel();
-    emit('action-success');
+    emit("action-success");
   } else {
-    showFailToast('加入失败' + (res.description ? `，${res.description}` : ''));
+    showFailToast("加入失败" + (res.description ? `：${res.description}` : ""));
   }
-}
+};
 
-/**
- * 跳转至更新队伍页
- */
 const doUpdateTeam = (id: number) => {
   router.push({
-    path: '/team/update',
-    query: {
-      id,
-    }
-  })
-}
+    path: "/team/update",
+    query: {id},
+  });
+};
 
-/**
- * 退出队伍
- */
 const doQuitTeam = async (id: number) => {
-  const res = await myAxios.post('/team/quit', {
-    teamId: id
+  const res = await myAxios.post("/team/quit", {
+    teamId: id,
   });
   if (res?.code === 0) {
-    showSuccessToast('操作成功');
-    emit('action-success');
+    showSuccessToast("操作成功");
+    emit("action-success");
   } else {
-    showFailToast('操作失败' + (res.description ? `，${res.description}` : ''));
+    showFailToast("操作失败" + (res.description ? `：${res.description}` : ""));
   }
-}
+};
 
-/**
- * 解散队伍
- */
 const doDeleteTeam = async (id: number) => {
   try {
     await showConfirmDialog({
-      title: '确认解散队伍',
-      message: '解散后队伍成员将无法继续加入，确定要继续吗？',
+      title: "确认解散队伍",
+      message: "解散后队伍成员将无法继续加入，确定要继续吗？",
     });
   } catch (error) {
     return;
   }
 
-  const res = await myAxios.post('/team/delete', {
+  const res = await myAxios.post("/team/delete", {
     id,
   });
   if (res?.code === 0) {
-    showSuccessToast('操作成功');
-    emit('action-success');
+    showSuccessToast("操作成功");
+    emit("action-success");
   } else {
-    showFailToast('操作失败' + (res.description ? `，${res.description}` : ''));
+    showFailToast("操作失败" + (res.description ? `：${res.description}` : ""));
   }
-}
-
+};
 </script>
 
 <style scoped>
@@ -348,6 +350,19 @@ const doDeleteTeam = async (id: number) => {
   color: #40504e;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.team-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.team-card__chips :deep(.van-tag) {
+  max-width: 100%;
+  color: var(--app-primary-deep);
+  background: rgba(24, 165, 143, 0.06);
 }
 
 .team-card__meta {

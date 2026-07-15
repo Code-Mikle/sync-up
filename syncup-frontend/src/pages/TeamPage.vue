@@ -4,7 +4,7 @@
       <div>
         <p class="team-hero__eyebrow">组队大厅</p>
         <h1>找到一起行动的队伍</h1>
-        <p class="team-hero__desc">按状态筛选队伍，公开队伍可直接加入，加密队伍需要口令。</p>
+        <p class="team-hero__desc">按活动、地点、时间和预算筛选队伍，公开队伍可直接加入。</p>
       </div>
       <van-button class="team-hero__button" type="primary" icon="plus" round @click="toAddTeam">
         创建
@@ -13,17 +13,67 @@
 
     <section class="team-toolbar">
       <van-search
-          v-model="searchText"
+          v-model="filters.searchText"
           placeholder="搜索队伍名称或描述"
           shape="round"
-          @search="onSearch"
-          @clear="onSearch('')"
+          @search="refreshTeamList"
+          @clear="refreshTeamList"
       />
       <van-tabs v-model:active="active" class="team-tabs" @change="onTabChange">
         <van-tab title="公开队伍" name="public" />
-        <van-tab title="加密队伍" name="private" />
+        <van-tab title="加密队伍" name="secret" />
       </van-tabs>
+      <div class="team-filters">
+        <van-field v-model="filters.activityType" label="活动" placeholder="羽毛球" clearable @blur="refreshTeamList" />
+        <van-field v-model="filters.city" label="城市" placeholder="西安" clearable @blur="refreshTeamList" />
+        <van-field
+            v-model.number="filters.maxBudgetPerPerson"
+            label="预算"
+            type="number"
+            placeholder="上限"
+            clearable
+            @blur="refreshTeamList"
+        />
+        <van-field
+            is-link
+            readonly
+            label="开始"
+            :model-value="formatDateTime(filters.startTimeBegin)"
+            placeholder="时间下限"
+            @click="openTimePicker('begin')"
+        />
+        <van-field
+            is-link
+            readonly
+            label="结束"
+            :model-value="formatDateTime(filters.startTimeEnd)"
+            placeholder="时间上限"
+            @click="openTimePicker('end')"
+        />
+        <van-cell title="只看有余位">
+          <template #right-icon>
+            <van-switch v-model="filters.onlyAvailable" size="22px" @change="refreshTeamList" />
+          </template>
+        </van-cell>
+      </div>
+      <div class="team-filter-actions">
+        <van-button size="small" plain round @click="resetFilters">重置</van-button>
+        <van-button size="small" type="primary" round @click="refreshTeamList">筛选</van-button>
+      </div>
     </section>
+
+    <van-popup v-model:show="showTimePicker" position="bottom">
+      <van-picker-group
+          title="选择时间"
+          :tabs="['选择日期', '选择时间']"
+          next-step-text="下一步"
+          @confirm="confirmFilterTime"
+          @cancel="showTimePicker = false"
+      >
+        <van-date-picker v-model="filterDatePickerValue" :show-toolbar="false" />
+        <van-time-picker v-model="filterTimePickerValue" :show-toolbar="false" />
+      </van-picker-group>
+    </van-popup>
 
     <section class="team-summary">
       <div>
@@ -45,83 +95,117 @@
         image-size="88"
         description="暂时没有找到队伍"
     />
-
   </div>
 </template>
 
 <script setup lang="ts">
-
 import {useRouter} from "vue-router";
 import TeamCardList from "../components/TeamCardList.vue";
 import {computed, onMounted, ref} from "vue";
 import myAxios from "../plugins/myAxios";
 import {showFailToast} from "vant";
 import {TeamType} from "../models/team";
+import {composeDateTime, formatDateTime, toDatePickerValue, toTimePickerValue} from "../utils/date";
 
-const active = ref('public')
+const active = ref("public");
 const router = useRouter();
-const searchText = ref('');
 const loading = ref(false);
-
-const currentStatus = computed(() => active.value === 'public' ? 0 : 2);
-
-/**
- * 切换查询状态
- */
-const onTabChange = () => {
-  listTeam(searchText.value, currentStatus.value);
-}
-
-// 跳转到创建队伍页
-const toAddTeam = () => {
-  router.push({
-    path: "/team/add"
-  })
-}
-
 const teamList = ref<TeamType[]>([]);
+const showTimePicker = ref(false);
+const editingTimeField = ref<"begin" | "end">("begin");
+const filterDatePickerValue = ref<string[]>(toDatePickerValue(new Date()));
+const filterTimePickerValue = ref<string[]>(toTimePickerValue(new Date()));
 
-/**
- * 搜索队伍
- */
-const listTeam = async (val = '', status = 0) => {
+const filters = ref({
+  searchText: "",
+  activityType: "",
+  city: "",
+  maxBudgetPerPerson: undefined as number | undefined,
+  startTimeBegin: undefined as Date | undefined,
+  startTimeEnd: undefined as Date | undefined,
+  onlyAvailable: false,
+});
+
+const currentStatus = computed(() => active.value === "public" ? 0 : 2);
+
+const onTabChange = () => {
+  refreshTeamList();
+};
+
+const toAddTeam = () => {
+  router.push({path: "/team/add"});
+};
+
+const listTeam = async () => {
   loading.value = true;
   try {
     const res = await myAxios.get<TeamType[]>("/team/list", {
       params: {
-        searchText: val,
+        searchText: filters.value.searchText,
         pageNum: 1,
-        status,
+        status: currentStatus.value,
+        activityType: filters.value.activityType || undefined,
+        city: filters.value.city || undefined,
+        maxBudgetPerPerson: filters.value.maxBudgetPerPerson || undefined,
+        startTimeBegin: filters.value.startTimeBegin,
+        startTimeEnd: filters.value.startTimeEnd,
+        onlyAvailable: filters.value.onlyAvailable || undefined,
       },
     });
     if (res?.code === 0) {
       teamList.value = res.data ?? [];
     } else {
       teamList.value = [];
-      showFailToast('加载队伍失败，请刷新重试');
+      showFailToast("加载队伍失败，请刷新重试");
     }
   } catch (error) {
-    console.error('/team/list error', error);
+    console.error("/team/list error", error);
     teamList.value = [];
-    showFailToast('加载队伍失败，请刷新重试');
+    showFailToast("加载队伍失败，请刷新重试");
   } finally {
     loading.value = false;
   }
-}
-
-const refreshTeamList = () => {
-  listTeam(searchText.value, currentStatus.value);
-}
-
-// 页面加载时只触发一次
-onMounted( () => {
-  refreshTeamList();
-})
-
-const onSearch = (val: string) => {
-  listTeam(val, currentStatus.value);
 };
 
+const refreshTeamList = () => {
+  listTeam();
+};
+
+const resetFilters = () => {
+  filters.value = {
+    searchText: "",
+    activityType: "",
+    city: "",
+    maxBudgetPerPerson: undefined,
+    startTimeBegin: undefined,
+    startTimeEnd: undefined,
+    onlyAvailable: false,
+  };
+  refreshTeamList();
+};
+
+const openTimePicker = (field: "begin" | "end") => {
+  editingTimeField.value = field;
+  const value = field === "begin" ? filters.value.startTimeBegin : filters.value.startTimeEnd;
+  filterDatePickerValue.value = toDatePickerValue(value, new Date());
+  filterTimePickerValue.value = toTimePickerValue(value, new Date());
+  showTimePicker.value = true;
+};
+
+const confirmFilterTime = () => {
+  const date = composeDateTime(filterDatePickerValue.value, filterTimePickerValue.value);
+  if (editingTimeField.value === "begin") {
+    filters.value.startTimeBegin = date;
+  } else {
+    filters.value.startTimeEnd = date;
+  }
+  showTimePicker.value = false;
+  refreshTeamList();
+};
+
+onMounted(() => {
+  refreshTeamList();
+});
 </script>
 
 <style scoped>
@@ -177,8 +261,8 @@ const onSearch = (val: string) => {
 
 .team-toolbar {
   margin-top: 12px;
-  padding: 4px 0 0;
-  background: rgba(255, 255, 255, 0.52);
+  padding: 4px 0 10px;
+  background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(28, 61, 58, 0.05);
   border-radius: 18px;
 }
@@ -202,6 +286,32 @@ const onSearch = (val: string) => {
 
 .team-tabs :deep(.van-tab--active) {
   color: var(--app-primary-deep);
+}
+
+.team-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 4px 10px 0;
+}
+
+.team-filters :deep(.van-cell) {
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+
+.team-filters :deep(.van-field__label),
+.team-filters :deep(.van-cell__title) {
+  width: 42px;
+  font-size: 12px;
+}
+
+.team-filter-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 10px 10px 0;
 }
 
 .team-summary {

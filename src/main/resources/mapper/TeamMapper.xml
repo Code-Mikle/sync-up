@@ -10,6 +10,13 @@
             <result property="description" column="description" jdbcType="VARCHAR"/>
             <result property="maxNum" column="maxNum" jdbcType="INTEGER"/>
             <result property="expireTime" column="expireTime" jdbcType="TIMESTAMP"/>
+            <result property="activityType" column="activityType" jdbcType="VARCHAR"/>
+            <result property="city" column="city" jdbcType="VARCHAR"/>
+            <result property="district" column="district" jdbcType="VARCHAR"/>
+            <result property="startTime" column="startTime" jdbcType="TIMESTAMP"/>
+            <result property="durationMinutes" column="durationMinutes" jdbcType="INTEGER"/>
+            <result property="budgetPerPerson" column="budgetPerPerson" jdbcType="DECIMAL"/>
+            <result property="skillLevel" column="skillLevel" jdbcType="VARCHAR"/>
             <result property="userId" column="userId" jdbcType="BIGINT"/>
             <result property="status" column="status" jdbcType="INTEGER"/>
             <result property="password" column="password" jdbcType="VARCHAR"/>
@@ -21,8 +28,10 @@
 
     <sql id="Base_Column_List">
         id,name,description,
-        maxNum,expireTime,userId,
-        status,password,createTime,
-        updateTime,isDelete
+        maxNum,expireTime,activityType,
+        city,district,startTime,
+        durationMinutes,budgetPerPerson,skillLevel,
+        userId,status,password,
+        createTime,updateTime,isDelete
     </sql>
 </mapper>

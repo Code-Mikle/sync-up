@@ -317,6 +317,18 @@ sync-up
 
 可以从 `.env.example` 复制一份本地配置。不要把真实数据库密码、Redis 密码或生产密钥提交到仓库。
 
+初始化新数据库：
+
+```bash
+mysql -u root -p < sql/create_table.sql
+```
+
+已有数据库升级到阶段 0.5 的结构化队伍查询字段：
+
+```bash
+mysql -u root -p sync_up_db < sql/stage0_5_team_search_migration.sql
+```
+
 启动后端：
 
 ```bash

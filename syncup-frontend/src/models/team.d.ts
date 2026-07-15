@@ -9,6 +9,13 @@ export type TeamType = {
     name: string;
     description: string;
     expireTime?: Date;
+    activityType?: string;
+    city?: string;
+    district?: string;
+    startTime?: Date;
+    durationMinutes?: number;
+    budgetPerPerson?: number;
+    skillLevel?: string;
     maxNum: number;
     password?: string,
     // todo 定义枚举值类型，更规范

@@ -30,6 +30,13 @@ create table team
     description varchar(1024) null comment '描述',
     maxNum      int      default 1 not null comment '最大人数',
     expireTime  datetime null comment '过期时间',
+    activityType varchar(64) null comment '活动类型',
+    city        varchar(64) null comment '城市',
+    district    varchar(64) null comment '区域',
+    startTime   datetime null comment '活动开始时间',
+    durationMinutes int null comment '预计时长，单位分钟',
+    budgetPerPerson decimal(10, 2) null comment '人均预算',
+    skillLevel  varchar(32) null comment '水平要求',
     userId      bigint null comment '用户id（队长 id）',
     status      int      default 0 not null comment '0 - 公开，1 - 私有，2 - 加密',
     password    varchar(512) null comment '密码',
@@ -39,6 +46,7 @@ create table team
 ) comment '队伍';
 
 create index idx_team_userId on team (userId);
+create index idx_team_search on team (status, city, activityType, startTime);
 
 -- 用户队伍关系表
 create table user_team

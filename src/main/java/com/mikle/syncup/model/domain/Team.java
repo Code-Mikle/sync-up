@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.Date;
 
 /**
@@ -43,6 +44,41 @@ public class Team implements Serializable {
      * 过期时间
      */
     private Date expireTime;
+
+    /**
+     * Activity type, for example badminton or hiking.
+     */
+    private String activityType;
+
+    /**
+     * City name.
+     */
+    private String city;
+
+    /**
+     * District or business area.
+     */
+    private String district;
+
+    /**
+     * Activity start time. Do not reuse expireTime for this meaning.
+     */
+    private Date startTime;
+
+    /**
+     * Estimated duration in minutes.
+     */
+    private Integer durationMinutes;
+
+    /**
+     * Budget per person.
+     */
+    private BigDecimal budgetPerPerson;
+
+    /**
+     * Skill level, for example beginner, intermediate, advanced.
+     */
+    private String skillLevel;
 
     /**
      * 用户id

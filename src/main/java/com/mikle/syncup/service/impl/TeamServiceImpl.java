@@ -28,8 +28,10 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
@@ -88,6 +90,7 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         if (expireTime != null && new Date().after(expireTime)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "expire time cannot be earlier than now");
         }
+        validateStructuredTeamFields(team, true);
 
         Long lockUserById = userMapper.lockUserById(userId);
         if (lockUserById == null) {
@@ -149,6 +152,40 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
             if (maxNum != null && maxNum > 0) {
                 queryWrapper.eq("maxNum", maxNum);
             }
+            String activityType = teamQuery.getActivityType();
+            if (StringUtils.isNotBlank(activityType)) {
+                queryWrapper.eq("activityType", activityType.trim());
+            }
+            String city = teamQuery.getCity();
+            if (StringUtils.isNotBlank(city)) {
+                queryWrapper.eq("city", city.trim());
+            }
+            String district = teamQuery.getDistrict();
+            if (StringUtils.isNotBlank(district)) {
+                queryWrapper.eq("district", district.trim());
+            }
+            Date startTimeBegin = teamQuery.getStartTimeBegin();
+            Date startTimeEnd = teamQuery.getStartTimeEnd();
+            if (startTimeBegin != null && startTimeEnd != null && startTimeBegin.after(startTimeEnd)) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "start time range is invalid");
+            }
+            if (startTimeBegin != null) {
+                queryWrapper.ge("startTime", startTimeBegin);
+            }
+            if (startTimeEnd != null) {
+                queryWrapper.le("startTime", startTimeEnd);
+            }
+            BigDecimal maxBudgetPerPerson = teamQuery.getMaxBudgetPerPerson();
+            if (maxBudgetPerPerson != null) {
+                if (maxBudgetPerPerson.compareTo(BigDecimal.ZERO) < 0) {
+                    throw new BusinessException(ErrorCode.PARAMS_ERROR, "budget range is invalid");
+                }
+                queryWrapper.le("budgetPerPerson", maxBudgetPerPerson);
+            }
+            String skillLevel = teamQuery.getSkillLevel();
+            if (StringUtils.isNotBlank(skillLevel)) {
+                queryWrapper.eq("skillLevel", skillLevel.trim());
+            }
             Long userId = teamQuery.getUserId();
             if (userId != null && userId > 0) {
                 queryWrapper.eq("userId", userId);
@@ -172,6 +209,16 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         List<Team> teamList = this.list(queryWrapper);
         if (CollectionUtils.isEmpty(teamList)) {
             return new ArrayList<>();
+        }
+        if (teamQuery != null && Boolean.TRUE.equals(teamQuery.getOnlyAvailable())) {
+            Iterator<Team> iterator = teamList.iterator();
+            while (iterator.hasNext()) {
+                Team team = iterator.next();
+                Integer maxNum = team.getMaxNum();
+                if (maxNum == null || countTeamUserByTeamId(team.getId()) >= maxNum) {
+                    iterator.remove();
+                }
+            }
         }
         List<TeamUserVO> teamUserVOList = new ArrayList<>();
         for (Team team : teamList) {
@@ -221,6 +268,7 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         }
         Team updateTeam = new Team();
         BeanUtils.copyProperties(teamUpdateRequest, updateTeam);
+        validateStructuredTeamFields(updateTeam, false);
         return this.updateById(updateTeam);
     }
 
@@ -366,5 +414,46 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         QueryWrapper<UserTeam> userTeamQueryWrapper = new QueryWrapper<>();
         userTeamQueryWrapper.eq("teamId", teamId);
         return userTeamService.count(userTeamQueryWrapper);
+    }
+
+    private void validateStructuredTeamFields(Team team, boolean creating) {
+        if (team == null) {
+            return;
+        }
+        team.setActivityType(trimToNull(team.getActivityType()));
+        team.setCity(trimToNull(team.getCity()));
+        team.setDistrict(trimToNull(team.getDistrict()));
+        team.setSkillLevel(trimToNull(team.getSkillLevel()));
+
+        validateTextLength(team.getActivityType(), 64, "activity type is too long");
+        validateTextLength(team.getCity(), 64, "city is too long");
+        validateTextLength(team.getDistrict(), 64, "district is too long");
+        validateTextLength(team.getSkillLevel(), 32, "skill level is too long");
+
+        Integer durationMinutes = team.getDurationMinutes();
+        if (durationMinutes != null && durationMinutes <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "duration must be positive");
+        }
+        BigDecimal budgetPerPerson = team.getBudgetPerPerson();
+        if (budgetPerPerson != null && budgetPerPerson.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "budget must be non-negative");
+        }
+        Date startTime = team.getStartTime();
+        if (startTime != null && creating && startTime.before(new Date())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "start time cannot be earlier than now");
+        }
+    }
+
+    private void validateTextLength(String value, int maxLength, String message) {
+        if (value != null && value.length() > maxLength) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, message);
+        }
+    }
+
+    private String trimToNull(String value) {
+        if (StringUtils.isBlank(value)) {
+            return null;
+        }
+        return value.trim();
     }
 }

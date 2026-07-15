@@ -8,14 +8,17 @@ import com.mikle.syncup.mapper.UserTeamMapper;
 import com.mikle.syncup.model.domain.Team;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.domain.UserTeam;
+import com.mikle.syncup.model.dto.TeamQuery;
 import com.mikle.syncup.model.request.TeamJoinRequest;
 import com.mikle.syncup.model.request.TeamQuitRequest;
+import com.mikle.syncup.model.vo.TeamUserVO;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 import java.util.Queue;
@@ -164,6 +167,83 @@ class TeamServiceTest {
         }
     }
 
+    @Test
+    void listTeams_structuredFields_shouldFilterByCityActivityTimeAndBudget() {
+        User creator = null;
+        try {
+            creator = createTestUser();
+            Date tomorrowMorning = new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000);
+            Date twoDaysLater = new Date(System.currentTimeMillis() + 2 * 24 * 60 * 60 * 1000);
+            long matchedTeamId = createStructuredTeam(creator, "羽毛球", "西安", "雁塔", tomorrowMorning,
+                    new BigDecimal("45.00"), "中等", 6);
+            createStructuredTeam(creator, "徒步", "西安", "长安", twoDaysLater,
+                    new BigDecimal("30.00"), "入门", 6);
+
+            TeamQuery query = new TeamQuery();
+            query.setActivityType("羽毛球");
+            query.setCity("西安");
+            query.setStartTimeBegin(new Date(System.currentTimeMillis() + 12 * 60 * 60 * 1000));
+            query.setStartTimeEnd(new Date(System.currentTimeMillis() + 36 * 60 * 60 * 1000));
+            query.setMaxBudgetPerPerson(new BigDecimal("50.00"));
+            query.setSkillLevel("中等");
+
+            List<TeamUserVO> teams = teamService.listTeams(query, false);
+
+            Assertions.assertEquals(1, teams.size());
+            Assertions.assertEquals(matchedTeamId, teams.get(0).getId());
+            Assertions.assertEquals("羽毛球", teams.get(0).getActivityType());
+            Assertions.assertEquals(new BigDecimal("45.00"), teams.get(0).getBudgetPerPerson());
+        } finally {
+            cleanupUserAndTeams(creator);
+        }
+    }
+
+    @Test
+    void listTeams_onlyAvailable_shouldExcludeFullTeams() {
+        User creator = null;
+        User member = null;
+        try {
+            creator = createTestUser();
+            member = createTestUser();
+            long teamId = createStructuredTeam(creator, "羽毛球", "西安", null,
+                    new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000),
+                    new BigDecimal("20.00"), "中等", 2);
+
+            TeamJoinRequest joinRequest = new TeamJoinRequest();
+            joinRequest.setTeamId(teamId);
+            Assertions.assertTrue(teamService.joinTeam(joinRequest, member));
+
+            TeamQuery query = new TeamQuery();
+            query.setCity("西安");
+            query.setOnlyAvailable(true);
+
+            List<TeamUserVO> teams = teamService.listTeams(query, false);
+
+            Assertions.assertTrue(teams.stream().noneMatch(team -> team.getId().equals(teamId)));
+        } finally {
+            cleanupUserAndTeams(creator);
+            cleanupUserAndTeams(member);
+        }
+    }
+
+    @Test
+    void listTeams_withoutStructuredFilters_shouldKeepLegacyTeams() {
+        User creator = null;
+        try {
+            creator = createTestUser();
+            long legacyTeamId = createTeam(creator, 3);
+
+            TeamQuery query = new TeamQuery();
+            query.setUserId(creator.getId());
+
+            List<TeamUserVO> teams = teamService.listTeams(query, false);
+
+            Assertions.assertTrue(teams.stream().anyMatch(team -> team.getId().equals(legacyTeamId)));
+        } finally {
+            cleanupUserAndTeams(creator);
+        }
+    }
+
     private User createTestUser() {
         User user = new User();
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
@@ -191,6 +271,24 @@ class TeamServiceTest {
         team.setMaxNum(maxNum);
         team.setStatus(0);
         team.setExpireTime(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000));
+        return teamService.addTeam(team, creator);
+    }
+
+    private long createStructuredTeam(User creator, String activityType, String city, String district, Date startTime,
+                                      BigDecimal budgetPerPerson, String skillLevel, int maxNum) {
+        Team team = new Team();
+        team.setName("t_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
+        team.setDescription("stage0.5 test");
+        team.setMaxNum(maxNum);
+        team.setStatus(0);
+        team.setExpireTime(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000));
+        team.setActivityType(activityType);
+        team.setCity(city);
+        team.setDistrict(district);
+        team.setStartTime(startTime);
+        team.setDurationMinutes(120);
+        team.setBudgetPerPerson(budgetPerPerson);
+        team.setSkillLevel(skillLevel);
         return teamService.addTeam(team, creator);
     }
 
