@@ -1,6 +1,7 @@
 package com.mikle.syncup.service;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Disabled;
 import org.redisson.api.RList;
 import org.redisson.api.RLock;
 import org.redisson.api.RMap;
@@ -53,6 +54,7 @@ public class RedissonTest {
     }
     
     @Test
+    @Disabled("Manual watchdog demo. Do not run with the regular test suite.")
     void testWatchDog() {
         RLock lock = redissonClient.getLock("syncup:precachejob:docache:lock");
         try {

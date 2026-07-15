@@ -156,10 +156,6 @@ public class UserController {
 
     /**
      * 获取最匹配的用户
-     *
-     * @param num
-     * @param request
-     * @return
      */
     @GetMapping("/match")
     public BaseResponse<List<User>> matchUsers(long num, HttpServletRequest request) {

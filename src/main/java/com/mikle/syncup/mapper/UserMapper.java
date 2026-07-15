@@ -3,6 +3,7 @@ package com.mikle.syncup.mapper;
 
 import com.mikle.syncup.model.domain.User;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
@@ -12,8 +13,10 @@ import org.apache.ibatis.annotations.Select;
 public interface UserMapper extends BaseMapper<User> {
     @Select("SELECT id FROM `user` WHERE id = #{userId} FOR UPDATE")
     Long lockUserById(@Param("userId") Long userId);
-}
 
+    @Delete("DELETE FROM `user` WHERE id = #{userId}")
+    int deleteByIdPhysically(@Param("userId") Long userId);
+}
 
 
 

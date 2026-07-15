@@ -46,7 +46,6 @@
         description="暂时没有找到队伍"
     />
 
-    <van-button class="add-button" type="primary" icon="plus" @click="toAddTeam" />
   </div>
 </template>
 

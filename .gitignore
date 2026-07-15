@@ -1,6 +1,10 @@
 # Compiled class file
 *.class
 
+# configure file
+.env
+.env.*
+
 # Maven / Java build output
 target/
 .m2/

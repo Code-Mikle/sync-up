@@ -1,106 +1,226 @@
 package com.mikle.syncup.service;
 
+import com.mikle.syncup.mapper.TeamMapper;
+import com.mikle.syncup.mapper.UserMapper;
+import com.mikle.syncup.mapper.UserTeamMapper;
 import com.mikle.syncup.model.domain.User;
+import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.util.DigestUtils;
 
-import jakarta.annotation.Resource;
-
-import java.time.LocalTime;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
-/**
- * 用户服务测试
- */
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 @SpringBootTest
-public class UserServiceTest {
+@AutoConfigureMockMvc
+class UserServiceTest {
+
+    private static final String LEGACY_SALT = "mikle";
+
+    private static final PasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     @Resource
     private UserService userService;
 
+    @Resource
+    private UserMapper userMapper;
+
+    @Resource
+    private TeamMapper teamMapper;
+
+    @Resource
+    private UserTeamMapper userTeamMapper;
+
+    @Autowired
+    private MockMvc mockMvc;
+
     @Test
-    public void testAddUser() {
+    void saveAndGetUser_shouldUseGeneratedTestData() {
+        User user = null;
+        try {
+            user = createTestUser();
+            User savedUser = userService.getById(user.getId());
+            Assertions.assertNotNull(savedUser);
+            Assertions.assertEquals(user.getUserAccount(), savedUser.getUserAccount());
+        } finally {
+            deletePhysically(user);
+        }
+    }
+
+    @Test
+    void updateUser_shouldOnlyUpdateSelfForNormalUser() {
+        User user = null;
+        try {
+            user = createTestUser();
+            User updateUser = new User();
+            updateUser.setId(user.getId());
+            updateUser.setUsername("updated_" + randomSuffix());
+
+            User loginUser = User.builder()
+                    .id(user.getId())
+                    .userRole(0)
+                    .build();
+
+            int updated = userService.updateUser(updateUser, loginUser);
+
+            Assertions.assertEquals(1, updated);
+            Assertions.assertEquals(updateUser.getUsername(), userService.getById(user.getId()).getUsername());
+        } finally {
+            deletePhysically(user);
+        }
+    }
+
+    @Test
+    void removeById_shouldDeleteCreatedUser() {
+        User user = null;
+        try {
+            user = createTestUser();
+            boolean removed = userService.removeById(user.getId());
+
+            Assertions.assertTrue(removed);
+            Assertions.assertNull(userService.getById(user.getId()));
+        } finally {
+            deletePhysically(user);
+        }
+    }
+
+    @Test
+    void userRegister_shouldStoreBCryptPassword() {
+        Long userId = null;
+        String userAccount = "reg_" + randomSuffix();
+        String rawPassword = "Password123";
+        String planetCode = planetCode();
+        try {
+            userId = userService.userRegister(userAccount, rawPassword, rawPassword, planetCode);
+            User savedUser = userService.getById(userId);
+
+            Assertions.assertNotNull(savedUser);
+            Assertions.assertFalse(savedUser.getUserPassword().matches("^[a-fA-F0-9]{32}$"));
+            Assertions.assertTrue(PASSWORD_ENCODER.matches(rawPassword, savedUser.getUserPassword()));
+        } finally {
+            deletePhysically(userId);
+        }
+    }
+
+    @Test
+    void userLogin_shouldUpgradeLegacyMd5Password() throws Exception {
+        User user = null;
+        String rawPassword = "Password123";
+        try {
+            user = createTestUser();
+            String legacyPassword = DigestUtils.md5DigestAsHex((LEGACY_SALT + rawPassword).getBytes());
+            User updateUser = new User();
+            updateUser.setId(user.getId());
+            updateUser.setUserPassword(legacyPassword);
+            userService.updateById(updateUser);
+
+            mockMvc.perform(post("/user/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(String.format(
+                                    "{\"userAccount\":\"%s\",\"userPassword\":\"%s\"}",
+                                    user.getUserAccount(), rawPassword)))
+                    .andExpect(status().isOk());
+            User upgradedUser = userService.getById(user.getId());
+
+            Assertions.assertFalse(upgradedUser.getUserPassword().matches("^[a-fA-F0-9]{32}$"));
+            Assertions.assertTrue(PASSWORD_ENCODER.matches(rawPassword, upgradedUser.getUserPassword()));
+        } finally {
+            deletePhysically(user);
+        }
+    }
+
+    @Test
+    void searchUsersByTags_shouldReturnCreatedUser() {
+        User user = null;
+        String tagA = "tag_" + randomSuffix();
+        String tagB = "tag_" + randomSuffix();
+        try {
+            user = createTestUser();
+            User updateUser = new User();
+            updateUser.setId(user.getId());
+            updateUser.setTags(String.format("[\"%s\",\"%s\"]", tagA, tagB));
+            userService.updateById(updateUser);
+
+            List<User> userList = userService.searchUsersByTags(Arrays.asList(tagA, tagB));
+            List<Long> idList = userList.stream().map(User::getId).collect(Collectors.toList());
+
+            Assertions.assertTrue(idList.contains(user.getId()));
+        } finally {
+            deletePhysically(user);
+        }
+    }
+
+    @Test
+    void matchUsers_shouldSupportPlainStringTags() {
+        User currentUser = null;
+        User matchedUser = null;
+        try {
+            currentUser = createTestUser();
+            matchedUser = createTestUser();
+
+            currentUser.setTags("Java");
+
+            User updateMatchedUser = new User();
+            updateMatchedUser.setId(matchedUser.getId());
+            updateMatchedUser.setTags("[\"Java\",\"Python\"]");
+            userService.updateById(updateMatchedUser);
+
+            List<User> matchedUsers = userService.matchUsers(10, currentUser);
+            List<Long> matchedUserIds = matchedUsers.stream().map(User::getId).collect(Collectors.toList());
+
+            Assertions.assertTrue(matchedUserIds.contains(matchedUser.getId()));
+        } finally {
+            deletePhysically(currentUser);
+            deletePhysically(matchedUser);
+        }
+    }
+
+    private User createTestUser() {
         User user = new User();
-        user.setUsername("mikle");
-        user.setUserAccount("123");
-        user.setAvatarUrl("");
-        user.setGender(0);
-        user.setUserPassword("xxx");
-        user.setPhone("123");
-        user.setEmail("456");
-        boolean result = userService.save(user);
-        System.out.println(user.getId());
-        Assertions.assertTrue(result);
+        String suffix = randomSuffix();
+        user.setUsername("test_" + suffix);
+        user.setUserAccount("account_" + suffix);
+        user.setUserPassword(PASSWORD_ENCODER.encode("Password123"));
+        user.setPlanetCode(planetCode());
+        user.setUserRole(0);
+        boolean saved = userService.save(user);
+        Assertions.assertTrue(saved, "test user should be created");
+        return user;
     }
 
-    @Test
-    public void testUpdateUser() {
-        User user = new User();
-        user.setId(1L);
-        user.setUsername("tom");
-        user.setUserAccount("123");
-        user.setAvatarUrl("");
-        user.setGender(0);
-        user.setUserPassword("xxx");
-        user.setPhone("123");
-        user.setEmail("456");
-        boolean result = userService.updateById(user);
-        Assertions.assertTrue(result);
+    private String randomSuffix() {
+        return UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     }
 
-    @Test
-    public void testDeleteUser() {
-        boolean result = userService.removeById(1L);
-        Assertions.assertTrue(result);
+    private String planetCode() {
+        return UUID.randomUUID().toString().replace("-", "").substring(0, 5);
     }
 
-    @Test
-    public void testGetUser() {
-        User user = userService.getById(1L);
-        Assertions.assertNotNull(user);
+    private void deletePhysically(User user) {
+        if (user != null && user.getId() > 0) {
+            deletePhysically(user.getId());
+        }
     }
 
-    @Test
-    void updateUser() {
-        User user = User.builder()
-                .id(2)
-                .username("约翰")
-                .userAccount("John")
-                .avatarUrl("https://images.pexels.com/photos/37669288/pexels-photo-37669288.jpeg")
-                .gender(1)
-                .userPassword("12345678")
-                .phone("15239181001")
-                .email("chengdu@126.com")
-                .tags("Java")
-                .build();
-
-        User loginUser = User.builder()
-                .id(2)
-                .userRole(0)
-                .build();
-
-        int updated = userService.updateUser(user, loginUser);
-
-        Assertions.assertEquals(1, updated);
-    }
-
-    @Test
-    void userRegister() {
-        String userAccount = "John";
-        String userPassword = "12345678";
-        String checkPassword = "12345678";
-        String planetCode = "10001";
-        long result = userService.userRegister(userAccount, userPassword, checkPassword, planetCode);
-        Assertions.assertEquals(1, result);
-    }
-
-    @Test
-    public void testSearchUsersByTags() {
-        List<String> tagNameList = Arrays.asList("java", "python");
-        List<User> userList = userService.searchUsersByTags(tagNameList);
-        Assertions.assertNotNull(userList);
+    private void deletePhysically(Long userId) {
+        if (userId != null && userId > 0) {
+            userTeamMapper.deleteByTeamCreatorUserIdPhysically(userId);
+            userTeamMapper.deleteByUserIdPhysically(userId);
+            teamMapper.deleteByUserIdPhysically(userId);
+            userMapper.deleteByIdPhysically(userId);
+        }
     }
 }

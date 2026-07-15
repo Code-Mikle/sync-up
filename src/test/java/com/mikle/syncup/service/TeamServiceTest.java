@@ -1,24 +1,32 @@
 package com.mikle.syncup.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.mikle.syncup.exception.BusinessException;
+import com.mikle.syncup.mapper.TeamMapper;
+import com.mikle.syncup.mapper.UserMapper;
+import com.mikle.syncup.mapper.UserTeamMapper;
 import com.mikle.syncup.model.domain.Team;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.domain.UserTeam;
+import com.mikle.syncup.model.request.TeamJoinRequest;
+import com.mikle.syncup.model.request.TeamQuitRequest;
+import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import jakarta.annotation.Resource;
 import java.util.Date;
 import java.util.List;
+import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-
 
 @SpringBootTest
 class TeamServiceTest {
@@ -32,43 +40,41 @@ class TeamServiceTest {
     @Resource
     private UserTeamService userTeamService;
 
+    @Resource
+    private TeamMapper teamMapper;
+
+    @Resource
+    private UserMapper userMapper;
+
+    @Resource
+    private UserTeamMapper userTeamMapper;
+
     @Test
     void addTeam_pessimisticLock_shouldNotExceed5() throws Exception {
         User loginUser = createTestUser();
-        // 线程池的容量 同时最多运行的任务数
-        ExecutorService pool = Executors.newFixedThreadPool(80);
+        int maxTeamCount = 5;
+        int requestCount = 20;
+        ExecutorService pool = Executors.newFixedThreadPool(requestCount);
 
         try {
             clearUserTeams(loginUser.getId());
 
-            int requestCount = 80;
-            // 准备锁 统计“线程就绪”数量
-            // 每个线程启动后先执行 ready.countDown()。
             CountDownLatch ready = new CountDownLatch(requestCount);
-            // 统一发令枪，确保同时开始
-            // 每个线程启动后执行 start.await()，这会阻塞所有线程。
             CountDownLatch start = new CountDownLatch(1);
-            // 统计“线程完成”数量
             CountDownLatch done = new CountDownLatch(requestCount);
-            // 线程安全统计成功次数
             AtomicInteger success = new AtomicInteger();
-            // 线程安全统计失败次数
-            AtomicInteger failed = new AtomicInteger();
-            // 提交 80 个任务到线程池
+            AtomicInteger failedByQuota = new AtomicInteger();
+            Queue<Throwable> unexpectedErrors = new ConcurrentLinkedQueue<>();
+
             for (int i = 0; i < requestCount; i++) {
                 final int idx = i;
-                // pool.submit 提交一个并发任务，超过线程池的容量的任务就会先排队
                 pool.submit(() -> {
-                    // 当前任务已就绪，ready减1
-                    // 子任务报到，我已经启动了
                     ready.countDown();
                     try {
-                        // 阻塞线程，等待统一开始信号
-                        // 是子任务等发令，先别干活，等主线程统一放行
                         start.await();
 
                         Team team = new Team();
-                        team.setName("t" + idx + UUID.randomUUID().toString().substring(0, 6)); // <= 20
+                        team.setName("t" + idx + UUID.randomUUID().toString().substring(0, 6));
                         team.setDescription("lock test");
                         team.setMaxNum(5);
                         team.setStatus(0);
@@ -76,36 +82,85 @@ class TeamServiceTest {
 
                         long teamId = teamService.addTeam(team, loginUser);
                         if (teamId > 0) {
-                            // 成功则成功计数+1
                             success.incrementAndGet();
                         }
+                    } catch (BusinessException e) {
+                        failedByQuota.incrementAndGet();
                     } catch (Exception e) {
-                        // 异常视为失败，失败计数+1
-                        failed.incrementAndGet();
+                        unexpectedErrors.add(e);
                     } finally {
-                        // 无论成功失败都标记任务完成
                         done.countDown();
                     }
                 });
             }
 
-            // 最多等 10 秒，确保 80 个任务都就绪
-            // ready.await 是等所有已提交的任务都报到完
-            Assertions.assertTrue(ready.await(10, TimeUnit.SECONDS), "线程未就绪");
-            // 发令，所有任务同时开跑
-            // 所有卡在 start.await 的任务同时往下执行 addTeam
+            Assertions.assertTrue(ready.await(10, TimeUnit.SECONDS), "worker threads are not ready");
             start.countDown();
-            // 最多等 60 秒，确保任务全部结束
-            Assertions.assertTrue(done.await(60, TimeUnit.SECONDS), "并发请求未完成");
-            // 查库统计该用户最终建队数量
-            long finalCount = teamService.count(new QueryWrapper<Team>().eq("userId", loginUser.getId()));
-            System.out.printf("success=%d, failed=%d, finalCount=%d%n", success.get(), failed.get(), finalCount);
-            Assertions.assertTrue(finalCount <= 5, "同一用户创建队伍数不应超过5");
-            Assertions.assertEquals(finalCount, success.get(), "成功次数应与最终落库数量一致");
+            Assertions.assertTrue(done.await(60, TimeUnit.SECONDS), "concurrent requests did not finish");
+
+            long finalTeamCount = countTeamsCreatedBy(loginUser.getId());
+            long finalUserTeamCount = countUserTeamRelationsByUser(loginUser.getId());
+
+            Assertions.assertTrue(unexpectedErrors.isEmpty(),
+                    () -> "unexpected errors: " + unexpectedErrors.stream()
+                            .map(error -> error.getClass().getName() + ": " + error.getMessage())
+                            .collect(Collectors.joining("; ")));
+            Assertions.assertEquals(maxTeamCount, finalTeamCount, "created team count should reach the limit exactly");
+            Assertions.assertEquals(maxTeamCount, finalUserTeamCount, "user_team relation count should match created teams");
+            Assertions.assertEquals(maxTeamCount, success.get(), "only the first 5 requests should succeed");
+            Assertions.assertEquals(requestCount - maxTeamCount, failedByQuota.get(),
+                    "remaining requests should fail because of the quota");
         } finally {
-            clearUserTeams(loginUser.getId());
-            userService.removeById(loginUser.getId());
             pool.shutdownNow();
+            pool.awaitTermination(10, TimeUnit.SECONDS);
+            cleanupUserAndTeams(loginUser);
+        }
+    }
+
+    @Test
+    void joinTeam_duplicateJoin_shouldBeRejected() {
+        User creator = null;
+        User member = null;
+        try {
+            creator = createTestUser();
+            member = createTestUser();
+            long teamId = createTeam(creator, 2);
+
+            TeamJoinRequest joinRequest = new TeamJoinRequest();
+            joinRequest.setTeamId(teamId);
+
+            Assertions.assertTrue(teamService.joinTeam(joinRequest, member));
+            User joinedMember = member;
+            Assertions.assertThrows(BusinessException.class, () -> teamService.joinTeam(joinRequest, joinedMember));
+            Assertions.assertEquals(1, countUserTeamRelationsByUser(member.getId()));
+        } finally {
+            cleanupUserAndTeams(creator);
+            cleanupUserAndTeams(member);
+        }
+    }
+
+    @Test
+    void quitTeam_physicalDelete_shouldAllowRejoin() {
+        User creator = null;
+        User member = null;
+        try {
+            creator = createTestUser();
+            member = createTestUser();
+            long teamId = createTeam(creator, 2);
+
+            TeamJoinRequest joinRequest = new TeamJoinRequest();
+            joinRequest.setTeamId(teamId);
+            Assertions.assertTrue(teamService.joinTeam(joinRequest, member));
+
+            TeamQuitRequest quitRequest = new TeamQuitRequest();
+            quitRequest.setTeamId(teamId);
+            Assertions.assertTrue(teamService.quitTeam(quitRequest, member));
+
+            Assertions.assertTrue(teamService.joinTeam(joinRequest, member));
+            Assertions.assertEquals(1, countUserTeamRelationsByUser(member.getId()));
+        } finally {
+            cleanupUserAndTeams(creator);
+            cleanupUserAndTeams(member);
         }
     }
 
@@ -117,35 +172,54 @@ class TeamServiceTest {
         user.setUserPassword("12345678");
         user.setUserRole(0);
         boolean saved = userService.save(user);
-        Assertions.assertTrue(saved, "测试用户创建失败");
+        Assertions.assertTrue(saved, "test user should be created");
         return user;
     }
 
-    private void clearUserTeams(long userId) {
-        List<Long> teamIds = teamService.list(new QueryWrapper<Team>().eq("userId", userId))
-                .stream()
-                .map(Team::getId) // 取出 team 的 id 属性
-                .collect(Collectors.toList());
-        if (!teamIds.isEmpty()) {
-            userTeamService.remove(new QueryWrapper<UserTeam>().in("teamId", teamIds));
-            teamService.remove(new QueryWrapper<Team>().in("id", teamIds));
+    private long countTeamsCreatedBy(long userId) {
+        return teamService.count(new QueryWrapper<Team>().eq("userId", userId));
+    }
+
+    private long countUserTeamRelationsByUser(long userId) {
+        return userTeamService.count(new QueryWrapper<UserTeam>().eq("userId", userId));
+    }
+
+    private long createTeam(User creator, int maxNum) {
+        Team team = new Team();
+        team.setName("t_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
+        team.setDescription("stage0 test");
+        team.setMaxNum(maxNum);
+        team.setStatus(0);
+        team.setExpireTime(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000));
+        return teamService.addTeam(team, creator);
+    }
+
+    private void cleanupUserAndTeams(User user) {
+        if (user == null || user.getId() <= 0) {
+            return;
         }
+        clearUserTeams(user.getId());
+        userMapper.deleteByIdPhysically(user.getId());
+    }
+
+    private void clearUserTeams(long userId) {
+        userTeamMapper.deleteByTeamCreatorUserIdPhysically(userId);
+        userTeamMapper.deleteByUserIdPhysically(userId);
+        teamMapper.deleteByUserIdPhysically(userId);
     }
 
     @Test
-    public void clearTeams() {
+    @Disabled("Manual cleanup helper. Do not run with the regular test suite.")
+    void clearTeams() {
         long userId = 6;
         List<Team> teams = teamService.list(new QueryWrapper<Team>().eq("userId", userId));
-        System.out.println("teams: "+ teams.toString() + teams.size());
+        System.out.println("teams: " + teams + teams.size());
         System.out.println("------");
         List<Long> teamIds = teamService.list(new QueryWrapper<Team>().eq("userId", userId))
                 .stream()
-                .map(Team::getId) // 取出 team 的 id 属性
+                .map(Team::getId)
                 .collect(Collectors.toList());
-        System.out.println(teamIds.toString());
-        if (!teamIds.isEmpty()) {
-            userTeamService.remove(new QueryWrapper<UserTeam>().in("teamId", teamIds));
-            teamService.remove(new QueryWrapper<Team>().in("id", teamIds));
-        }
+        System.out.println(teamIds);
+        clearUserTeams(userId);
     }
 }

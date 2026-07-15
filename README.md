@@ -27,7 +27,7 @@ Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Sprin
   -> 首页推荐 / 标签搜索 / 相似度匹配
   -> 创建队伍 / 加入队伍 / 退出队伍
   -> Redis 推荐缓存 / 定时预热
-  -> Redisson 控制并发加入
+  -> MySQL 事务 / 行锁 / 唯一约束控制入队一致性
   -> MySQL 持久化用户、队伍和加入关系
 ```
 
@@ -59,7 +59,7 @@ Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Sprin
 
 - 推荐用户列表使用 Redis 缓存，减少重复数据库查询。
 - 定时任务对重点用户的推荐列表做缓存预热。
-- 加入队伍使用 Redisson 分布式锁，避免并发场景下队伍人数超限。
+- 加入队伍使用数据库事务、目标队伍行锁和 `user_team(userId, teamId)` 唯一索引兜底，避免重复加入和队伍人数超限。
 - 创建队伍、退出队伍和删除队伍涉及多表写入，使用本地事务保证一致性。
 - 使用 EasyExcel 支持一次性批量导入用户数据。
 - 使用统一响应体、错误码和全局异常处理，减少 Controller 重复代码。
@@ -80,7 +80,7 @@ flowchart TD
     Match["标签搜索 / 相似度匹配"]
     Team["队伍业务"]
     Cache["Redis 推荐缓存"]
-    Lock["Redisson 分布式锁"]
+    Consistency["事务 / 行锁 / 唯一约束"]
     Job["缓存预热定时任务"]
     Import["EasyExcel 数据导入"]
     DB["MySQL"]
@@ -94,7 +94,7 @@ flowchart TD
     Service --> Team
     Service --> Mapper
     Service --> Cache
-    Service --> Lock
+    Service --> Consistency
     Job --> Cache
     Import --> Service
     Mapper --> DB
@@ -110,7 +110,7 @@ Vue 3 前端
   -> Service 业务层
       -> 用户资料 / 标签搜索 / 搭子匹配
       -> 队伍创建 / 加入 / 退出 / 删除
-      -> Redis 缓存 / Redisson 锁 / 本地事务
+      -> Redis 缓存 / 本地事务 / 数据库约束
   -> MyBatis-Plus
   -> MySQL
 ```
@@ -150,24 +150,22 @@ sequenceDiagram
     participant F as 前端
     participant C as TeamController
     participant S as TeamService
-    participant L as Redisson
     participant D as MySQL
 
     U->>F: 点击加入队伍
     F->>C: POST /api/team/join
     C->>S: joinTeam
-    S->>D: 查询队伍信息
+    S->>D: 开启事务并锁定目标队伍行
     S->>S: 校验状态、密码、过期时间
-    S->>L: 获取分布式锁
     S->>D: 校验是否重复加入
     S->>D: 校验队伍人数
-    S->>D: 写入 user_team 关系
-    S->>L: 释放锁
+    S->>D: 写入 user_team 关系，唯一索引兜底
+    S->>D: 提交事务
     S-->>C: 返回加入结果
     C-->>F: 统一响应体
 ```
 
-这条链路的重点是控制并发抢占。如果多人同时加入同一个队伍，只靠前端判断或普通查询都不可靠，所以在写入关系前用 Redisson 锁保护关键校验和写入过程。
+这条链路的重点是控制并发抢占。如果多人同时加入同一个队伍，只靠前端判断或普通查询都不可靠，所以服务端在本地事务中锁定目标队伍行，重新校验容量，并用数据库唯一索引阻止重复加入。Redisson 仍可用于缓存预热等协调场景，但当前入队正确性不依赖它。
 
 ## 功能模块
 
@@ -314,8 +312,10 @@ sync-up
 按本机环境修改：
 
 ```text
-src/main/resources/application.yml
+.env
 ```
+
+可以从 `.env.example` 复制一份本地配置。不要把真实数据库密码、Redis 密码或生产密钥提交到仓库。
 
 启动后端：
 
@@ -335,6 +335,12 @@ mvnw.cmd spring-boot:run
 ./mvnw -DskipTests compile
 ```
 
+如果本机没有可用的 Maven Wrapper，或 Windows PowerShell 执行策略阻止脚本运行，可以使用本机 Maven，并将依赖仓库放到项目目录：
+
+```bash
+mvn "-Dmaven.repo.local=.m2/repository" test
+```
+
 后端接口默认地址：
 
 ```text
@@ -347,6 +353,12 @@ http://localhost:8080/api
 cd syncup-frontend
 npm install
 npm run dev
+```
+
+Windows PowerShell 如果拦截 `npm.ps1`，使用：
+
+```bash
+npm.cmd run dev
 ```
 
 类型检查：

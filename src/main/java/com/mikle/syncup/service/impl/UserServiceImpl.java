@@ -17,6 +17,8 @@ import com.mikle.syncup.utils.AlgorithmUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.math3.util.Pair;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.DigestUtils;
@@ -45,6 +47,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     /**
      * 盐值，混淆密码
      */
+    private static final PasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
+
     private static final String SALT = "mikle";
 
     @Override
@@ -89,7 +93,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "编号重复");
         }
         // 2. 加密
-        String encryptPassword = DigestUtils.md5DigestAsHex((SALT + userPassword).getBytes());
+        String encryptPassword = PASSWORD_ENCODER.encode(userPassword);
         // 3. 插入数据
         User user = new User();
         user.setUserAccount(userAccount);
@@ -121,17 +125,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (matcher.find()) {
             return null;
         }
-        // 2. 加密
-        String encryptPassword = DigestUtils.md5DigestAsHex((SALT + userPassword).getBytes());
         // 查询用户是否存在
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("userAccount", userAccount);
-        queryWrapper.eq("userPassword", encryptPassword);
         User user = userMapper.selectOne(queryWrapper);
         // 用户不存在
-        if (user == null) {
+        if (user == null || !passwordMatches(userPassword, user.getUserPassword())) {
             log.info("user login failed, userAccount cannot match userPassword");
             return null;
+        }
+        if (isLegacyMd5Password(user.getUserPassword())) {
+            User updateUser = new User();
+            updateUser.setId(user.getId());
+            updateUser.setUserPassword(PASSWORD_ENCODER.encode(userPassword));
+            this.updateById(updateUser);
         }
         // 3. 用户脱敏
         User safetyUser = getSafetyUser(user);
@@ -145,10 +152,23 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         return userLoginVO;
     }
 
+    private boolean passwordMatches(String rawPassword, String storedPassword) {
+        if (StringUtils.isBlank(rawPassword) || StringUtils.isBlank(storedPassword)) {
+            return false;
+        }
+        if (isLegacyMd5Password(storedPassword)) {
+            String legacyPassword = DigestUtils.md5DigestAsHex((SALT + rawPassword).getBytes());
+            return legacyPassword.equals(storedPassword);
+        }
+        return PASSWORD_ENCODER.matches(rawPassword, storedPassword);
+    }
+
+    private boolean isLegacyMd5Password(String storedPassword) {
+        return storedPassword != null && storedPassword.matches("^[a-fA-F0-9]{32}$");
+    }
+
     /**
      * 用户脱敏
-     * @param originUser
-     * @return
      */
     @Override
     public User getSafetyUser(User originUser) {
@@ -173,8 +193,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     /**
      * 用户注销
-     *
-     * @param request
      */
     @Override
     public int userLogout(HttpServletRequest request) {
@@ -187,7 +205,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     /**
      * 根据标签搜索用户（内存过滤）
      * @param tagNameList 用户要拥有的标签
-     * @return
      */
     @Override
     public List<User> searchUsersByTags(List<String> tagNameList) {
@@ -282,9 +299,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     /**
      * 是否为管理员
-     *
-     * @param request
-     * @return
      */
     @Override
     public boolean isAdmin(HttpServletRequest request) {
@@ -297,9 +311,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     /**
      * 是否为管理员
-     *
-     * @param loginUser
-     * @return
      */
     @Override
     public boolean isAdmin(User loginUser) {
@@ -312,10 +323,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         queryWrapper.select("id", "tags");
         queryWrapper.isNotNull("tags");
         List<User> userList = this.list(queryWrapper);
-        String tags = loginUser.getTags();
-        Gson gson = new Gson();
-        List<String> tagList = gson.fromJson(tags, new TypeToken<List<String>>() {
-        }.getType());
+        List<String> tagList = parseTagNameList(loginUser.getTags());
+        if (CollectionUtils.isEmpty(tagList)) {
+            return new ArrayList<>();
+        }
         // 用户列表的下标 => 相似度
         List<Pair<User, Long>> list = new ArrayList<>();
         // 依次计算所有用户和当前用户的相似度
@@ -326,8 +337,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             if (StringUtils.isBlank(userTags) || user.getId() == loginUser.getId()) {
                 continue;
             }
-            List<String> userTagList = gson.fromJson(userTags, new TypeToken<List<String>>() {
-            }.getType());
+            List<String> userTagList = parseTagNameList(userTags);
+            if (CollectionUtils.isEmpty(userTagList)) {
+                continue;
+            }
             // 计算分数
             long distance = AlgorithmUtils.minDistance(tagList, userTagList);
             list.add(new Pair<>(user, distance));
@@ -339,6 +352,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
                 .collect(Collectors.toList());
         // 原本顺序的 userId 列表
         List<Long> userIdList = topUserPairList.stream().map(pair -> pair.getKey().getId()).collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(userIdList)) {
+            return new ArrayList<>();
+        }
         QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
         userQueryWrapper.in("id", userIdList);
         // 1, 3, 2
@@ -353,6 +369,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             finalUserList.add(userIdUserListMap.get(userId).get(0));
         }
         return finalUserList;
+    }
+
+    private List<String> parseTagNameList(String tagsStr) {
+        return new ArrayList<>(parseTagNameSet(tagsStr));
     }
 
     /**
