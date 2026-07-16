@@ -63,6 +63,59 @@ create table user_team
 create unique index uk_user_team_userId_teamId on user_team (userId, teamId);
 create index idx_user_team_teamId on user_team (teamId);
 
+-- AI 队伍草稿表
+create table ai_team_draft
+(
+    id              bigint auto_increment comment 'id' primary key,
+    draftId         varchar(64) not null comment 'AI 草稿公开 id',
+    sessionId       varchar(64) null comment 'AI 对话会话 id',
+    userId          bigint not null comment '草稿所属用户 id',
+    name            varchar(256) not null comment '队伍名称',
+    description     varchar(1024) null comment '描述',
+    maxNum          int not null comment '最大人数',
+    activityType    varchar(64) null comment '活动类型',
+    city            varchar(64) null comment '城市',
+    district        varchar(64) null comment '区域',
+    startTime       datetime null comment '活动开始时间',
+    durationMinutes int null comment '预计时长，单位分钟',
+    budgetPerPerson decimal(10, 2) null comment '人均预算',
+    skillLevel      varchar(32) null comment '水平要求',
+    status          tinyint default 0 not null comment '0 - 待确认，1 - 已确认，2 - 已过期',
+    confirmedTeamId bigint null comment '确认后创建的队伍 id',
+    confirmedAt     datetime null comment '确认时间',
+    expiresAt       datetime not null comment '草稿过期时间',
+    createTime      datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime      datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete        tinyint default 0 not null comment '是否删除'
+) comment 'AI 队伍草稿';
+
+create unique index uk_ai_team_draft_draftId on ai_team_draft (draftId);
+create index idx_ai_team_draft_user_status on ai_team_draft (userId, status, expiresAt);
+
+-- AI 工具调用审计表
+create table ai_tool_call_log
+(
+    id               bigint auto_increment comment 'id' primary key,
+    sessionId        varchar(64) null comment 'AI 对话会话 id',
+    userId           bigint null comment '用户 id',
+    actionType       varchar(64) not null comment '动作类型',
+    toolName         varchar(64) not null comment '工具名称',
+    status           varchar(32) not null comment 'success / failed',
+    argumentsSummary varchar(1024) null comment '脱敏参数摘要',
+    resultSummary    varchar(1024) null comment '结果摘要',
+    errorMessage     varchar(1024) null comment '错误摘要',
+    durationMs       bigint null comment '耗时毫秒',
+    relatedDraftId   varchar(64) null comment '关联草稿 id',
+    relatedTeamId    bigint null comment '关联队伍 id',
+    createTime       datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete         tinyint default 0 not null comment '是否删除'
+) comment 'AI 工具调用审计';
+
+create index idx_ai_tool_call_log_user_time on ai_tool_call_log (userId, createTime);
+create index idx_ai_tool_call_log_session on ai_tool_call_log (sessionId);
+create index idx_ai_tool_call_log_action_status on ai_tool_call_log (actionType, status);
+
 -- 标签表（可以不创建，因为标签字段已经放到用户表中）
 create table tag
 (

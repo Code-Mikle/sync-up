@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
-@MapperScan("com.mikle.syncup.mapper")
+@MapperScan({"com.mikle.syncup.mapper", "com.mikle.syncup.ai.mapper"})
 @EnableScheduling
 public class MyApplication {
 
