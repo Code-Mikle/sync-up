@@ -19,6 +19,8 @@ Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Sprin
 
 项目围绕“如何找到同频的人”这个业务场景展开：用户可以维护个人资料和标签，按标签搜索搭子，查看推荐用户，通过相似度算法匹配更接近的人，也可以创建队伍、加入队伍、退出队伍和管理自己的队伍。
 
+当前阶段已补齐 AI 组队助手的第一阶段闭环：用户可以用自然语言查找队伍、推荐搭子、查看队伍详情、生成队伍草稿，并在确认后复用原有队伍服务创建正式队伍。
+
 ## 项目概览
 
 ```text
@@ -26,6 +28,7 @@ Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Sprin
   -> 维护个人资料和标签
   -> 首页推荐 / 标签搜索 / 相似度匹配
   -> 创建队伍 / 加入队伍 / 退出队伍
+  -> AI 助手解析自然语言 / 调用受控工具 / 生成待确认草稿
   -> Redis 推荐缓存 / 定时预热
   -> MySQL 事务 / 行锁 / 唯一约束控制入队一致性
   -> MySQL 持久化用户、队伍和加入关系
@@ -54,6 +57,25 @@ Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Sprin
 - 创建队伍时校验人数、名称、描述、状态、密码和过期时间。
 - 加入队伍时校验是否过期、是否私有、密码是否正确、是否重复加入、队伍是否已满。
 - 退出队伍时处理队长转移；队伍只剩一人时自动解散。
+
+**AI 组队助手（阶段 1）**
+
+- 支持 `POST /api/ai/chat`，根据自然语言识别组队需求。
+- 支持受控工具：队伍查询、队伍详情、搭子推荐、队伍草稿、我创建的队伍、我的公开资料。
+- 阶段 2 后扩展操作工具：我加入的队伍、加入队伍、退出队伍、更新我的自我介绍。
+- 支持 LangChain4j 工具调用编排，默认关闭；未配置模型时自动降级到 Mock 解析和固定工具链。
+- 模型默认配置为 `qwen3.6-flash-2026-04-16`，通过 DashScope / 百炼 OpenAI 兼容接口接入。
+- 创建队伍只生成草稿，必须用户确认后才会写入 `team` 和 `user_team`。
+- 工具调用和草稿确认写入 `ai_tool_call_log`，审计信息做脱敏摘要。
+
+**AI 用户画像（阶段 2）**
+
+- 用户可维护 `profile` 自我介绍，AI 画像接口可从自由文本提取结构化画像。
+- 画像提取结果先进入 `ai_profile_extraction_task`，用户确认后才写入 `ai_user_profile`。
+- 第一版采用规则化受控词表解析，保留候选标签，后续可替换为模型提取但接口和数据结构不变。
+- 画像读取已接入 `getMyProfile` 工具，模型能看到用户确认过的结构化偏好。
+- 画像写入已接入 `updateMyProfile` 工具，用户可直接对 AI 说“这是我的自我介绍，根据这个更新我的信息”。
+- 提取失败或画像表未初始化不会阻断注册、登录、资料编辑和原有 AI 助手能力。
 
 **缓存、并发与工程实践**
 
@@ -167,6 +189,34 @@ sequenceDiagram
 
 这条链路的重点是控制并发抢占。如果多人同时加入同一个队伍，只靠前端判断或普通查询都不可靠，所以服务端在本地事务中锁定目标队伍行，重新校验容量，并用数据库唯一索引阻止重复加入。Redisson 仍可用于缓存预热等协调场景，但当前入队正确性不依赖它。
 
+### AI 组队助手链路
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant F as 前端 AI 页面
+    participant C as AiChatController
+    participant A as AI 编排层
+    participant T as 受控工具
+    participant S as 业务 Service
+    participant D as MySQL
+
+    U->>F: 输入自然语言需求
+    F->>C: POST /api/ai/chat
+    C->>A: 获取登录用户并进入 AI 流程
+    A->>A: LangChain4j Agent 可用则选择工具，否则降级 Mock 固定链路
+    A->>T: 调用 searchTeams / recommendUsers / createTeamDraft
+    T->>S: 复用现有队伍和用户服务
+    T->>D: 写入工具审计或草稿
+    A-->>C: 返回回复、工具结果和草稿
+    C-->>F: 统一响应体
+    U->>F: 点击确认草稿
+    F->>C: POST /api/ai/team-draft/{draftId}/confirm
+    C->>S: 重新校验并创建正式队伍
+```
+
+这条链路的原则是“模型负责理解和选择，后端负责边界”。模型不能直接传入用户身份，不能直接写正式业务表，所有写入动作都必须经过确认接口。
+
 ## 功能模块
 
 | 模块 | 说明 |
@@ -176,6 +226,7 @@ sequenceDiagram
 | 推荐模块 | 首页推荐、Redis 缓存、定时缓存预热 |
 | 匹配模块 | 基于编辑距离的标签相似度匹配 |
 | 队伍模块 | 创建、更新、查询、加入、退出、删除、我创建、我加入 |
+| AI 助手模块 | 自然语言组队、受控工具调用、队伍草稿、确认创建、工具审计 |
 | 导入模块 | EasyExcel 批量导入用户数据 |
 | 基础能力 | 统一响应、错误码、全局异常、逻辑删除、接口文档配置 |
 
@@ -189,6 +240,11 @@ sequenceDiagram
 | `team` | 队伍信息、最大人数、过期时间、队长、状态、密码 |
 | `user_team` | 用户和队伍的加入关系 |
 | `tag` | 标签表，当前可以不启用，因为用户标签已存入 `user.tags` |
+| `ai_team_draft` | AI 生成的队伍草稿、确认状态、过期时间和确认后的队伍 ID |
+| `ai_tool_call_log` | AI 工具调用和草稿确认的脱敏审计记录 |
+| `ai_user_profile` | 用户确认后的结构化 AI 画像 |
+| `ai_profile_extraction_task` | 画像提取任务、状态、来源文本和提取结果 |
+| `ai_chat_memory` | AI 短期会话记忆，保存 24 小时内的 LangChain4j 消息窗口 |
 
 设计取舍：
 
@@ -197,6 +253,7 @@ sequenceDiagram
 - 使用 `isDelete` 配合 MyBatis-Plus 做逻辑删除。
 - 当前标签存在 `user.tags` 字段中，适合快速落地；如果后续标签查询、统计、推荐规则变复杂，再拆成标签关系表更稳妥。
 - 当前不依赖数据库外键，关系一致性主要由业务层和事务维护，部署和迁移成本更低。
+- AI 相关表只保存草稿、画像和审计摘要，不保存登录 Token、模型 API Key、队伍密码和完整敏感内容；画像来源文本会做手机号、邮箱和密钥类信息最小化处理。
 
 ## 接口概览
 
@@ -232,6 +289,18 @@ sequenceDiagram
 | `GET` | `/api/team/list/my/create` | 我创建的队伍 |
 | `GET` | `/api/team/list/my/join` | 我加入的队伍 |
 
+### AI 接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/ai/chat` | AI 组队助手对话入口 |
+| `POST` | `/api/ai/team/{teamId}/details` | AI 工具路径下的队伍详情查询 |
+| `POST` | `/api/ai/team-draft/{draftId}/confirm` | 确认 AI 队伍草稿并创建正式队伍 |
+| `GET` | `/api/ai/profile/current` | 查询当前用户已确认的结构化画像 |
+| `POST` | `/api/ai/profile/extract` | 从自我介绍文本生成待确认画像任务 |
+| `POST` | `/api/ai/profile-task/{taskId}/confirm` | 确认画像任务并保存当前画像 |
+| `POST` | `/api/ai/profile-task/{taskId}/reject` | 拒绝画像任务 |
+
 统一响应格式：
 
 ```json
@@ -253,6 +322,7 @@ sequenceDiagram
 - Redis / Spring Data Redis
 - Sa-Token
 - Redisson
+- LangChain4j 1.14
 - EasyExcel
 - Knife4j / Springdoc OpenAPI
 - Gson
@@ -274,6 +344,7 @@ sequenceDiagram
 sync-up
 ├── src/main/java/com/mikle/syncup
 │   ├── common        # 统一响应、错误码、通用请求对象
+│   ├── ai            # AI 助手、受控工具、草稿、审计、意图评测
 │   ├── config        # MyBatis-Plus、Redis、Redisson、Knife4j、Web MVC 配置
 │   ├── constant      # 常量
 │   ├── controller    # 用户接口、队伍接口
@@ -323,10 +394,26 @@ sync-up
 mysql -u root -p < sql/create_table.sql
 ```
 
-已有数据库升级到阶段 0.5 的结构化队伍查询字段：
+已有数据库按阶段升级时，推荐顺序如下：
 
 ```bash
+mysql -u root -p sync_up_db < sql/stage0_baseline_migration.sql
 mysql -u root -p sync_up_db < sql/stage0_5_team_search_migration.sql
+mysql -u root -p sync_up_db < sql/stage1_3_ai_team_draft_migration.sql
+mysql -u root -p sync_up_db < sql/stage1_4_ai_audit_migration.sql
+mysql -u root -p sync_up_db < sql/stage2_ai_user_profile_migration.sql
+mysql -u root -p sync_up_db < sql/stage2_1_ai_chat_memory_migration.sql
+```
+
+AI Agent 默认关闭，不影响本地启动。需要接入真实模型时，在 `.env` 或运行环境中配置：
+
+```properties
+SYNC_UP_AI_AGENT_ENABLED=true
+DASHSCOPE_API_KEY=你的百炼或 DashScope API Key
+SYNC_UP_AI_AGENT_MODEL=qwen3.6-flash-2026-04-16
+SYNC_UP_AI_MEMORY_MAX_MESSAGES=20
+SYNC_UP_AI_MEMORY_REDIS_TTL_HOURS=12
+SYNC_UP_AI_MEMORY_MYSQL_TTL_HOURS=24
 ```
 
 启动后端：
@@ -390,6 +477,102 @@ npm run build
 ```text
 http://localhost:8080/api
 ```
+
+## AI 阶段 1 验收
+
+阶段 1 的验收目标是证明 AI 助手可以形成最小闭环，而不是宣传完整智能推荐系统。
+
+### 演示脚本
+
+1. 登录用户。
+2. 在 AI 页面输入：`我想这个周末在西安找羽毛球搭子，预算每人50以内`。
+3. 后端识别组队需求，调用 `searchTeams` 返回可加入队伍。
+4. 同一轮调用 `recommendUsers` 返回搭子推荐和推荐原因。
+5. 点击队伍卡片“详情”，调用 `getTeamDetails` 查看人数、地点、时间和创建者。
+6. 输入：`帮我在西安创建一个4人的羽毛球队伍，预算每人50以内`。
+7. 后端只生成 `createTeamDraft` 草稿，不写正式队伍表。
+8. 用户点击确认后，调用 `POST /api/ai/team-draft/{draftId}/confirm` 创建正式队伍并自动加入。
+9. 查询 `ai_tool_call_log`，确认搜索、推荐、详情、草稿和确认动作都有审计记录。
+
+### 固定评测集
+
+当前固定评测集为 `src/test/resources/ai/intent-evaluation-v1.json`，共 30 条样本。当前基线对象是 `MockTeamIntentParser`，不是大模型效果。
+
+最近一次阶段 1 验证指标：
+
+| 指标 | 结果 |
+| --- | --- |
+| 样本数 | 30 |
+| 关键槽位准确率 | 91/94，96.81% |
+| 工具选择准确率 | 60/60，100.00% |
+| 缺失字段识别率 | 4/4，100.00% |
+
+### 验证命令
+
+后端阶段 1 测试：
+
+```bash
+mvn "-Dmaven.repo.local=.m2/repository" "-Dtest=AiChatServiceTest,AiIntentEvaluationTest" test
+```
+
+前端验证：
+
+```bash
+cd syncup-frontend
+npm.cmd run type-check
+npm.cmd run build
+```
+
+### 已知限制
+
+- 未配置 `DASHSCOPE_API_KEY` 时，AI 助手默认使用 Mock 解析和固定工具链。
+- 真实模型工具调用默认关闭，需要显式开启 `SYNC_UP_AI_AGENT_ENABLED=true`。
+- 当前推荐仍是标签匹配和编辑距离基线，不是向量召回或复杂语义推荐。
+- 当前没有长期记忆、内容审核后台、复杂 Agent 工作流和向量数据库；只保留短期会话记忆。
+- 个人信息更新只暴露受控的 `updateMyProfile` 工具；模型只能更新当前用户自我介绍和确认后的结构化画像，不能直接修改账号、手机号、邮箱、角色等敏感字段。
+
+## AI 短期会话记忆
+
+真实模型开启后，AI 助手使用 LangChain4j `chatMemoryProvider` 读取短期上下文，解决“刚才那个队伍”“加入第一个”“继续修改我的资料”这类连续对话问题。
+
+设计取舍：
+
+- `memoryId = userId:sessionId`，避免不同用户之间串话。
+- Redis 缓存 `syncup:ai:chat-memory:{memoryId}`，默认保留 12 小时。
+- MySQL 表 `ai_chat_memory` 默认保留 24 小时，并由定时任务每小时物理清理过期数据。
+- 第一版使用 `MessageWindowChatMemory`，默认最多保留最近 20 条消息。
+- 只做短期会话记忆；长期偏好仍由 `ai_user_profile` 管理。
+
+## AI 阶段 2 验收
+
+阶段 2 的目标是让用户画像进入可解释、可确认、可回滚的结构化状态，而不是让模型直接覆盖用户标签。
+
+### 核心流程
+
+```text
+用户编辑自我介绍 / 调用画像提取接口
+  -> Agent 识别更新意图并调用 updateMyProfile，或用户调用画像提取接口
+  -> 规则化画像提取
+  -> 写入 ai_profile_extraction_task
+  -> 用户确认或拒绝
+  -> 确认后写入 ai_user_profile
+  -> getMyProfile 工具读取已确认画像
+```
+
+### 验证命令
+
+```bash
+mvn "-Dmaven.repo.local=.m2/repository" "-Dtest=AiUserProfileServiceTest,AiChatServiceTest" test
+```
+
+当前覆盖：
+
+- 画像提取、确认、当前画像读取。
+- `updateMyProfile` 工具更新 `user.profile` 并确认结构化画像。
+- `joinTeam`、`quitTeam`、`listMyJoinedTeams` 工具复用原队伍 Service 完成入队、退队和列表查询。
+- 拒绝画像任务后不写入当前画像。
+- 其他用户不能确认画像任务。
+- 阶段 1 AI 聊天、工具调用、草稿确认链路回归通过。
 
 ## License
 

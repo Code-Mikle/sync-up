@@ -19,7 +19,8 @@ create table user
     isDelete     tinyint  default 0 not null comment '是否删除',
     userRole     int      default 0 not null comment '用户角色 0 - 普通用户 1 - 管理员',
     planetCode   varchar(512) null comment '星球编号',
-    tags         varchar(1024) null comment '标签 json 列表'
+    tags         varchar(1024) null comment '标签 json 列表',
+    profile      varchar(1024) null comment '个人简介 / 自我介绍'
 ) comment '用户';
 
 -- 队伍表
@@ -115,6 +116,64 @@ create table ai_tool_call_log
 create index idx_ai_tool_call_log_user_time on ai_tool_call_log (userId, createTime);
 create index idx_ai_tool_call_log_session on ai_tool_call_log (sessionId);
 create index idx_ai_tool_call_log_action_status on ai_tool_call_log (actionType, status);
+
+-- AI 用户画像表
+create table ai_user_profile
+(
+    id            bigint auto_increment comment 'id' primary key,
+    userId        bigint not null comment '用户 id',
+    profileJson   text not null comment '结构化画像 JSON',
+    sourceText    varchar(1024) null comment '画像来源文本，已做最小化脱敏',
+    modelVersion  varchar(64) not null comment '提取模型或规则版本',
+    status        tinyint default 1 not null comment '1 - 已确认',
+    confirmedAt   datetime null comment '用户确认时间',
+    createTime    datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime    datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete      tinyint default 0 not null comment '是否删除'
+) comment 'AI 用户结构化画像';
+
+create unique index uk_ai_user_profile_userId on ai_user_profile (userId);
+create index idx_ai_user_profile_updateTime on ai_user_profile (updateTime);
+
+-- AI 用户画像提取任务表
+create table ai_profile_extraction_task
+(
+    id             bigint auto_increment comment 'id' primary key,
+    taskId         varchar(64) not null comment '画像提取任务公开 id',
+    userId         bigint not null comment '用户 id',
+    sourceText     varchar(1024) not null comment '来源文本，已做最小化脱敏',
+    extractionJson text not null comment '提取出的结构化画像 JSON',
+    status         tinyint default 1 not null comment '0 - 待处理，1 - 已提取，2 - 已确认，3 - 已拒绝，4 - 失败',
+    retryCount     int default 0 not null comment '重试次数',
+    nextRetryAt    datetime null comment '下次重试时间',
+    lastError      varchar(1024) null comment '最后一次错误',
+    modelVersion   varchar(64) not null comment '提取模型或规则版本',
+    createTime     datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete       tinyint default 0 not null comment '是否删除'
+) comment 'AI 用户画像提取任务';
+
+create unique index uk_ai_profile_task_taskId on ai_profile_extraction_task (taskId);
+create index idx_ai_profile_task_user_status on ai_profile_extraction_task (userId, status, createTime);
+
+-- AI 短期会话记忆表
+create table ai_chat_memory
+(
+    id           bigint auto_increment comment 'id' primary key,
+    memoryId     varchar(160) not null comment '会话记忆 id，userId:sessionId',
+    userId       bigint not null comment '用户 id',
+    sessionId    varchar(64) not null comment 'AI 对话会话 id',
+    messagesJson mediumtext not null comment 'LangChain4j ChatMessage JSON',
+    messageCount int default 0 not null comment '消息数量',
+    expireAt     datetime not null comment '过期时间',
+    createTime   datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete     tinyint default 0 not null comment '是否删除'
+) comment 'AI 短期会话记忆';
+
+create unique index uk_ai_chat_memory_memoryId on ai_chat_memory (memoryId);
+create index idx_ai_chat_memory_user_time on ai_chat_memory (userId, updateTime);
+create index idx_ai_chat_memory_expireAt on ai_chat_memory (expireAt);
 
 -- 标签表（可以不创建，因为标签字段已经放到用户表中）
 create table tag

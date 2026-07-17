@@ -16,6 +16,8 @@
       <section class="user-field-group">
         <van-cell title="昵称" is-link :value="user.username || '-'" @click="toEdit('username', '昵称', user.username)"/>
         <van-cell title="账号" :value="user.userAccount || '-'"/>
+        <van-cell title="自我介绍" is-link :value="formatValue(user.profile)" @click="toEdit('profile', '自我介绍', user.profile)"/>
+        <van-cell title="标签" is-link :value="formatTagsValue(user.tags)" @click="toEdit('tags', '标签', user.tags)"/>
         <van-cell title="头像" is-link @click="toEdit('avatarUrl', '头像', user.avatarUrl)">
           <template #value>
             <span class="avatar-value">{{ user.avatarUrl ? '已设置' : '未设置' }}</span>
@@ -48,6 +50,7 @@ import {computed, onMounted, ref} from "vue";
 import {getCurrentUser} from "../services/user";
 import {UserType} from "../models/user";
 import {getGenderText} from "../constants/user";
+import {parseUserTags} from "../utils/user";
 
 const user = ref<UserType | null>(null);
 const loading = ref(true);
@@ -71,7 +74,18 @@ const formatValue = (value: unknown) => {
   return value === undefined || value === null || value === '' ? '-' : String(value);
 }
 
+const formatTagsValue = (tags: UserType['tags']) => {
+  const parsedTags = parseUserTags(tags);
+  if (parsedTags.length === 0) {
+    return '未设置';
+  }
+  return parsedTags.slice(0, 3).join('、') + (parsedTags.length > 3 ? ` 等 ${parsedTags.length} 个` : '');
+}
+
 const getEditValue = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
   return value === undefined || value === null ? '' : String(value);
 }
 

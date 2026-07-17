@@ -7,7 +7,7 @@
           <span v-else>{{ avatarText }}</span>
         </div>
         <div class="profile-card__body">
-          <p class="profile-card__eyebrow">当前用户</p>
+          <p class="profile-card__eyebrow">用户昵称</p>
           <h1>{{ user.username || '未命名用户' }}</h1>
           <p>账号 {{ user.userAccount || '-' }}</p>
         </div>

@@ -28,7 +28,21 @@ public class AiAgentProperties {
 
     private int maxInputLength = 1000;
 
+    private Memory memory = new Memory();
+
     public boolean available() {
         return enabled && StringUtils.isNotBlank(apiKey);
+    }
+
+    @Data
+    public static class Memory {
+
+        private boolean enabled = true;
+
+        private int maxMessages = 20;
+
+        private long redisTtlHours = 12;
+
+        private long mysqlTtlHours = 24;
     }
 }

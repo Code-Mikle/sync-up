@@ -1,16 +1,5 @@
 <template>
   <div class="ai-chat-page">
-    <section class="ai-hero">
-      <div class="ai-hero__copy">
-        <span>AI 智能匹配</span>
-        <h1>直接告诉我你想找什么</h1>
-        <p>我会先整理需求，再把可操作的结果放进对话里。</p>
-      </div>
-      <div class="ai-hero__bot">
-        <van-icon name="service-o" size="36" />
-      </div>
-    </section>
-
     <section class="chat-stream" ref="streamRef">
       <article
           v-for="message in messages"
@@ -18,32 +7,41 @@
           class="chat-message"
           :class="`chat-message--${message.role}`"
       >
-        <div class="chat-message__avatar" v-if="message.role === 'assistant'">
-          <van-icon name="service-o" size="20" />
-        </div>
-        <div class="chat-message__content">
-          <div class="chat-message__bubble">
-            {{ message.content }}
-            <span>{{ message.time }}</span>
+        <div class="chat-message__row">
+          <div class="chat-message__avatar">
+            <template v-if="message.role === 'assistant'">
+              <van-icon name="service-o" size="20" />
+            </template>
+            <template v-else>
+              <img v-if="currentUser?.avatarUrl" :src="currentUser.avatarUrl" :alt="currentUser.username || '我'" />
+              <span v-else>{{ userAvatarText }}</span>
+            </template>
           </div>
+          <div class="chat-message__content">
+            <div class="chat-message__bubble">
+              {{ message.content }}
+              <span>{{ message.time }}</span>
+            </div>
+          </div>
+        </div>
 
-          <template v-if="message.response">
-            <article class="intent-card" v-if="message.response.intent?.teamRelated">
+        <div class="chat-message__results" v-if="message.response">
+            <article class="intent-card" v-if="shouldShowIntentCard(message.response)">
               <header>
                 <van-icon name="description-o" size="18" />
                 <h2>需求识别</h2>
               </header>
               <div class="intent-card__grid">
-                <span>活动：{{ message.response.intent.activityType || "待补充" }}</span>
-                <span>城市：{{ message.response.intent.city || "待补充" }}</span>
-                <span>人数：{{ formatCount(message.response.intent.memberCount) }}</span>
-                <span>预算：{{ formatBudget(message.response.intent.budgetMax) }}</span>
-                <span>时间：{{ formatDate(message.response.intent.startTime) }}</span>
-                <span>水平：{{ message.response.intent.skillLevel || "不限" }}</span>
+                <span>活动：{{ message.response.intent?.activityType || "待补充" }}</span>
+                <span>城市：{{ message.response.intent?.city || "待补充" }}</span>
+                <span>人数：{{ formatCount(message.response.intent?.memberCount) }}</span>
+                <span>预算：{{ formatBudget(message.response.intent?.budgetMax) }}</span>
+                <span>时间：{{ formatDate(message.response.intent?.startTime) }}</span>
+                <span>水平：{{ message.response.intent?.skillLevel || "不限" }}</span>
               </div>
-              <div class="intent-card__missing" v-if="message.response.intent.missingFields?.length">
+              <div class="intent-card__missing" v-if="message.response.intent?.missingFields?.length">
                 <van-icon name="warning-o" />
-                <span>还缺：{{ formatMissingFields(message.response.intent.missingFields) }}</span>
+                <span>还缺：{{ formatMissingFields(message.response.intent?.missingFields ?? []) }}</span>
               </div>
             </article>
 
@@ -63,9 +61,10 @@
             </article>
 
             <article
-                v-for="toolResult in message.response.toolResults"
+                v-for="toolResult in getVisibleToolResults(message.response)"
                 :key="`${message.id}-${toolResult.toolName}`"
                 class="tool-card"
+                :class="`tool-card--${toolResult.toolName}`"
             >
               <header>
                 <van-icon :name="getToolIcon(toolResult.toolName)" size="18" />
@@ -74,9 +73,42 @@
                   {{ toolResult.success ? "完成" : "失败" }}
                 </van-tag>
               </header>
-              <p>{{ toolResult.summary || "工具已执行" }}</p>
+              <p v-if="shouldShowToolSummary(toolResult)">{{ getToolSummary(toolResult) }}</p>
 
-              <div class="team-result-list" v-if="toolResult.toolName === 'searchTeams'">
+              <div class="profile-result" v-if="toolResult.toolName === 'getMyProfile'">
+                <div class="profile-result__avatar">
+                  <img v-if="getProfileData(toolResult)?.avatarUrl" :src="getProfileData(toolResult)?.avatarUrl" alt="" />
+                  <van-icon v-else name="contact-o" size="22" />
+                </div>
+                <div class="profile-result__main">
+                  <h3>{{ getProfileData(toolResult)?.username || "未命名用户" }}</h3>
+                  <p>{{ getProfileData(toolResult)?.profile || "还没有填写自我介绍" }}</p>
+                  <div class="profile-result__meta">
+                    <span v-if="getProfileData(toolResult)?.planetCode">星球编号 {{ getProfileData(toolResult)?.planetCode }}</span>
+                    <span v-if="getProfileData(toolResult)?.structuredProfile?.city">{{ getProfileData(toolResult)?.structuredProfile?.city }}</span>
+                    <span v-if="getProfileActivities(toolResult).length">{{ getProfileActivities(toolResult).join("、") }}</span>
+                  </div>
+                  <div class="profile-result__tags" v-if="formatUserTags(getProfileData(toolResult)?.tags).length">
+                    <van-tag
+                        v-for="tag in formatUserTags(getProfileData(toolResult)?.tags)"
+                        :key="`profile-${tag}`"
+                        round
+                    >
+                      {{ tag }}
+                    </van-tag>
+                  </div>
+                </div>
+              </div>
+
+              <div class="operation-result" v-else-if="isOperationTool(toolResult.toolName)">
+                <van-icon :name="toolResult.success ? 'checked' : 'warning-o'" size="22" />
+                <div>
+                  <h3>{{ getOperationTitle(toolResult) }}</h3>
+                  <p>{{ getOperationDescription(toolResult) }}</p>
+                </div>
+              </div>
+
+              <div class="team-result-list" v-else-if="isTeamListTool(toolResult.toolName)">
                 <article
                     v-for="team in getTeams(toolResult)"
                     :key="team.id"
@@ -132,7 +164,7 @@
                 />
               </div>
 
-              <div class="user-recommend-list" v-if="toolResult.toolName === 'recommendUsers'">
+              <div class="user-recommend-list" v-else-if="toolResult.toolName === 'recommendUsers'">
                 <article
                     v-for="user in getRecommendedUsers(toolResult)"
                     :key="user.id"
@@ -209,19 +241,20 @@
                 </van-button>
               </div>
             </article>
-          </template>
         </div>
       </article>
 
       <article class="chat-message chat-message--assistant" v-if="loading">
-        <div class="chat-message__avatar">
-          <van-icon name="service-o" size="20" />
-        </div>
-        <div class="chat-message__content">
-          <div class="typing-card">
-            <span></span>
-            <span></span>
-            <span></span>
+        <div class="chat-message__row">
+          <div class="chat-message__avatar">
+            <van-icon name="service-o" size="20" />
+          </div>
+          <div class="chat-message__content">
+            <div class="typing-card">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
           </div>
         </div>
       </article>
@@ -247,12 +280,21 @@
 </template>
 
 <script setup lang="ts">
-import {nextTick, ref} from 'vue';
+import {computed, nextTick, onMounted, ref} from 'vue';
 import {useRouter} from "vue-router";
 import {showFailToast, showSuccessToast} from "vant";
 import myAxios from "../plugins/myAxios";
-import {AiChatResponse, AiTeamDraftConfirmResponse, AiToolResult, AiUserRecommendation} from "../models/ai";
+import {
+  AiChatResponse,
+  AiProfileResponse,
+  AiTeamDraftConfirmResponse,
+  AiToolResult,
+  AiUserProfileData,
+  AiUserRecommendation
+} from "../models/ai";
 import {TeamType} from "../models/team";
+import {UserType} from "../models/user";
+import {getCurrentUser} from "../services/user";
 
 type ChatMessage = {
   id: number;
@@ -271,14 +313,28 @@ const confirmingDraftId = ref<string>();
 const confirmedDraftTeams = ref<Record<string, number>>({});
 const loadingTeamDetailsId = ref<number>();
 const teamDetails = ref<Record<number, TeamType>>({});
+const currentUser = ref<UserType | null>(null);
 const messages = ref<ChatMessage[]>([
   {
     id: 1,
     role: 'assistant',
-    content: '告诉我你想找的活动、城市、时间或预算。我会先识别需求，再调用受控工具查询队伍。',
+    content: '你可以直接告诉我想找队伍、加入队伍、查看资料或更新自我介绍。',
     time: '现在',
   },
 ]);
+
+const userAvatarText = computed(() => {
+  const name = currentUser.value?.username || currentUser.value?.userAccount || '我';
+  return name.trim().slice(0, 1).toUpperCase();
+});
+
+onMounted(async () => {
+  try {
+    currentUser.value = await getCurrentUser();
+  } catch (error) {
+    console.warn('load current user failed', error);
+  }
+});
 
 const currentTime = () => {
   const now = new Date();
@@ -320,7 +376,7 @@ const sendMessage = async () => {
     messages.value.push({
       id: Date.now() + 1,
       role: 'assistant',
-      content: response.data.reply || '我已经整理好了这次需求。',
+      content: normalizeAssistantReply(response.data),
       time: currentTime(),
       response: response.data,
     });
@@ -413,12 +469,102 @@ const loadTeamDetails = async (teamId?: number) => {
   }
 };
 
+const getVisibleToolResults = (response: AiChatResponse) => {
+  return response.toolResults ?? [];
+};
+
+const normalizeAssistantReply = (response: AiChatResponse) => {
+  const toolNames = (response.toolResults ?? []).map(tool => tool.toolName);
+  if (toolNames.includes('getMyProfile')) {
+    return '这是你的个人资料。';
+  }
+  if (toolNames.includes('updateMyProfile')) {
+    return '我已经帮你更新个人资料。';
+  }
+  if (toolNames.includes('listMyJoinedTeams')) {
+    const teams = getTeamsByToolName(response, 'listMyJoinedTeams');
+    return teams.length ? `你目前加入了 ${teams.length} 个队伍。` : '你暂时还没有加入队伍。';
+  }
+  if (toolNames.includes('listMyCreatedTeams')) {
+    const teams = getTeamsByToolName(response, 'listMyCreatedTeams');
+    return teams.length ? `你目前创建了 ${teams.length} 个队伍。` : '你暂时还没有创建队伍。';
+  }
+  if (toolNames.includes('joinTeam')) {
+    return '已帮你加入队伍。';
+  }
+  if (toolNames.includes('quitTeam')) {
+    return '已帮你退出队伍。';
+  }
+  if (response.draft) {
+    return '我整理了一份队伍草稿，确认后才会正式创建。';
+  }
+  if (response.needClarification) {
+    return cleanAssistantText(response.reply) || '我还需要你补充一点信息。';
+  }
+  return cleanAssistantText(response.reply) || '我已经处理好了。';
+};
+
+const cleanAssistantText = (text?: string) => {
+  if (!text) {
+    return '';
+  }
+  return text
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*/g, '')
+      .replace(/[ \t]*(\d+)[.．、][ \t]*/g, '\n$1. ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+};
+
+const shouldShowIntentCard = (response: AiChatResponse) => {
+  if (!response.intent?.teamRelated) {
+    return false;
+  }
+  const toolNames = (response.toolResults ?? []).map(tool => tool.toolName);
+  const cardWorthyTools = ['searchTeams', 'recommendUsers', 'createTeamDraft'];
+  return Boolean(response.needClarification)
+      || Boolean(response.draft)
+      || toolNames.some(toolName => cardWorthyTools.includes(toolName));
+};
+
+const isTeamListTool = (toolName: string) => {
+  return ['searchTeams', 'listMyJoinedTeams', 'listMyCreatedTeams'].includes(toolName);
+};
+
+const isOperationTool = (toolName: string) => {
+  return ['joinTeam', 'quitTeam', 'updateMyProfile'].includes(toolName);
+};
+
+const shouldShowToolSummary = (toolResult: AiToolResult) => {
+  return !['getMyProfile', 'joinTeam', 'quitTeam', 'updateMyProfile'].includes(toolResult.toolName);
+};
+
+const getToolSummary = (toolResult: AiToolResult) => {
+  if (!toolResult.success) {
+    return toolResult.summary || '操作没有完成';
+  }
+  const teams = getTeams(toolResult);
+  if (toolResult.toolName === 'listMyJoinedTeams') {
+    return teams.length ? `你当前加入了 ${teams.length} 个队伍。` : '你暂时还没有加入队伍。';
+  }
+  if (toolResult.toolName === 'listMyCreatedTeams') {
+    return teams.length ? `你当前创建了 ${teams.length} 个队伍。` : '你暂时还没有创建队伍。';
+  }
+  return toolResult.summary || '工具已执行';
+};
+
 const getToolTitle = (toolName: string) => {
   const titleMap: Record<string, string> = {
     searchTeams: '队伍查询',
     getTeamDetails: '队伍详情',
     recommendUsers: '搭子推荐',
     createTeamDraft: '草稿生成',
+    getMyProfile: '我的资料',
+    updateMyProfile: '资料已更新',
+    listMyJoinedTeams: '我加入的队伍',
+    listMyCreatedTeams: '我创建的队伍',
+    joinTeam: '已加入队伍',
+    quitTeam: '已退出队伍',
   };
   return titleMap[toolName] || toolName;
 };
@@ -429,6 +575,12 @@ const getToolIcon = (toolName: string) => {
     getTeamDetails: 'notes-o',
     recommendUsers: 'contact-o',
     createTeamDraft: 'records-o',
+    getMyProfile: 'manager-o',
+    updateMyProfile: 'edit',
+    listMyJoinedTeams: 'friends-o',
+    listMyCreatedTeams: 'cluster-o',
+    joinTeam: 'add-o',
+    quitTeam: 'close',
   };
   return iconMap[toolName] || 'setting-o';
 };
@@ -437,8 +589,66 @@ const getTeams = (toolResult: AiToolResult): TeamType[] => {
   return Array.isArray(toolResult.data) ? toolResult.data as TeamType[] : [];
 };
 
+const getTeamsByToolName = (response: AiChatResponse, toolName: string): TeamType[] => {
+  const toolResult = (response.toolResults ?? []).find(item => item.toolName === toolName);
+  return toolResult ? getTeams(toolResult) : [];
+};
+
 const getRecommendedUsers = (toolResult: AiToolResult): AiUserRecommendation[] => {
   return Array.isArray(toolResult.data) ? toolResult.data as AiUserRecommendation[] : [];
+};
+
+const getProfileData = (toolResult: AiToolResult): AiUserProfileData | undefined => {
+  if (!toolResult.data || Array.isArray(toolResult.data) || typeof toolResult.data !== 'object') {
+    return undefined;
+  }
+  return toolResult.data as AiUserProfileData;
+};
+
+const getProfileActivities = (toolResult: AiToolResult) => {
+  const profile = getProfileData(toolResult)?.structuredProfile;
+  return [
+    ...(profile?.activityTypes ?? []),
+    ...(profile?.interests ?? []),
+  ].filter((item, index, array) => item && array.indexOf(item) === index).slice(0, 4);
+};
+
+const getProfileResponse = (toolResult: AiToolResult): AiProfileResponse | undefined => {
+  if (!toolResult.data || Array.isArray(toolResult.data) || typeof toolResult.data !== 'object') {
+    return undefined;
+  }
+  return toolResult.data as AiProfileResponse;
+};
+
+const getOperationTitle = (toolResult: AiToolResult) => {
+  if (!toolResult.success) {
+    return '操作失败';
+  }
+  const titleMap: Record<string, string> = {
+    updateMyProfile: '个人资料已更新',
+    joinTeam: '已加入队伍',
+    quitTeam: '已退出队伍',
+  };
+  return titleMap[toolResult.toolName] || '操作已完成';
+};
+
+const getOperationDescription = (toolResult: AiToolResult) => {
+  if (!toolResult.success) {
+    return toolResult.summary || '你可以稍后再试，或补充必要信息。';
+  }
+  if (toolResult.toolName === 'updateMyProfile') {
+    const profile = getProfileResponse(toolResult)?.profile;
+    const city = profile?.city ? `，城市偏好：${profile.city}` : '';
+    const activities = profile?.activityTypes?.length ? `，活动：${profile.activityTypes.join('、')}` : '';
+    return `我已经保存你的自我介绍，并更新了结构化画像${city}${activities}。`;
+  }
+  if (toolResult.toolName === 'joinTeam') {
+    return '我已经帮你加入该队伍，后续可以在“我加入的队伍”里查看。';
+  }
+  if (toolResult.toolName === 'quitTeam') {
+    return '我已经帮你退出该队伍。';
+  }
+  return toolResult.summary || '操作已完成。';
 };
 
 const formatUserTags = (tags?: string) => {
@@ -508,77 +718,31 @@ const goTeamPage = () => {
   padding: 16px var(--app-page-x) 92px;
 }
 
-.ai-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 160px;
-  padding: 22px;
-  overflow: hidden;
-  color: #ffffff;
-  background:
-      radial-gradient(circle at 82% 15%, rgba(255, 232, 186, 0.5), transparent 6rem),
-      linear-gradient(135deg, #078f80 0%, #0ba992 58%, #92d0ad 100%);
-  border-radius: 24px;
-  box-shadow: 0 18px 34px rgba(16, 113, 101, 0.22);
-}
-
-.ai-hero__copy span {
-  display: inline-flex;
-  padding: 5px 10px;
-  margin-bottom: 14px;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 12px;
-  font-weight: 800;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-}
-
-.ai-hero__copy h1 {
-  max-width: 240px;
-  margin: 0;
-  font-size: 26px;
-  font-weight: 900;
-  line-height: 1.16;
-  letter-spacing: 0;
-}
-
-.ai-hero__copy p {
-  max-width: 250px;
-  margin: 9px 0 0;
-  color: rgba(255, 255, 255, 0.86);
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.ai-hero__bot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 72px;
-  width: 72px;
-  height: 72px;
-  color: var(--app-primary-deep);
-  background: rgba(255, 255, 255, 0.92);
-  border: 8px solid rgba(255, 255, 255, 0.42);
-  border-radius: 50%;
-}
-
 .chat-stream {
   display: grid;
   gap: 12px;
-  padding: 18px 0 0;
+  padding: 0;
 }
 
 .chat-message {
-  display: flex;
+  display: grid;
   gap: 8px;
-  align-items: flex-end;
 }
 
 .chat-message--user {
-  justify-content: flex-end;
+  justify-items: end;
+}
+
+.chat-message__row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.chat-message--user .chat-message__row {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
 }
 
 .chat-message__avatar {
@@ -588,19 +752,47 @@ const goTeamPage = () => {
   flex: 0 0 36px;
   width: 36px;
   height: 36px;
+  overflow: hidden;
   color: #ffffff;
   background: linear-gradient(135deg, var(--app-primary), var(--app-accent));
   border-radius: 50%;
 }
 
+.chat-message--user .chat-message__avatar {
+  color: var(--app-primary-deep);
+  font-size: 13px;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.96);
+  border: 2px solid rgba(24, 165, 143, 0.18);
+}
+
+.chat-message__avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .chat-message__content {
   display: grid;
   gap: 10px;
-  max-width: min(86%, 620px);
+  max-width: calc(100% - 44px);
 }
 
 .chat-message--user .chat-message__content {
   justify-items: end;
+}
+
+.chat-message__results {
+  display: grid;
+  gap: 10px;
+  width: min(calc(100% - 44px), 620px);
+  margin-left: 44px;
+}
+
+.chat-message--user .chat-message__results {
+  margin-right: 44px;
+  margin-left: 0;
 }
 
 .chat-message__bubble {
@@ -608,6 +800,8 @@ const goTeamPage = () => {
   color: var(--app-text);
   font-size: 15px;
   line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid var(--app-border);
   border-radius: 18px 18px 18px 6px;
@@ -761,6 +955,94 @@ const goTeamPage = () => {
   color: var(--app-text-muted);
   font-size: 13px;
   line-height: 1.55;
+}
+
+.profile-result,
+.operation-result {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 11px;
+  background: rgba(245, 247, 243, 0.82);
+  border: 1px solid rgba(28, 61, 58, 0.06);
+  border-radius: 14px;
+}
+
+.profile-result__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  color: var(--app-primary-deep);
+  background: rgba(24, 165, 143, 0.1);
+  border-radius: 50%;
+}
+
+.profile-result__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-result__main,
+.operation-result div {
+  min-width: 0;
+  flex: 1;
+}
+
+.profile-result h3,
+.operation-result h3 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.profile-result p,
+.operation-result p {
+  margin: 5px 0 0;
+  color: #40504e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.profile-result__meta,
+.profile-result__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.profile-result__meta span {
+  padding: 4px 7px;
+  color: #2d5b53;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(24, 165, 143, 0.1);
+  border-radius: 999px;
+}
+
+.profile-result__tags :deep(.van-tag) {
+  color: var(--app-primary-deep);
+  font-weight: 700;
+  background: rgba(24, 165, 143, 0.1);
+  border: 0;
+}
+
+.operation-result {
+  align-items: center;
+  color: #116456;
+  background: rgba(24, 165, 143, 0.08);
+  border-color: rgba(24, 165, 143, 0.14);
 }
 
 .team-result-list,

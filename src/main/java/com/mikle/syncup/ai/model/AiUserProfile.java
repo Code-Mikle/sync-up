@@ -18,6 +18,10 @@ public class AiUserProfile implements Serializable {
 
     private String tags;
 
+    private String profile;
+
+    private ProfileExtraction structuredProfile;
+
     private String planetCode;
 
     private Date createTime;

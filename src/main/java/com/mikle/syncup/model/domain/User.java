@@ -65,6 +65,11 @@ public class User implements Serializable {
     private String tags;
 
     /**
+     * 个人简介 / 自我介绍
+     */
+    private String profile;
+
+    /**
      * 状态 0 - 正常
      */
     private Integer userStatus;

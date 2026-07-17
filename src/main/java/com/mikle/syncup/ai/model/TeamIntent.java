@@ -15,6 +15,8 @@ public class TeamIntent implements Serializable {
 
     private Long teamId;
 
+    private String teamPassword;
+
     private String activityType;
 
     private String city;
@@ -38,6 +40,8 @@ public class TeamIntent implements Serializable {
     private String teamName;
 
     private String description;
+
+    private String profileText;
 
     private boolean createTeamRequested;
 

@@ -4,8 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.MissingNode;
+import com.mikle.syncup.ai.agent.AiAgentToolContext;
+import com.mikle.syncup.ai.agent.AiAssistantTools;
 import com.mikle.syncup.ai.model.AiTeamDraft;
 import com.mikle.syncup.ai.model.AiToolResult;
+import com.mikle.syncup.ai.model.TeamDraft;
 import com.mikle.syncup.ai.model.TeamIntent;
 import com.mikle.syncup.ai.service.AiTeamDraftService;
 import com.mikle.syncup.ai.service.TeamIntentParser;
@@ -31,6 +34,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
@@ -60,6 +64,12 @@ class AiChatServiceTest {
     private AiTeamDraftService aiTeamDraftService;
 
     @Resource
+    private AiAssistantTools aiAssistantTools;
+
+    @Resource
+    private AiAgentToolContext aiAgentToolContext;
+
+    @Resource
     private UserService userService;
 
     @Resource
@@ -82,6 +92,7 @@ class AiChatServiceTest {
 
     @BeforeEach
     void ensureAiTeamDraftTable() {
+        addUserProfileColumnIfMissing();
         jdbcTemplate.execute("""
                 create table if not exists ai_team_draft
                 (
@@ -113,6 +124,20 @@ class AiChatServiceTest {
         addIndexIfMissing("idx_ai_team_draft_user_status",
                 "alter table ai_team_draft add index idx_ai_team_draft_user_status (userId, status, expiresAt)");
         ensureAiToolCallLogTable();
+    }
+
+    private void addUserProfileColumnIfMissing() {
+        Integer count = jdbcTemplate.queryForObject("""
+                        select count(1)
+                        from information_schema.columns
+                        where table_schema = database()
+                          and table_name = 'user'
+                          and column_name = 'profile'
+                        """,
+                Integer.class);
+        if (count == null || count == 0) {
+            jdbcTemplate.execute("alter table user add column profile varchar(1024) null comment '个人简介 / 自我介绍' after tags");
+        }
     }
 
     private void addIndexIfMissing(String indexName, String ddl) {
@@ -462,6 +487,10 @@ class AiChatServiceTest {
         Assertions.assertTrue(aiToolRegistry.contains("createTeamDraft"));
         Assertions.assertTrue(aiToolRegistry.contains("listMyCreatedTeams"));
         Assertions.assertTrue(aiToolRegistry.contains("getMyProfile"));
+        Assertions.assertTrue(aiToolRegistry.contains("updateMyProfile"));
+        Assertions.assertTrue(aiToolRegistry.contains("listMyJoinedTeams"));
+        Assertions.assertTrue(aiToolRegistry.contains("joinTeam"));
+        Assertions.assertTrue(aiToolRegistry.contains("quitTeam"));
     }
 
     @Test
@@ -486,6 +515,58 @@ class AiChatServiceTest {
     }
 
     @Test
+    void aiTeamOperationTools_shouldJoinListAndQuitTeam() {
+        User creator = null;
+        User loginUser = null;
+        try {
+            creator = createTestUser();
+            loginUser = createTestUser();
+            long teamId = createStructuredTeam(creator, "羽毛球", "西安", new BigDecimal("45.00"), 6);
+
+            TeamIntent joinIntent = new TeamIntent();
+            joinIntent.setTeamId(teamId);
+            AiToolResult joinResult = aiToolRegistry.execute("joinTeam", joinIntent, loginUser);
+
+            Assertions.assertTrue(joinResult.isSuccess());
+            Assertions.assertEquals(1L, countUserTeam(loginUser.getId(), teamId));
+
+            AiToolResult listResult = aiToolRegistry.execute("listMyJoinedTeams", new TeamIntent(), loginUser);
+            JsonNode joinedTeams = objectMapper.valueToTree(listResult.getData());
+            Assertions.assertTrue(joinedTeams.isArray());
+            Assertions.assertTrue(joinedTeams.toString().contains(String.valueOf(teamId)));
+            Assertions.assertTrue(joinedTeams.findPath("password").isMissingNode());
+
+            TeamIntent quitIntent = new TeamIntent();
+            quitIntent.setTeamId(teamId);
+            AiToolResult quitResult = aiToolRegistry.execute("quitTeam", quitIntent, loginUser);
+
+            Assertions.assertTrue(quitResult.isSuccess());
+            Assertions.assertEquals(0L, countUserTeam(loginUser.getId(), teamId));
+        } finally {
+            cleanupUserAndTeams(creator);
+            cleanupUserAndTeams(loginUser);
+        }
+    }
+
+    @Test
+    void joinTeamTool_missingTeamId_shouldBeRejected() {
+        User loginUser = null;
+        try {
+            loginUser = createTestUser();
+            User currentUser = loginUser;
+
+            BusinessException exception = Assertions.assertThrows(
+                    BusinessException.class,
+                    () -> aiToolRegistry.execute("joinTeam", new TeamIntent(), currentUser)
+            );
+
+            Assertions.assertNotNull(exception);
+        } finally {
+            cleanupUserAndTeams(loginUser);
+        }
+    }
+
+    @Test
     void listMyCreatedTeams_shouldOnlyReturnCurrentUserTeams() {
         User owner = null;
         User other = null;
@@ -506,6 +587,54 @@ class AiChatServiceTest {
         } finally {
             cleanupUserAndTeams(owner);
             cleanupUserAndTeams(other);
+        }
+    }
+
+    @Test
+    void agentToolCall_shouldBackfillIntentFromModelParametersAndSaveDraft() throws Exception {
+        User user = null;
+        try {
+            user = createTestUser();
+            String sessionId = UUID.randomUUID().toString();
+            aiAgentToolContext.start(sessionId, user);
+
+            aiAssistantTools.createTeamDraft(
+                    "足球",
+                    "西安",
+                    "西安市运动公园",
+                    "2026-07-18 17:00:00",
+                    180,
+                    11,
+                    "明天下午足球活动",
+                    "明天下午五点在西安市运动公园踢足球，活动持续约3小时，无需支付场地费用。",
+                    0D,
+                    null
+            );
+
+            AiAgentToolContext.State state = aiAgentToolContext.snapshot();
+            TeamIntent intent = state.getIntent();
+            TeamDraft draft = state.getDraft();
+
+            Assertions.assertNotNull(intent);
+            Assertions.assertEquals("足球", intent.getActivityType());
+            Assertions.assertEquals("西安", intent.getCity());
+            Assertions.assertEquals("西安市运动公园", intent.getDistrict());
+            Assertions.assertEquals(11, intent.getMemberCount());
+            Assertions.assertEquals(new BigDecimal("0.0"), intent.getBudgetMax());
+            Assertions.assertEquals(180, intent.getDurationMinutes());
+            Assertions.assertEquals("2026-07-18 17:00:00", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(intent.getStartTime()));
+            Assertions.assertTrue(intent.isCreateTeamRequested());
+
+            Assertions.assertNotNull(draft);
+            Assertions.assertEquals("足球", draft.getActivityType());
+            Assertions.assertEquals("西安", draft.getCity());
+            Assertions.assertEquals("西安市运动公园", draft.getDistrict());
+            Assertions.assertEquals(11, draft.getMaxNum());
+            Assertions.assertEquals(new BigDecimal("0.0"), draft.getBudgetPerPerson());
+            Assertions.assertEquals(180, draft.getDurationMinutes());
+        } finally {
+            aiAgentToolContext.clear();
+            cleanupUserAndTeams(user);
         }
     }
 
@@ -632,6 +761,19 @@ class AiChatServiceTest {
 
     private long countTeamsCreatedBy(long userId) {
         return teamService.count(new QueryWrapper<Team>().eq("userId", userId));
+    }
+
+    private Long countUserTeam(long userId, long teamId) {
+        return jdbcTemplate.queryForObject("""
+                        select count(1)
+                        from user_team
+                        where isDelete = 0
+                          and userId = ?
+                          and teamId = ?
+                        """,
+                Long.class,
+                userId,
+                teamId);
     }
 
     private Long countAuditLogs(long userId, String sessionId, String actionType, String toolName, String status) {

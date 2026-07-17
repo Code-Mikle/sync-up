@@ -2,6 +2,7 @@ package com.mikle.syncup.ai.agent;
 
 import com.mikle.syncup.ai.model.AiToolResult;
 import com.mikle.syncup.ai.model.TeamDraft;
+import com.mikle.syncup.ai.model.TeamIntent;
 import com.mikle.syncup.model.domain.User;
 import lombok.Data;
 import org.springframework.stereotype.Component;
@@ -36,6 +37,7 @@ public class AiAgentToolContext {
         snapshot.setLoginUser(state.getLoginUser());
         snapshot.getToolResults().addAll(state.getToolResults());
         snapshot.setDraft(state.getDraft());
+        snapshot.setIntent(state.getIntent());
         return snapshot;
     }
 
@@ -53,5 +55,7 @@ public class AiAgentToolContext {
         private List<AiToolResult> toolResults = new ArrayList<>();
 
         private TeamDraft draft;
+
+        private TeamIntent intent;
     }
 }

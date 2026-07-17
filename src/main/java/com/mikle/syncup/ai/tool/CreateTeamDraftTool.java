@@ -36,6 +36,7 @@ public class CreateTeamDraftTool implements AiTool {
         draft.setCity(intent.getCity());
         draft.setDistrict(intent.getDistrict());
         draft.setStartTime(intent.getStartTime());
+        draft.setDurationMinutes(intent.getDurationMinutes());
         draft.setBudgetPerPerson(intent.getBudgetMax());
         draft.setSkillLevel(intent.getSkillLevel());
         draft.setExpiresAt(new Date(System.currentTimeMillis() + 30 * 60 * 1000));

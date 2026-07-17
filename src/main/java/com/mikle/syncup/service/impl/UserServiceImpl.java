@@ -10,6 +10,7 @@ import com.google.gson.reflect.TypeToken;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.constant.UserConstant;
 import com.mikle.syncup.exception.BusinessException;
+import com.mikle.syncup.ai.service.AiUserProfileService;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.vo.UserLoginVO;
 import com.mikle.syncup.model.vo.UserSearchResultVO;
@@ -45,6 +46,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Resource
     private UserMapper userMapper;
+
+    @Resource
+    private AiUserProfileService aiUserProfileService;
 
     /**
      * 盐值，混淆密码
@@ -190,6 +194,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         safetyUser.setUserStatus(originUser.getUserStatus());
         safetyUser.setCreateTime(originUser.getCreateTime());
         safetyUser.setTags(originUser.getTags());
+        safetyUser.setProfile(originUser.getProfile());
         return safetyUser;
     }
 
@@ -256,7 +261,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
 
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("id", "username", "avatarUrl", "gender", "tags", "createTime", "planetCode");
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "tags", "profile", "createTime", "planetCode");
         if (excludeUserId != null && excludeUserId > 0) {
             queryWrapper.ne("id", excludeUserId);
         }
@@ -264,7 +269,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         for (String keyword : normalizedKeywords) {
             queryWrapper.and(qw -> qw.like("username", keyword)
                     .or().like("planetCode", keyword)
-                    .or().like("tags", keyword));
+                    .or().like("tags", keyword)
+                    .or().like("profile", keyword));
         }
         queryWrapper.orderByDesc("updateTime");
 
@@ -339,7 +345,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (oldUser == null) {
             throw new BusinessException(ErrorCode.NULL_ERROR);
         }
-        return userMapper.updateById(user);
+        int updated = userMapper.updateById(user);
+        if (updated > 0) {
+            tryCreateProfileExtractionTask(user, loginUser);
+        }
+        return updated;
+    }
+
+    private void tryCreateProfileExtractionTask(User user, User loginUser) {
+        try {
+            aiUserProfileService.createExtractionTaskFromUserUpdate(user, loginUser);
+        } catch (Exception e) {
+            log.warn("create AI profile extraction task failed, userId={}", user.getId(), e);
+        }
     }
 
     @Override

@@ -1,7 +1,47 @@
 import {TeamType} from "./team";
 
+export type ProfileExtraction = {
+    interests?: string[];
+    activityTypes?: string[];
+    availableTimes?: string[];
+    city?: string;
+    districts?: string[];
+    socialPreference?: string;
+    skillLevels?: string[];
+    budgetPreference?: string;
+    candidateTags?: string[];
+    confidence?: number;
+    sourceText?: string;
+    modelVersion?: string;
+};
+
+export type AiProfileResponse = {
+    taskId?: string;
+    userId?: number;
+    status?: number;
+    profile?: ProfileExtraction;
+    sourceText?: string;
+    modelVersion?: string;
+    confirmedAt?: string | Date;
+    updateTime?: string | Date;
+};
+
+export type AiUserProfileData = {
+    id: number;
+    username?: string;
+    avatarUrl?: string;
+    gender?: number;
+    tags?: string;
+    profile?: string;
+    structuredProfile?: ProfileExtraction;
+    planetCode?: string;
+    createTime?: string | Date;
+};
+
 export type TeamIntent = {
     sourceText?: string;
+    teamId?: number;
+    teamPassword?: string;
     activityType?: string;
     city?: string;
     district?: string;
