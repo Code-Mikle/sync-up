@@ -10,10 +10,8 @@ import com.mikle.syncup.ai.service.AiToolExecutionService;
 import com.mikle.syncup.ai.tool.CreateTeamDraftTool;
 import com.mikle.syncup.ai.tool.GetMyProfileTool;
 import com.mikle.syncup.ai.tool.GetTeamDetailsTool;
-import com.mikle.syncup.ai.tool.JoinTeamTool;
 import com.mikle.syncup.ai.tool.ListMyJoinedTeamsTool;
 import com.mikle.syncup.ai.tool.ListMyCreatedTeamsTool;
-import com.mikle.syncup.ai.tool.QuitTeamTool;
 import com.mikle.syncup.ai.tool.RecommendUsersTool;
 import com.mikle.syncup.ai.tool.SearchTeamsTool;
 import com.mikle.syncup.ai.tool.UpdateMyProfileTool;
@@ -105,24 +103,6 @@ public class AiAssistantTools {
         TeamIntent intent = new TeamIntent();
         intent.setProfileText(profileText);
         return executeAndRemember(UpdateMyProfileTool.TOOL_NAME, intent);
-    }
-
-    @Tool(name = JoinTeamTool.TOOL_NAME, value = "Join a public or secret team by team id. Only use when user explicitly asks to join a team.")
-    public String joinTeam(@P(value = "Team id to join.", required = true) Long teamId,
-                           @P(value = "Team password, only required for secret teams.", required = false) String password) {
-        TeamIntent intent = new TeamIntent();
-        intent.setTeamRelated(true);
-        intent.setTeamId(teamId);
-        intent.setTeamPassword(password);
-        return executeAndRemember(JoinTeamTool.TOOL_NAME, intent);
-    }
-
-    @Tool(name = QuitTeamTool.TOOL_NAME, value = "Quit a team by team id. Only use when user explicitly asks to quit or leave a team.")
-    public String quitTeam(@P(value = "Team id to quit.", required = true) Long teamId) {
-        TeamIntent intent = new TeamIntent();
-        intent.setTeamRelated(true);
-        intent.setTeamId(teamId);
-        return executeAndRemember(QuitTeamTool.TOOL_NAME, intent);
     }
 
     @Tool(name = CreateTeamDraftTool.TOOL_NAME, value = "Create a team draft for user confirmation. This does not write final team tables.")

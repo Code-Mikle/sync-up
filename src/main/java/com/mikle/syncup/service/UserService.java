@@ -44,6 +44,11 @@ public interface UserService extends IService<User> {
     User getSafetyUser(User originUser);
 
     /**
+     * Convert a user entity to fields that are safe to expose to other users.
+     */
+    UserSearchResultVO getPublicUser(User originUser);
+
+    /**
      * 用户注销
      *
      * @param request

@@ -1,0 +1,80 @@
+# 公共配置文件
+spring:
+  profiles:
+    active: dev # 本地开发默认激活 dev
+  application:
+    name: sync-up
+  # DataSource Config
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${LOCAL_MYSQL_HOST:localhost}:${LOCAL_MYSQL_PORT:3306}/sync_up_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    username: ${LOCAL_MYSQL_USERNAME:root}
+    password: ${LOCAL_MYSQL_PASSWORD:}
+  # redis 配置
+  data:
+    redis:
+      port: ${LOCAL_REDIS_PORT:6379}
+      host: ${LOCAL_REDIS_HOST:localhost}
+      database: 1
+      password: ${LOCAL_REDIS_PASSWORD:}
+  config:
+    import: optional:file:.env[.properties]  # optional: 表示文件不存在时不报错
+server:
+  port: ${LOCAL_SERVER_PORT:8080}
+  servlet:
+    context-path: /api  # 会给所有接口统一加前缀
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  timeout: 86400
+  active-timeout: -1
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  is-read-header: true
+  is-read-body: false
+  is-read-cookie: true
+  cookie-auto-fill-prefix: true
+  is-log: false
+knife4j:
+  enable: false
+  setting:
+    language: zh_cn
+
+sync-up:
+  ai:
+    agent:
+      enabled: ${SYNC_UP_AI_AGENT_ENABLED:false}
+      provider: ${SYNC_UP_AI_AGENT_PROVIDER:dashscope}
+      base-url: ${SYNC_UP_AI_AGENT_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      model: ${SYNC_UP_AI_AGENT_MODEL:qwen3.6-flash-2026-04-16}
+      api-key: ${DASHSCOPE_API_KEY:}
+      temperature: ${SYNC_UP_AI_AGENT_TEMPERATURE:0.1}
+      timeout-ms: ${SYNC_UP_AI_AGENT_TIMEOUT_MS:8000}
+      max-tool-calls: ${SYNC_UP_AI_AGENT_MAX_TOOL_CALLS:3}
+      max-input-length: ${SYNC_UP_AI_AGENT_MAX_INPUT_LENGTH:1000}
+      memory:
+        enabled: ${SYNC_UP_AI_MEMORY_ENABLED:true}
+        max-messages: ${SYNC_UP_AI_MEMORY_MAX_MESSAGES:20}
+        redis-ttl-hours: ${SYNC_UP_AI_MEMORY_REDIS_TTL_HOURS:12}
+        mysql-ttl-hours: ${SYNC_UP_AI_MEMORY_MYSQL_TTL_HOURS:24}
+
+
+springdoc:
+  api-docs:
+    version: OPENAPI_3_0
+  group-configs:
+    - group: "default"
+      paths-to-match: "/**"
+      packages-to-scan: com.mikle.syncup.controller
+
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+#    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: isDelete # 全局逻辑删除的实体字段名(since 3.3.0,配置后可以忽略不配置步骤2)
+      logic-delete-value: 1 # 逻辑已删除值(默认为 1)
+      logic-not-delete-value: 0 # 逻辑未删除值(默认为 0)

@@ -7,6 +7,8 @@ import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.vo.UserSearchResultVO;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -49,6 +51,9 @@ class UserServiceTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Resource
+    private ObjectMapper objectMapper;
 
     @Test
     void saveAndGetUser_shouldUseGeneratedTestData() {
@@ -140,6 +145,42 @@ class UserServiceTest {
 
             Assertions.assertFalse(upgradedUser.getUserPassword().matches("^[a-fA-F0-9]{32}$"));
             Assertions.assertTrue(PASSWORD_ENCODER.matches(rawPassword, upgradedUser.getUserPassword()));
+        } finally {
+            deletePhysically(user);
+        }
+    }
+
+    @Test
+    void updateUserApi_shouldIgnorePrivilegedAndPasswordFields() throws Exception {
+        User user = null;
+        try {
+            user = createTestUser();
+            String originalPassword = user.getUserPassword();
+            String loginContent = mockMvc.perform(post("/user/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(String.format(
+                                    "{\"userAccount\":\"%s\",\"userPassword\":\"Password123\"}",
+                                    user.getUserAccount())))
+                    .andExpect(status().isOk())
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString();
+            JsonNode login = objectMapper.readTree(loginContent).path("data");
+            String authorization = login.path("tokenPrefix").asText() + " " + login.path("token").asText();
+
+            mockMvc.perform(post("/user/update")
+                            .header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(String.format(
+                                    "{\"id\":%d,\"username\":\"safe_name\",\"userRole\":1,\"userStatus\":1,\"userPassword\":\"hacked\"}",
+                                    user.getId())))
+                    .andExpect(status().isOk());
+
+            User updated = userService.getById(user.getId());
+            Assertions.assertEquals("safe_name", updated.getUsername());
+            Assertions.assertEquals(0, updated.getUserRole());
+            Assertions.assertEquals(0, updated.getUserStatus());
+            Assertions.assertEquals(originalPassword, updated.getUserPassword());
         } finally {
             deletePhysically(user);
         }

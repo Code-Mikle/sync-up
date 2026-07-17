@@ -22,6 +22,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.math3.util.Pair;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.DigestUtils;
@@ -105,7 +106,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         user.setUserAccount(userAccount);
         user.setUserPassword(encryptPassword);
         user.setPlanetCode(planetCode);
-        boolean saveResult = this.save(user);
+        boolean saveResult;
+        try {
+            saveResult = this.save(user);
+        } catch (DuplicateKeyException e) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号或星球编号已存在");
+        }
         if (!saveResult) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "注册失败");
         }
@@ -278,12 +284,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         Page<UserSearchResultVO> resultPage = new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
         resultPage.setRecords(userPage.getRecords()
                 .stream()
-                .map(this::getUserSearchResultVO)
+                .map(this::getPublicUser)
                 .collect(Collectors.toList()));
         return resultPage;
     }
 
-    private UserSearchResultVO getUserSearchResultVO(User originUser) {
+    @Override
+    public UserSearchResultVO getPublicUser(User originUser) {
         if (originUser == null) {
             return null;
         }

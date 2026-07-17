@@ -113,7 +113,11 @@ public class AiChatServiceImpl implements AiChatService {
 
     private String resolveSessionId(String sessionId) {
         if (StringUtils.isNotBlank(sessionId)) {
-            return sessionId.trim();
+            String normalizedSessionId = sessionId.trim();
+            if (normalizedSessionId.length() > 64) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "sessionId is too long");
+            }
+            return normalizedSessionId;
         }
         return UUID.randomUUID().toString();
     }

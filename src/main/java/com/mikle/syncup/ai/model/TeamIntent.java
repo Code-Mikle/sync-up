@@ -27,6 +27,9 @@ public class TeamIntent implements Serializable {
 
     private Integer durationMinutes;
 
+    /**
+     * 创建队伍时表示总人数上限；搜索队伍时表示所需的剩余可用名额数。
+     */
     private Integer memberCount;
 
     private BigDecimal budgetMin;

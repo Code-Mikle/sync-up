@@ -6,6 +6,8 @@ import com.mikle.syncup.common.BaseResponse;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.common.ResultUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -32,6 +34,19 @@ public class GlobalExceptionHandler {
     public BaseResponse saTokenExceptionHandler(SaTokenException e) {
         log.error("saTokenException: " + e.getMessage(), e);
         return ResultUtils.error(ErrorCode.NO_AUTH, e.getMessage(), "");
+    }
+
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public BaseResponse validationExceptionHandler(Exception e) {
+        String message = "请求参数校验失败";
+        if (e instanceof MethodArgumentNotValidException validationException
+                && validationException.getBindingResult().getFieldError() != null) {
+            message = validationException.getBindingResult().getFieldError().getDefaultMessage();
+        } else if (e instanceof BindException bindException
+                && bindException.getBindingResult().getFieldError() != null) {
+            message = bindException.getBindingResult().getFieldError().getDefaultMessage();
+        }
+        return ResultUtils.error(ErrorCode.PARAMS_ERROR, message, "");
     }
 
     @ExceptionHandler(RuntimeException.class)

@@ -1,6 +1,7 @@
 package com.mikle.syncup.ai.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mikle.syncup.ai.exception.DraftExpiredException;
 import com.mikle.syncup.ai.mapper.AiTeamDraftMapper;
 import com.mikle.syncup.ai.model.AiTeamDraft;
 import com.mikle.syncup.ai.model.AiTeamDraftConfirmResponse;
@@ -56,7 +57,7 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, noRollbackFor = DraftExpiredException.class)
     public AiTeamDraftConfirmResponse confirmDraft(String draftId, User loginUser) {
         long start = System.currentTimeMillis();
         String normalizedDraftId = StringUtils.isBlank(draftId) ? draftId : draftId.trim();
@@ -115,8 +116,10 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
             AiTeamDraft updateDraft = new AiTeamDraft();
             updateDraft.setId(draft.getId());
             updateDraft.setStatus(STATUS_EXPIRED);
-            this.updateById(updateDraft);
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "draft has expired");
+            if (!this.updateById(updateDraft)) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "mark expired draft failed");
+            }
+            throw new DraftExpiredException();
         }
 
         Team team = new Team();

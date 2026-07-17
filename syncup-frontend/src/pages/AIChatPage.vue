@@ -105,6 +105,22 @@
                 <div>
                   <h3>{{ getOperationTitle(toolResult) }}</h3>
                   <p>{{ getOperationDescription(toolResult) }}</p>
+                  <div class="profile-draft-actions" v-if="isPendingProfileDraft(toolResult)">
+                    <van-button
+                        size="small"
+                        round
+                        type="primary"
+                        :loading="processingProfileTaskId === getProfileTaskId(toolResult)"
+                        @click="confirmProfileDraft(toolResult)"
+                    >确认更新</van-button>
+                    <van-button
+                        size="small"
+                        round
+                        plain
+                        :disabled="processingProfileTaskId === getProfileTaskId(toolResult)"
+                        @click="rejectProfileDraft(toolResult)"
+                    >拒绝</van-button>
+                  </div>
                 </div>
               </div>
 
@@ -311,6 +327,8 @@ const sessionId = ref<string>();
 const loading = ref(false);
 const confirmingDraftId = ref<string>();
 const confirmedDraftTeams = ref<Record<string, number>>({});
+const processingProfileTaskId = ref<string>();
+const profileTaskStatus = ref<Record<string, 'confirmed' | 'rejected'>>({});
 const loadingTeamDetailsId = ref<number>();
 const teamDetails = ref<Record<number, TeamType>>({});
 const currentUser = ref<UserType | null>(null);
@@ -318,7 +336,7 @@ const messages = ref<ChatMessage[]>([
   {
     id: 1,
     role: 'assistant',
-    content: '你可以直接告诉我想找队伍、加入队伍、查看资料或更新自我介绍。',
+    content: '你可以直接告诉我想找队伍、查看资料，或生成待确认的队伍和画像草稿。',
     time: '现在',
   },
 ]);
@@ -479,7 +497,7 @@ const normalizeAssistantReply = (response: AiChatResponse) => {
     return '这是你的个人资料。';
   }
   if (toolNames.includes('updateMyProfile')) {
-    return '我已经帮你更新个人资料。';
+    return '我整理了一份个人画像草稿，确认后才会更新资料。';
   }
   if (toolNames.includes('listMyJoinedTeams')) {
     const teams = getTeamsByToolName(response, 'listMyJoinedTeams');
@@ -560,7 +578,7 @@ const getToolTitle = (toolName: string) => {
     recommendUsers: '搭子推荐',
     createTeamDraft: '草稿生成',
     getMyProfile: '我的资料',
-    updateMyProfile: '资料已更新',
+    updateMyProfile: '画像更新草稿',
     listMyJoinedTeams: '我加入的队伍',
     listMyCreatedTeams: '我创建的队伍',
     joinTeam: '已加入队伍',
@@ -625,7 +643,11 @@ const getOperationTitle = (toolResult: AiToolResult) => {
     return '操作失败';
   }
   const titleMap: Record<string, string> = {
-    updateMyProfile: '个人资料已更新',
+    updateMyProfile: getProfileTaskStatus(toolResult) === 'confirmed'
+        ? '个人资料已更新'
+        : getProfileTaskStatus(toolResult) === 'rejected'
+            ? '已拒绝画像草稿'
+            : '请确认画像草稿',
     joinTeam: '已加入队伍',
     quitTeam: '已退出队伍',
   };
@@ -640,7 +662,13 @@ const getOperationDescription = (toolResult: AiToolResult) => {
     const profile = getProfileResponse(toolResult)?.profile;
     const city = profile?.city ? `，城市偏好：${profile.city}` : '';
     const activities = profile?.activityTypes?.length ? `，活动：${profile.activityTypes.join('、')}` : '';
-    return `我已经保存你的自我介绍，并更新了结构化画像${city}${activities}。`;
+    if (getProfileTaskStatus(toolResult) === 'confirmed') {
+      return `已更新你的自我介绍和结构化画像${city}${activities}。`;
+    }
+    if (getProfileTaskStatus(toolResult) === 'rejected') {
+      return '这份画像草稿已拒绝，不会修改个人资料。';
+    }
+    return `请检查这份结构化画像${city}${activities}，确认后才会写入个人资料。`;
   }
   if (toolResult.toolName === 'joinTeam') {
     return '我已经帮你加入该队伍，后续可以在“我加入的队伍”里查看。';
@@ -649,6 +677,63 @@ const getOperationDescription = (toolResult: AiToolResult) => {
     return '我已经帮你退出该队伍。';
   }
   return toolResult.summary || '操作已完成。';
+};
+
+const getProfileTaskId = (toolResult: AiToolResult) => getProfileResponse(toolResult)?.taskId;
+
+const getProfileTaskStatus = (toolResult: AiToolResult) => {
+  const taskId = getProfileTaskId(toolResult);
+  return taskId ? profileTaskStatus.value[taskId] : undefined;
+};
+
+const isPendingProfileDraft = (toolResult: AiToolResult) => {
+  return toolResult.toolName === 'updateMyProfile'
+      && !!getProfileTaskId(toolResult)
+      && !getProfileTaskStatus(toolResult);
+};
+
+const confirmProfileDraft = async (toolResult: AiToolResult) => {
+  const taskId = getProfileTaskId(toolResult);
+  if (!taskId || processingProfileTaskId.value) {
+    return;
+  }
+  processingProfileTaskId.value = taskId;
+  try {
+    const response = await myAxios.post<AiProfileResponse>(`/ai/profile-task/${taskId}/confirm`, {});
+    if (response?.code !== 0) {
+      showFailToast(response?.description || response?.message || '画像确认失败');
+      return;
+    }
+    profileTaskStatus.value = {...profileTaskStatus.value, [taskId]: 'confirmed'};
+    showSuccessToast('个人资料已更新');
+  } catch (error) {
+    console.error('/ai/profile-task confirm error', error);
+    showFailToast('画像确认失败');
+  } finally {
+    processingProfileTaskId.value = undefined;
+  }
+};
+
+const rejectProfileDraft = async (toolResult: AiToolResult) => {
+  const taskId = getProfileTaskId(toolResult);
+  if (!taskId || processingProfileTaskId.value) {
+    return;
+  }
+  processingProfileTaskId.value = taskId;
+  try {
+    const response = await myAxios.post<AiProfileResponse>(`/ai/profile-task/${taskId}/reject`);
+    if (response?.code !== 0) {
+      showFailToast(response?.description || response?.message || '拒绝画像失败');
+      return;
+    }
+    profileTaskStatus.value = {...profileTaskStatus.value, [taskId]: 'rejected'};
+    showSuccessToast('已拒绝画像草稿');
+  } catch (error) {
+    console.error('/ai/profile-task reject error', error);
+    showFailToast('拒绝画像失败');
+  } finally {
+    processingProfileTaskId.value = undefined;
+  }
 };
 
 const formatUserTags = (tags?: string) => {
@@ -1012,6 +1097,13 @@ const goTeamPage = () => {
   color: #40504e;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.profile-draft-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
 }
 
 .profile-result__meta,

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.ai.mapper.AiProfileExtractionTaskMapper;
 import com.mikle.syncup.ai.mapper.AiUserProfileMapper;
+import com.mikle.syncup.mapper.UserMapper;
 import com.mikle.syncup.ai.model.AiProfileConfirmRequest;
 import com.mikle.syncup.ai.model.AiProfileExtractionTask;
 import com.mikle.syncup.ai.model.AiProfileResponse;
@@ -46,6 +47,9 @@ public class AiUserProfileServiceImpl extends ServiceImpl<AiUserProfileMapper, A
 
     @Resource
     private ObjectMapper objectMapper;
+
+    @Resource
+    private UserMapper userMapper;
 
     @Override
     public AiProfileResponse getCurrentProfile(User loginUser) {
@@ -119,6 +123,13 @@ public class AiUserProfileServiceImpl extends ServiceImpl<AiUserProfileMapper, A
         boolean saved = entity.getId() == null ? this.save(entity) : this.updateById(entity);
         if (!saved) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "save AI user profile failed");
+        }
+
+        User updateUser = new User();
+        updateUser.setId(loginUser.getId());
+        updateUser.setProfile(task.getSourceText());
+        if (userMapper.updateById(updateUser) <= 0) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "update user self introduction failed");
         }
 
         AiProfileExtractionTask updateTask = new AiProfileExtractionTask();
@@ -254,4 +265,3 @@ public class AiUserProfileServiceImpl extends ServiceImpl<AiUserProfileMapper, A
         return response;
     }
 }
-

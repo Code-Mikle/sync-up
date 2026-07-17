@@ -33,10 +33,14 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements TeamService {
+
+    private static final Set<String> ALLOWED_SKILL_LEVELS = Set.of("入门", "中等", "熟练");
 
     @Resource
     private UserTeamService userTeamService;
@@ -90,7 +94,7 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         if (expireTime != null && new Date().after(expireTime)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "expire time cannot be earlier than now");
         }
-        validateStructuredTeamFields(team, true);
+        validateStructuredTeamFields(team);
 
         Long lockUserById = userMapper.lockUserById(userId);
         if (lockUserById == null) {
@@ -256,7 +260,7 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         if (oldTeam == null) {
             throw new BusinessException(ErrorCode.NULL_ERROR, "team does not exist");
         }
-        if (oldTeam.getUserId() != loginUser.getId() && !userService.isAdmin(loginUser)) {
+        if (!Objects.equals(oldTeam.getUserId(), loginUser.getId()) && !userService.isAdmin(loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH);
         }
         TeamStatusEnum statusEnum = TeamStatusEnum.getEnumByValue(teamUpdateRequest.getStatus());
@@ -266,9 +270,13 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         if (TeamStatusEnum.SECRET.equals(statusEnum) && StringUtils.isBlank(teamUpdateRequest.getPassword())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "secret team password is required");
         }
+        Date expireTime = teamUpdateRequest.getExpireTime();
+        if (expireTime != null && expireTime.before(new Date())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "expire time cannot be earlier than now");
+        }
         Team updateTeam = new Team();
         BeanUtils.copyProperties(teamUpdateRequest, updateTeam);
-        validateStructuredTeamFields(updateTeam, false);
+        validateStructuredTeamFields(updateTeam);
         return this.updateById(updateTeam);
     }
 
@@ -416,7 +424,7 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         return userTeamService.count(userTeamQueryWrapper);
     }
 
-    private void validateStructuredTeamFields(Team team, boolean creating) {
+    private void validateStructuredTeamFields(Team team) {
         if (team == null) {
             return;
         }
@@ -429,6 +437,9 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         validateTextLength(team.getCity(), 64, "city is too long");
         validateTextLength(team.getDistrict(), 64, "district is too long");
         validateTextLength(team.getSkillLevel(), 32, "skill level is too long");
+        if (team.getSkillLevel() != null && !ALLOWED_SKILL_LEVELS.contains(team.getSkillLevel())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "skill level is invalid");
+        }
 
         Integer durationMinutes = team.getDurationMinutes();
         if (durationMinutes != null && durationMinutes <= 0) {
@@ -439,7 +450,7 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "budget must be non-negative");
         }
         Date startTime = team.getStartTime();
-        if (startTime != null && creating && startTime.before(new Date())) {
+        if (startTime != null && startTime.before(new Date())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "start time cannot be earlier than now");
         }
     }

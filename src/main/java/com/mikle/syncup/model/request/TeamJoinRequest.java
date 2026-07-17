@@ -1,5 +1,8 @@
 package com.mikle.syncup.model.request;
 
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -15,10 +18,13 @@ public class TeamJoinRequest implements Serializable {
     /**
      * id
      */
+    @NotNull
+    @Positive
     private Long teamId;
 
     /**
      * 密码
      */
+    @Size(max = 32)
     private String password;
 }

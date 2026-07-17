@@ -23,6 +23,9 @@ create table user
     profile      varchar(1024) null comment '个人简介 / 自我介绍'
 ) comment '用户';
 
+create unique index uk_user_userAccount on user (userAccount);
+create unique index uk_user_planetCode on user (planetCode);
+
 -- 队伍表
 create table team
 (

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.ai.model.AiToolResult;
 import com.mikle.syncup.ai.model.TeamIntent;
+import com.mikle.syncup.ai.model.AiProfileResponse;
+import com.mikle.syncup.ai.service.AiUserProfileService;
 import com.mikle.syncup.ai.tool.AiToolRegistry;
 import com.mikle.syncup.ai.tool.UpdateMyProfileTool;
 import com.mikle.syncup.mapper.UserMapper;
@@ -45,6 +47,9 @@ class AiUserProfileServiceTest {
 
     @Resource
     private AiToolRegistry aiToolRegistry;
+
+    @Resource
+    private AiUserProfileService aiUserProfileService;
 
     @Resource
     private MockMvc mockMvc;
@@ -171,7 +176,7 @@ class AiUserProfileServiceTest {
     }
 
     @Test
-    void updateMyProfileTool_shouldUpdateProfileAndConfirmStructuredProfile() {
+    void updateMyProfileTool_shouldCreateDraftAndOnlyUpdateAfterConfirmation() {
         User user = null;
         try {
             user = createTestUser();
@@ -181,12 +186,19 @@ class AiUserProfileServiceTest {
             AiToolResult result = aiToolRegistry.execute(UpdateMyProfileTool.TOOL_NAME, intent, user);
 
             Assertions.assertTrue(result.isSuccess());
+            Assertions.assertEquals("draft", result.getType());
+            Assertions.assertNull(userService.getById(user.getId()).getProfile());
+            Assertions.assertEquals(0L, countCurrentProfiles(user.getId()));
+
+            AiProfileResponse draft = objectMapper.convertValue(result.getData(), AiProfileResponse.class);
+            Assertions.assertNotNull(draft.getTaskId());
+            aiUserProfileService.confirmExtraction(draft.getTaskId(), null, user);
+
             User updatedUser = userService.getById(user.getId());
-            Assertions.assertNotNull(updatedUser);
             Assertions.assertTrue(updatedUser.getProfile().contains("羽毛球"));
             Assertions.assertFalse(updatedUser.getProfile().contains("test@example.com"));
             Assertions.assertTrue(updatedUser.getProfile().contains("***@***"));
-            JsonNode profile = objectMapper.valueToTree(result.getData());
+            JsonNode profile = objectMapper.valueToTree(aiUserProfileService.getCurrentProfile(user));
             Assertions.assertEquals("西安", profile.at("/profile/city").asText());
             Assertions.assertTrue(profile.at("/profile/activityTypes").toString().contains("羽毛球"));
             Assertions.assertEquals(1L, countCurrentProfiles(user.getId()));

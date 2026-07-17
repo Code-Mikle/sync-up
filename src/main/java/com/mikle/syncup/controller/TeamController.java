@@ -21,6 +21,7 @@ import com.mikle.syncup.service.UserService;
 import com.mikle.syncup.service.UserTeamService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -52,7 +54,7 @@ public class TeamController {
     private UserTeamService userTeamService;
 
     @PostMapping("/add")
-    public BaseResponse<Long> addTeam(@RequestBody TeamAddRequest teamAddRequest, HttpServletRequest request) {
+    public BaseResponse<Long> addTeam(@Valid @RequestBody TeamAddRequest teamAddRequest, HttpServletRequest request) {
         if (teamAddRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
@@ -64,7 +66,7 @@ public class TeamController {
     }
 
     @PostMapping("/update")
-    public BaseResponse<Boolean> updateTeam(@RequestBody TeamUpdateRequest teamUpdateRequest,
+    public BaseResponse<Boolean> updateTeam(@Valid @RequestBody TeamUpdateRequest teamUpdateRequest,
                                             HttpServletRequest request) {
         if (teamUpdateRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -78,13 +80,17 @@ public class TeamController {
     }
 
     @GetMapping("/get")
-    public BaseResponse<Team> getTeamById(long id) {
+    public BaseResponse<Team> getTeamById(long id, HttpServletRequest request) {
         if (id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         Team team = teamService.getById(id);
         if (team == null) {
             throw new BusinessException(ErrorCode.NULL_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        if (!Objects.equals(team.getUserId(), loginUser.getId()) && !userService.isAdmin(loginUser)) {
+            throw new BusinessException(ErrorCode.NO_AUTH);
         }
         return ResultUtils.success(team);
     }
@@ -99,7 +105,10 @@ public class TeamController {
         try {
             User loginUser = userService.getLoginUser(request);
             fillTeamHasJoin(teamList, loginUser);
-        } catch (Exception ignored) {
+        } catch (BusinessException e) {
+            if (e.getCode() != ErrorCode.NOT_LOGIN.getCode()) {
+                throw e;
+            }
             // Anonymous users can still browse the public team list.
         }
         fillTeamHasJoinNum(teamList);
@@ -107,20 +116,36 @@ public class TeamController {
     }
 
     @GetMapping("/list/page")
-    public BaseResponse<Page<Team>> listTeamsByPage(TeamQuery teamQuery) {
+    public BaseResponse<Page<TeamUserVO>> listTeamsByPage(TeamQuery teamQuery, HttpServletRequest request) {
         if (teamQuery == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        Team team = new Team();
-        BeanUtils.copyProperties(teamQuery, team);
-        Page<Team> page = new Page<>(teamQuery.getPageNum(), teamQuery.getPageSize());
-        QueryWrapper<Team> queryWrapper = new QueryWrapper<>(team);
-        Page<Team> resultPage = teamService.page(page, queryWrapper);
+        int pageNum = teamQuery.getPageNum();
+        int pageSize = teamQuery.getPageSize();
+        if (pageNum <= 0 || pageSize <= 0 || pageSize > 100) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "分页参数错误");
+        }
+        boolean isAdmin = userService.isAdmin(request);
+        List<TeamUserVO> teams = teamService.listTeams(teamQuery, isAdmin);
+        try {
+            fillTeamHasJoin(teams, userService.getLoginUser(request));
+        } catch (BusinessException e) {
+            if (e.getCode() != ErrorCode.NOT_LOGIN.getCode()) {
+                throw e;
+            }
+            // Anonymous users can browse public teams.
+        }
+        fillTeamHasJoinNum(teams);
+        long offset = (long) (pageNum - 1) * pageSize;
+        int fromIndex = (int) Math.min(offset, teams.size());
+        int toIndex = Math.min(fromIndex + pageSize, teams.size());
+        Page<TeamUserVO> resultPage = new Page<>(pageNum, pageSize, teams.size());
+        resultPage.setRecords(new ArrayList<>(teams.subList(fromIndex, toIndex)));
         return ResultUtils.success(resultPage);
     }
 
     @PostMapping("/join")
-    public BaseResponse<Boolean> joinTeam(@RequestBody TeamJoinRequest teamJoinRequest, HttpServletRequest request) {
+    public BaseResponse<Boolean> joinTeam(@Valid @RequestBody TeamJoinRequest teamJoinRequest, HttpServletRequest request) {
         if (teamJoinRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
@@ -130,7 +155,7 @@ public class TeamController {
     }
 
     @PostMapping("/quit")
-    public BaseResponse<Boolean> quitTeam(@RequestBody TeamQuitRequest teamQuitRequest, HttpServletRequest request) {
+    public BaseResponse<Boolean> quitTeam(@Valid @RequestBody TeamQuitRequest teamQuitRequest, HttpServletRequest request) {
         if (teamQuitRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }

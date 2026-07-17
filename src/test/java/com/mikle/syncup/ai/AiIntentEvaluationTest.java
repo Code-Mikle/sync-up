@@ -3,18 +3,17 @@ package com.mikle.syncup.ai;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.ai.model.TeamIntent;
-import com.mikle.syncup.ai.service.TeamIntentParser;
-import jakarta.annotation.Resource;
+import com.mikle.syncup.ai.service.impl.MockTeamIntentParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
-@SpringBootTest
 class AiIntentEvaluationTest {
 
     private static final double MIN_SLOT_ACCURACY = 0.90;
@@ -23,11 +22,9 @@ class AiIntentEvaluationTest {
 
     private static final double MIN_MISSING_FIELD_ACCURACY = 0.90;
 
-    @Resource
-    private TeamIntentParser teamIntentParser;
+    private final MockTeamIntentParser teamIntentParser = new MockTeamIntentParser();
 
-    @Resource
-    private ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     void intentEvaluationV1_shouldReachStageOneBaseline() throws Exception {
@@ -40,21 +37,19 @@ class AiIntentEvaluationTest {
 
         for (EvaluationCase evaluationCase : cases) {
             TeamIntent intent = teamIntentParser.parse(evaluationCase.message);
-            compareSlot(slotMetric, evaluationCase.expectedActivityType, intent.getActivityType());
-            compareSlot(slotMetric, evaluationCase.expectedCity, intent.getCity());
-            compareSlot(slotMetric, evaluationCase.expectedMemberCount, intent.getMemberCount());
-            compareSlot(slotMetric, evaluationCase.expectedBudgetMax, intent.getBudgetMax());
-            compareSlot(slotMetric, evaluationCase.expectedSkillLevel, intent.getSkillLevel());
+            compareNullableSlot(slotMetric, evaluationCase.expectedActivityType, intent.getActivityType());
+            compareNullableSlot(slotMetric, evaluationCase.expectedCity, intent.getCity());
+            compareNullableSlot(slotMetric, evaluationCase.expectedMemberCount, intent.getMemberCount());
+            compareNullableDecimalSlot(slotMetric, evaluationCase.expectedBudgetMax, intent.getBudgetMax());
+            compareNullableSlot(slotMetric, evaluationCase.expectedSkillLevel, intent.getSkillLevel());
 
-            toolMetric.add(evaluationCase.expectedTeamRelated == intent.isTeamRelated());
-            toolMetric.add(evaluationCase.expectedCreateTeamRequested == intent.isCreateTeamRequested());
+            toolMetric.add(expectedTools(evaluationCase).equals(selectedTools(intent)));
 
             List<String> expectedMissingFields = evaluationCase.expectedMissingFields == null
                     ? Collections.emptyList()
                     : evaluationCase.expectedMissingFields;
-            for (String missingField : expectedMissingFields) {
-                missingFieldMetric.add(intent.getMissingFields().contains(missingField));
-            }
+            missingFieldMetric.add(new LinkedHashSet<>(expectedMissingFields)
+                    .equals(new LinkedHashSet<>(intent.getMissingFields())));
         }
 
         System.out.printf(
@@ -82,25 +77,42 @@ class AiIntentEvaluationTest {
         }
     }
 
-    private void compareSlot(Metric metric, String expected, String actual) {
-        if (expected == null) {
-            return;
+    private Set<String> expectedTools(EvaluationCase evaluationCase) {
+        if (!evaluationCase.expectedTeamRelated
+                || evaluationCase.expectedMissingFields != null && !evaluationCase.expectedMissingFields.isEmpty()) {
+            return Collections.emptySet();
         }
-        metric.add(expected.equals(actual));
+        Set<String> tools = new LinkedHashSet<>();
+        tools.add("searchTeams");
+        tools.add("recommendUsers");
+        if (evaluationCase.expectedCreateTeamRequested) {
+            tools.add("createTeamDraft");
+        }
+        return tools;
     }
 
-    private void compareSlot(Metric metric, Integer expected, Integer actual) {
-        if (expected == null) {
-            return;
+    private Set<String> selectedTools(TeamIntent intent) {
+        if (!intent.isTeamRelated()
+                || intent.getActivityType() == null
+                || intent.getCity() == null
+                || intent.isCreateTeamRequested() && intent.getMemberCount() == null) {
+            return Collections.emptySet();
         }
-        metric.add(expected.equals(actual));
+        Set<String> tools = new LinkedHashSet<>();
+        tools.add("searchTeams");
+        tools.add("recommendUsers");
+        if (intent.isCreateTeamRequested()) {
+            tools.add("createTeamDraft");
+        }
+        return tools;
     }
 
-    private void compareSlot(Metric metric, String expected, BigDecimal actual) {
-        if (expected == null) {
-            return;
-        }
-        metric.add(actual != null && new BigDecimal(expected).compareTo(actual) == 0);
+    private void compareNullableSlot(Metric metric, Object expected, Object actual) {
+        metric.add(java.util.Objects.equals(expected, actual));
+    }
+
+    private void compareNullableDecimalSlot(Metric metric, String expected, BigDecimal actual) {
+        metric.add(expected == null ? actual == null : actual != null && new BigDecimal(expected).compareTo(actual) == 0);
     }
 
     private static class Metric {

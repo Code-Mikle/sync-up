@@ -1,5 +1,7 @@
 package com.mikle.syncup.model.request;
 
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -15,6 +17,8 @@ public class TeamQuitRequest implements Serializable {
     /**
      * id
      */
+    @NotNull
+    @Positive
     private Long teamId;
 
 }

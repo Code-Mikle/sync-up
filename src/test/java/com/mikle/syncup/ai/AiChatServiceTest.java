@@ -13,6 +13,7 @@ import com.mikle.syncup.ai.model.TeamIntent;
 import com.mikle.syncup.ai.service.AiTeamDraftService;
 import com.mikle.syncup.ai.service.TeamIntentParser;
 import com.mikle.syncup.ai.tool.AiToolRegistry;
+import dev.langchain4j.agent.tool.Tool;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.mapper.TeamMapper;
 import com.mikle.syncup.mapper.UserMapper;
@@ -36,8 +37,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Arrays;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -424,6 +428,9 @@ class AiChatServiceTest {
             Assertions.assertEquals(40000, response.at("/code").asInt());
             Assertions.assertEquals(1L,
                     countDraftConfirmAudit(draft.getDraftId(), "failed"));
+            AiTeamDraft expiredDraft = aiTeamDraftService.getById(draft.getId());
+            Assertions.assertNotNull(expiredDraft);
+            Assertions.assertEquals(2, expiredDraft.getStatus());
         } finally {
             cleanupUserAndTeams(user);
         }
@@ -491,6 +498,18 @@ class AiChatServiceTest {
         Assertions.assertTrue(aiToolRegistry.contains("listMyJoinedTeams"));
         Assertions.assertTrue(aiToolRegistry.contains("joinTeam"));
         Assertions.assertTrue(aiToolRegistry.contains("quitTeam"));
+    }
+
+    @Test
+    void agentTools_shouldNotExposeJoinOrQuitWithoutConfirmation() {
+        Set<String> exposedToolNames = Arrays.stream(AiAssistantTools.class.getDeclaredMethods())
+                .map(method -> method.getAnnotation(Tool.class))
+                .filter(java.util.Objects::nonNull)
+                .map(Tool::name)
+                .collect(Collectors.toSet());
+
+        Assertions.assertFalse(exposedToolNames.contains("joinTeam"));
+        Assertions.assertFalse(exposedToolNames.contains("quitTeam"));
     }
 
     @Test
