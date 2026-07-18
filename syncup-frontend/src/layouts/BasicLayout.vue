@@ -5,6 +5,13 @@
         :title="title"
         @click-right="onClickRight"
     >
+      <template #title>
+        <div class="nav-brand" aria-label="搭子星球">
+          <img :src="logoIcon" alt="" />
+          <span>{{ title }}</span>
+        </div>
+      </template>
+
       <template #left>
         <button
             v-if="showAiEntry"
@@ -49,6 +56,7 @@
 import {computed} from "vue";
 import {useRoute, useRouter} from "vue-router";
 import routes from "../config/route";
+import logoIcon from "../assets/logo.png";
 
 const router = useRouter();
 const route = useRoute();
@@ -90,13 +98,28 @@ const onChange = () => {};
   top: 0;
   z-index: 30;
   overflow: hidden;
-  border-bottom: 1px solid rgba(28, 61, 58, 0.06);
+  border-bottom: 1px solid rgba(40, 38, 101, 0.07);
   backdrop-filter: blur(16px);
 }
 
 .app-nav :deep(.van-nav-bar__title) {
   font-size: 17px;
   font-weight: 700;
+}
+
+.nav-brand {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--app-primary-deep);
+}
+
+.nav-brand img {
+  width: 29px;
+  height: 29px;
+  object-fit: cover;
+  border-radius: 10px;
+  box-shadow: 0 5px 12px rgba(var(--app-primary-rgb), 0.18);
 }
 
 .app-nav :deep(.van-icon) {
@@ -112,15 +135,15 @@ const onChange = () => {};
   padding: 0;
   color: var(--app-primary-deep);
   cursor: pointer;
-  background: rgba(24, 165, 143, 0.1);
-  border: 1px solid rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.09);
+  border: 1px solid rgba(var(--app-primary-rgb), 0.1);
   border-radius: 50%;
 }
 
 .nav-icon-button--ai {
   background:
-      radial-gradient(circle at 70% 22%, rgba(255, 232, 186, 0.9), transparent 0.7rem),
-      rgba(24, 165, 143, 0.12);
+      radial-gradient(circle at 70% 22%, rgba(var(--app-accent-rgb), 0.62), transparent 0.7rem),
+      rgba(var(--app-primary-rgb), 0.11);
 }
 
 .app-content {
@@ -130,8 +153,8 @@ const onChange = () => {};
 
 .app-tabbar {
   overflow: hidden;
-  border-top: 1px solid rgba(28, 61, 58, 0.06);
-  box-shadow: 0 -10px 26px rgba(19, 69, 61, 0.08);
+  border-top: 1px solid rgba(40, 38, 101, 0.07);
+  box-shadow: 0 -10px 26px rgba(52, 48, 139, 0.09);
   backdrop-filter: blur(16px);
 }
 

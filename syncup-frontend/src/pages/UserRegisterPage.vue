@@ -1,7 +1,9 @@
 <template>
   <div class="register-page">
     <section class="register-hero">
-      <div class="register-hero__mark">新</div>
+      <div class="register-hero__mark">
+        <img :src="logoIcon" alt="搭子星球" />
+      </div>
       <p class="register-hero__eyebrow">加入搭子星球</p>
       <h1>创建你的星球身份</h1>
       <p>用一个账号开始发现同频的人，找到合适的队伍。</p>
@@ -66,6 +68,7 @@ import {ref} from "vue";
 import {useRouter} from "vue-router";
 import {showFailToast, showSuccessToast} from "vant";
 import myAxios from "../plugins/myAxios";
+import logoIcon from "../assets/logo.png";
 
 const router = useRouter();
 
@@ -146,10 +149,10 @@ const toLogin = () => {
   overflow: hidden;
   color: #ffffff;
   background:
-      radial-gradient(circle at 88% 18%, rgba(255, 184, 77, 0.4), transparent 7rem),
-      linear-gradient(135deg, #0b7d72 0%, #18a58f 58%, #70c69d 100%);
+      radial-gradient(circle at 88% 18%, rgba(var(--app-accent-rgb), 0.4), transparent 7rem),
+      var(--app-brand-gradient);
   border-radius: 24px;
-  box-shadow: 0 18px 34px rgba(16, 113, 101, 0.22);
+  box-shadow: var(--app-brand-shadow);
 }
 
 .register-hero::after {
@@ -172,9 +175,16 @@ const toLogin = () => {
   margin-bottom: 18px;
   font-size: 23px;
   font-weight: 900;
-  color: var(--app-primary-deep);
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.94);
   border-radius: 16px;
+  box-shadow: 0 8px 20px rgba(23, 21, 79, 0.18);
+}
+
+.register-hero__mark img {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 14px;
 }
 
 .register-hero__eyebrow {

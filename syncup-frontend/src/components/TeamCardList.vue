@@ -268,8 +268,8 @@ const doDeleteTeam = async (id: number) => {
   height: 88px;
   overflow: hidden;
   background:
-      radial-gradient(circle at 35% 20%, rgba(255, 184, 77, 0.35), transparent 3rem),
-      linear-gradient(145deg, rgba(24, 165, 143, 0.2), rgba(11, 125, 114, 0.08));
+      radial-gradient(circle at 35% 20%, rgba(var(--app-accent-rgb), 0.32), transparent 3rem),
+      linear-gradient(145deg, rgba(var(--app-secondary-rgb), 0.2), rgba(var(--app-primary-rgb), 0.09));
   border-radius: 16px;
 }
 
@@ -328,17 +328,17 @@ const doDeleteTeam = async (id: number) => {
 
 .team-card__status--public {
   color: var(--app-primary-deep);
-  background: rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.1);
 }
 
 .team-card__status--private {
   color: #7b5b18;
-  background: rgba(255, 184, 77, 0.18);
+  background: rgba(var(--app-accent-rgb), 0.18);
 }
 
 .team-card__status--locked {
   color: #6b4b12;
-  background: rgba(255, 184, 77, 0.22);
+  background: rgba(var(--app-accent-rgb), 0.22);
 }
 
 .team-card__desc {
@@ -347,7 +347,7 @@ const doDeleteTeam = async (id: number) => {
   overflow: hidden;
   font-size: 13px;
   line-height: 1.55;
-  color: #40504e;
+  color: #4b4c69;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -362,7 +362,7 @@ const doDeleteTeam = async (id: number) => {
 .team-card__chips :deep(.van-tag) {
   max-width: 100%;
   color: var(--app-primary-deep);
-  background: rgba(24, 165, 143, 0.06);
+  background: rgba(var(--app-primary-rgb), 0.06);
 }
 
 .team-card__meta {
@@ -375,8 +375,8 @@ const doDeleteTeam = async (id: number) => {
 .team-card__meta-item {
   min-width: 0;
   padding: 7px 6px;
-  background: rgba(245, 247, 243, 0.85);
-  border: 1px solid rgba(28, 61, 58, 0.05);
+  background: rgba(244, 245, 252, 0.88);
+  border: 1px solid rgba(40, 38, 101, 0.05);
   border-radius: 12px;
 }
 

@@ -109,10 +109,10 @@ watch(isMatchMode, loadData, {immediate: true});
   overflow: hidden;
   color: #ffffff;
   background:
-      radial-gradient(circle at 86% 16%, rgba(255, 184, 77, 0.36), transparent 7rem),
-      linear-gradient(135deg, #0b7d72 0%, #18a58f 56%, #69c39d 100%);
+      radial-gradient(circle at 86% 16%, rgba(var(--app-accent-rgb), 0.38), transparent 7rem),
+      var(--app-brand-gradient);
   border-radius: 22px;
-  box-shadow: 0 18px 34px rgba(16, 113, 101, 0.22);
+  box-shadow: var(--app-brand-shadow);
 }
 
 .match-panel::after {
@@ -122,8 +122,9 @@ watch(isMatchMode, loadData, {immediate: true});
   width: 150px;
   height: 150px;
   content: "";
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 50%;
+  transform: rotate(-18deg) scaleY(0.46);
 }
 
 .match-panel__content,
@@ -205,7 +206,7 @@ watch(isMatchMode, loadData, {immediate: true});
   font-size: 12px;
   font-weight: 700;
   color: var(--app-primary-deep);
-  background: rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.1);
   border-radius: 999px;
 }
 </style>

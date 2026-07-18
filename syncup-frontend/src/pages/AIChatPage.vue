@@ -839,7 +839,7 @@ const goTeamPage = () => {
   height: 36px;
   overflow: hidden;
   color: #ffffff;
-  background: linear-gradient(135deg, var(--app-primary), var(--app-accent));
+  background: var(--app-brand-gradient);
   border-radius: 50%;
 }
 
@@ -848,7 +848,7 @@ const goTeamPage = () => {
   font-size: 13px;
   font-weight: 900;
   background: rgba(255, 255, 255, 0.96);
-  border: 2px solid rgba(24, 165, 143, 0.18);
+  border: 2px solid rgba(var(--app-primary-rgb), 0.18);
 }
 
 .chat-message__avatar img {
@@ -890,12 +890,12 @@ const goTeamPage = () => {
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid var(--app-border);
   border-radius: 18px 18px 18px 6px;
-  box-shadow: 0 10px 22px rgba(22, 80, 73, 0.08);
+  box-shadow: 0 10px 22px rgba(52, 48, 139, 0.09);
 }
 
 .chat-message--user .chat-message__bubble {
-  color: #102825;
-  background: linear-gradient(135deg, rgba(230, 249, 244, 0.98), rgba(244, 255, 251, 0.96));
+  color: var(--app-primary-deep);
+  background: linear-gradient(135deg, rgba(235, 241, 255, 0.98), rgba(246, 241, 255, 0.96));
   border-radius: 18px 18px 6px 18px;
 }
 
@@ -964,9 +964,9 @@ const goTeamPage = () => {
   min-width: 0;
   padding: 9px 10px;
   overflow: hidden;
-  color: #263f3b;
+  color: #484967;
   font-size: 13px;
-  background: #f3f6f4;
+  background: #f3f4fb;
   border-radius: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1006,10 +1006,10 @@ const goTeamPage = () => {
 .draft-card__status {
   justify-content: space-between;
   padding: 10px 11px;
-  color: #116456;
+  color: var(--app-primary-deep);
   font-weight: 800;
-  background: rgba(24, 165, 143, 0.08);
-  border: 1px solid rgba(24, 165, 143, 0.12);
+  background: rgba(var(--app-primary-rgb), 0.08);
+  border: 1px solid rgba(var(--app-primary-rgb), 0.12);
   border-radius: 12px;
 }
 
@@ -1029,8 +1029,8 @@ const goTeamPage = () => {
   font-size: 13px;
   font-weight: 700;
   text-align: left;
-  background: rgba(24, 165, 143, 0.08);
-  border: 1px solid rgba(24, 165, 143, 0.12);
+  background: rgba(var(--app-primary-rgb), 0.08);
+  border: 1px solid rgba(var(--app-primary-rgb), 0.12);
   border-radius: 12px;
 }
 
@@ -1048,8 +1048,8 @@ const goTeamPage = () => {
   gap: 11px;
   align-items: flex-start;
   padding: 11px;
-  background: rgba(245, 247, 243, 0.82);
-  border: 1px solid rgba(28, 61, 58, 0.06);
+  background: rgba(244, 245, 252, 0.86);
+  border: 1px solid rgba(40, 38, 101, 0.06);
   border-radius: 14px;
 }
 
@@ -1062,7 +1062,7 @@ const goTeamPage = () => {
   height: 42px;
   overflow: hidden;
   color: var(--app-primary-deep);
-  background: rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.1);
   border-radius: 50%;
 }
 
@@ -1094,7 +1094,7 @@ const goTeamPage = () => {
 .profile-result p,
 .operation-result p {
   margin: 5px 0 0;
-  color: #40504e;
+  color: #4b4c69;
   font-size: 12px;
   line-height: 1.45;
 }
@@ -1116,25 +1116,25 @@ const goTeamPage = () => {
 
 .profile-result__meta span {
   padding: 4px 7px;
-  color: #2d5b53;
+  color: #50516f;
   font-size: 11px;
   font-weight: 800;
-  background: rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.1);
   border-radius: 999px;
 }
 
 .profile-result__tags :deep(.van-tag) {
   color: var(--app-primary-deep);
   font-weight: 700;
-  background: rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.1);
   border: 0;
 }
 
 .operation-result {
   align-items: center;
-  color: #116456;
-  background: rgba(24, 165, 143, 0.08);
-  border-color: rgba(24, 165, 143, 0.14);
+  color: var(--app-primary-deep);
+  background: rgba(var(--app-primary-rgb), 0.08);
+  border-color: rgba(var(--app-primary-rgb), 0.14);
 }
 
 .team-result-list,
@@ -1149,8 +1149,8 @@ const goTeamPage = () => {
   gap: 10px;
   align-items: flex-start;
   padding: 11px;
-  background: rgba(245, 247, 243, 0.82);
-  border: 1px solid rgba(28, 61, 58, 0.06);
+  background: rgba(244, 245, 252, 0.86);
+  border: 1px solid rgba(40, 38, 101, 0.06);
   border-radius: 14px;
 }
 
@@ -1176,7 +1176,7 @@ const goTeamPage = () => {
   display: -webkit-box;
   margin: 6px 0 0;
   overflow: hidden;
-  color: #40504e;
+  color: #4b4c69;
   font-size: 12px;
   line-height: 1.45;
   -webkit-box-orient: vertical;
@@ -1193,7 +1193,7 @@ const goTeamPage = () => {
 .team-result-card__tags :deep(.van-tag) {
   color: var(--app-primary-deep);
   font-weight: 700;
-  background: rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.1);
   border: 0;
 }
 
@@ -1208,7 +1208,7 @@ const goTeamPage = () => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   padding-top: 10px;
-  border-top: 1px solid rgba(28, 61, 58, 0.08);
+  border-top: 1px solid rgba(40, 38, 101, 0.08);
 }
 
 .team-detail-panel div {
@@ -1226,7 +1226,7 @@ const goTeamPage = () => {
   display: block;
   margin-top: 3px;
   overflow: hidden;
-  color: #203935;
+  color: #3f405e;
   font-size: 13px;
   line-height: 1.3;
   text-overflow: ellipsis;
@@ -1238,8 +1238,8 @@ const goTeamPage = () => {
   gap: 10px;
   align-items: flex-start;
   padding: 11px;
-  background: rgba(245, 247, 243, 0.82);
-  border: 1px solid rgba(28, 61, 58, 0.06);
+  background: rgba(244, 245, 252, 0.86);
+  border: 1px solid rgba(40, 38, 101, 0.06);
   border-radius: 14px;
 }
 
@@ -1252,7 +1252,7 @@ const goTeamPage = () => {
   height: 38px;
   overflow: hidden;
   color: var(--app-primary-deep);
-  background: rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.1);
   border-radius: 50%;
 }
 
@@ -1281,7 +1281,7 @@ const goTeamPage = () => {
 
 .user-recommend-card p {
   margin: 5px 0 0;
-  color: #40504e;
+  color: #4b4c69;
   font-size: 12px;
   line-height: 1.4;
 }
@@ -1297,7 +1297,7 @@ const goTeamPage = () => {
 .user-recommend-card__tags :deep(.van-tag) {
   color: var(--app-primary-deep);
   font-weight: 700;
-  background: rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.1);
   border: 0;
 }
 
@@ -1350,7 +1350,7 @@ const goTeamPage = () => {
   align-items: center;
   padding: 10px var(--app-page-x);
   background: rgba(255, 255, 255, 0.9);
-  border-top: 1px solid rgba(28, 61, 58, 0.08);
+  border-top: 1px solid rgba(40, 38, 101, 0.08);
   backdrop-filter: blur(18px);
 }
 
@@ -1361,7 +1361,7 @@ const goTeamPage = () => {
   width: 38px;
   height: 38px;
   color: var(--app-text);
-  background: #f4f6f4;
+  background: #f3f4fb;
   border: 1px solid var(--app-border);
   border-radius: 50%;
 }
@@ -1384,7 +1384,7 @@ const goTeamPage = () => {
 
 .chat-composer__send {
   color: #ffffff !important;
-  background: linear-gradient(135deg, var(--app-primary), var(--app-accent)) !important;
+  background: var(--app-brand-gradient) !important;
   border: 0 !important;
 }
 

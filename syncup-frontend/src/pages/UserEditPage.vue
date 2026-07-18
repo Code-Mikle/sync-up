@@ -220,7 +220,7 @@ const onSubmit = async () => {
   padding: 5px 9px;
   color: var(--app-primary-deep);
   font-weight: 800;
-  background: rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.1);
   border: 0;
 }
 
@@ -229,8 +229,8 @@ const onSubmit = async () => {
   color: var(--app-text-muted);
   font-size: 13px;
   line-height: 1.45;
-  background: rgba(245, 247, 243, 0.86);
-  border: 1px dashed rgba(28, 61, 58, 0.14);
+  background: rgba(244, 245, 252, 0.88);
+  border: 1px dashed rgba(40, 38, 101, 0.14);
   border-radius: 12px;
 }
 
@@ -250,8 +250,8 @@ const onSubmit = async () => {
 .tag-editor__input :deep(.van-field__body) {
   min-height: 38px;
   padding: 0 12px;
-  background: rgba(245, 247, 243, 0.9);
-  border: 1px solid rgba(28, 61, 58, 0.08);
+  background: rgba(244, 245, 252, 0.92);
+  border: 1px solid rgba(40, 38, 101, 0.08);
   border-radius: 999px;
 }
 
@@ -266,16 +266,16 @@ const onSubmit = async () => {
 .tag-editor__suggestions button {
   height: 30px;
   padding: 0 11px;
-  color: #2d5b53;
+  color: #50516f;
   font-size: 12px;
   font-weight: 800;
-  background: rgba(24, 165, 143, 0.08);
-  border: 1px solid rgba(24, 165, 143, 0.12);
+  background: rgba(var(--app-primary-rgb), 0.08);
+  border: 1px solid rgba(var(--app-primary-rgb), 0.12);
   border-radius: 999px;
 }
 
 .tag-editor__suggestions button:disabled {
   color: var(--app-text-muted);
-  background: rgba(102, 119, 117, 0.08);
+  background: rgba(109, 111, 139, 0.08);
 }
 </style>

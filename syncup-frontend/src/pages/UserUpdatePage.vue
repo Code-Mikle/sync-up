@@ -121,10 +121,10 @@ const toEdit = (editKey: string, editName: string, currentValue: unknown) => {
   padding: 18px;
   color: #ffffff;
   background:
-      radial-gradient(circle at 88% 18%, rgba(255, 184, 77, 0.34), transparent 7rem),
-      linear-gradient(135deg, #0b7d72 0%, #18a58f 58%, #70c69d 100%);
+      radial-gradient(circle at 88% 18%, rgba(var(--app-accent-rgb), 0.36), transparent 7rem),
+      var(--app-brand-gradient);
   border-radius: 24px;
-  box-shadow: 0 18px 34px rgba(16, 113, 101, 0.22);
+  box-shadow: var(--app-brand-shadow);
 }
 
 .user-update-card--loading {

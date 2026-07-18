@@ -221,8 +221,9 @@ onMounted(() => {
   padding: 18px;
   color: var(--app-text);
   background:
-      radial-gradient(circle at right top, rgba(255, 184, 77, 0.2), transparent 8rem),
-      linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(238, 247, 242, 0.94));
+      radial-gradient(circle at right top, rgba(var(--app-accent-rgb), 0.18), transparent 8rem),
+      radial-gradient(circle at left bottom, rgba(var(--app-secondary-rgb), 0.08), transparent 9rem),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(239, 241, 255, 0.95));
   border: 1px solid var(--app-border);
   border-radius: 22px;
   box-shadow: var(--app-shadow);
@@ -256,14 +257,14 @@ onMounted(() => {
   flex: 0 0 auto;
   height: 38px;
   padding: 0 15px;
-  box-shadow: 0 10px 20px rgba(24, 165, 143, 0.18);
+  box-shadow: 0 10px 20px rgba(var(--app-primary-rgb), 0.2);
 }
 
 .team-toolbar {
   margin-top: 12px;
   padding: 4px 0 10px;
   background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(28, 61, 58, 0.05);
+  border: 1px solid rgba(40, 38, 101, 0.05);
   border-radius: 18px;
 }
 

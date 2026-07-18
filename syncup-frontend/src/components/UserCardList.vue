@@ -99,10 +99,10 @@ const getAvatarText = (user: UserType) => {
   color: #ffffff;
   font-size: 21px;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--app-primary), var(--app-accent));
+  background: var(--app-brand-gradient);
   border: 3px solid rgba(255, 255, 255, 0.82);
   border-radius: 18px;
-  box-shadow: 0 10px 18px rgba(24, 165, 143, 0.16);
+  box-shadow: 0 10px 18px rgba(var(--app-primary-rgb), 0.18);
 }
 
 .user-card__avatar img {
@@ -162,7 +162,7 @@ const getAvatarText = (user: UserType) => {
   overflow: hidden;
   font-size: 13px;
   line-height: 1.55;
-  color: #40504e;
+  color: #4b4c69;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -184,12 +184,12 @@ const getAvatarText = (user: UserType) => {
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: rgba(24, 165, 143, 0.1);
+  background: rgba(var(--app-primary-rgb), 0.1);
   border: 0;
 }
 
 .user-card__tags--empty .user-card__tag {
   color: var(--app-text-muted);
-  background: rgba(102, 119, 117, 0.1);
+  background: rgba(109, 111, 139, 0.1);
 }
 </style>
