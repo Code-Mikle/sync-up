@@ -24,7 +24,20 @@
         <van-tab title="加密队伍" name="secret" />
       </van-tabs>
       <div class="team-filters">
-        <van-field v-model="filters.activityType" label="活动" placeholder="羽毛球" clearable @blur="refreshTeamList" />
+        <van-field label="大类">
+          <template #input>
+            <select v-model.number="filters.activityCategory" class="category-select" @change="refreshTeamList">
+              <option :value="undefined">全部</option>
+              <option
+                  v-for="category in teamActivityCategoryOptions"
+                  :key="category.code"
+                  :value="category.code"
+              >
+                {{ category.name }}
+              </option>
+            </select>
+          </template>
+        </van-field>
         <van-field v-model="filters.city" label="城市" placeholder="西安" clearable @blur="refreshTeamList" />
         <van-field
             v-model.number="filters.maxBudgetPerPerson"
@@ -106,6 +119,7 @@ import myAxios from "../plugins/myAxios";
 import {showFailToast} from "vant";
 import {TeamType} from "../models/team";
 import {composeDateTime, formatDateTime, toDatePickerValue, toTimePickerValue} from "../utils/date";
+import {teamActivityCategoryOptions} from "../constants/team";
 
 const active = ref("public");
 const router = useRouter();
@@ -118,7 +132,7 @@ const filterTimePickerValue = ref<string[]>(toTimePickerValue(new Date()));
 
 const filters = ref({
   searchText: "",
-  activityType: "",
+  activityCategory: undefined as number | undefined,
   city: "",
   maxBudgetPerPerson: undefined as number | undefined,
   startTimeBegin: undefined as Date | undefined,
@@ -144,7 +158,7 @@ const listTeam = async () => {
         searchText: filters.value.searchText,
         pageNum: 1,
         status: currentStatus.value,
-        activityType: filters.value.activityType || undefined,
+        activityCategory: filters.value.activityCategory || undefined,
         city: filters.value.city || undefined,
         maxBudgetPerPerson: filters.value.maxBudgetPerPerson || undefined,
         startTimeBegin: filters.value.startTimeBegin,
@@ -174,7 +188,7 @@ const refreshTeamList = () => {
 const resetFilters = () => {
   filters.value = {
     searchText: "",
-    activityType: "",
+    activityCategory: undefined,
     city: "",
     maxBudgetPerPerson: undefined,
     startTimeBegin: undefined,
@@ -313,6 +327,14 @@ onMounted(() => {
   gap: 8px;
   justify-content: flex-end;
   padding: 10px 10px 0;
+}
+
+.category-select {
+  width: 100%;
+  color: var(--app-text);
+  background: transparent;
+  border: 0;
+  outline: 0;
 }
 
 .team-summary {

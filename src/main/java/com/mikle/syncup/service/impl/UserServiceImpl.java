@@ -156,6 +156,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User safetyUser = getSafetyUser(user);
         // 4. 记录用户的登录态
         StpUtil.login(user.getId());
+        Date lastActiveTime = new Date();
+        updateLastActiveTime(user.getId(), lastActiveTime);
+        safetyUser.setLastActiveTime(lastActiveTime);
         UserLoginVO userLoginVO = new UserLoginVO();
         userLoginVO.setUser(safetyUser);
         userLoginVO.setToken(StpUtil.getTokenValue());
@@ -195,10 +198,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         safetyUser.setGender(originUser.getGender());
         safetyUser.setPhone(originUser.getPhone());
         safetyUser.setEmail(originUser.getEmail());
+        safetyUser.setCity(originUser.getCity());
         safetyUser.setPlanetCode(originUser.getPlanetCode());
         safetyUser.setUserRole(originUser.getUserRole());
         safetyUser.setUserStatus(originUser.getUserStatus());
         safetyUser.setCreateTime(originUser.getCreateTime());
+        safetyUser.setLastActiveTime(originUser.getLastActiveTime());
         safetyUser.setTags(originUser.getTags());
         safetyUser.setProfile(originUser.getProfile());
         return safetyUser;
@@ -267,7 +272,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
 
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("id", "username", "avatarUrl", "gender", "tags", "profile", "createTime", "planetCode");
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tags", "profile", "createTime", "lastActiveTime", "planetCode");
         if (excludeUserId != null && excludeUserId > 0) {
             queryWrapper.ne("id", excludeUserId);
         }
@@ -299,10 +304,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         userSearchResultVO.setUsername(originUser.getUsername());
         userSearchResultVO.setAvatarUrl(originUser.getAvatarUrl());
         userSearchResultVO.setGender(originUser.getGender());
+        userSearchResultVO.setCity(originUser.getCity());
         userSearchResultVO.setTags(originUser.getTags());
         userSearchResultVO.setCreateTime(originUser.getCreateTime());
+        userSearchResultVO.setLastActiveTime(originUser.getLastActiveTime());
         userSearchResultVO.setPlanetCode(originUser.getPlanetCode());
         return userSearchResultVO;
+    }
+
+    private void updateLastActiveTime(long userId, Date lastActiveTime) {
+        User updateUser = new User();
+        updateUser.setId(userId);
+        updateUser.setLastActiveTime(lastActiveTime);
+        this.updateById(updateUser);
     }
 
     private Set<String> parseTagNameSet(String tagsStr) {
@@ -339,7 +353,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (userId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        // todo 补充校验，如果用户没有传任何要更新的值，就直接报错，不用执行 update 语句
         // 如果是管理员，允许更新任意用户
         // 如果不是管理员，只允许更新当前（自己的）信息
         if (!isAdmin(loginUser) && userId != loginUser.getId()) {
@@ -348,22 +361,28 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (user.getGender() != null && (user.getGender() < 0 || user.getGender() > 2)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "性别参数错误");
         }
+        if (user.getCity() != null) {
+            user.setCity(user.getCity().trim());
+            if (user.getCity().length() > 64) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "城市名称过长");
+            }
+        }
         User oldUser = userMapper.selectById(userId);
         if (oldUser == null) {
             throw new BusinessException(ErrorCode.NULL_ERROR);
         }
         int updated = userMapper.updateById(user);
         if (updated > 0) {
-            tryCreateProfileExtractionTask(user, loginUser);
+            tryCreateProfileDraft(user, loginUser);
         }
         return updated;
     }
 
-    private void tryCreateProfileExtractionTask(User user, User loginUser) {
+    private void tryCreateProfileDraft(User user, User loginUser) {
         try {
-            aiUserProfileService.createExtractionTaskFromUserUpdate(user, loginUser);
+            aiUserProfileService.createDraftFromUserUpdate(user, loginUser);
         } catch (Exception e) {
-            log.warn("create AI profile extraction task failed, userId={}", user.getId(), e);
+            log.warn("create AI profile draft failed, userId={}", user.getId(), e);
         }
     }
 
@@ -462,7 +481,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     /**
      * 根据标签搜索用户（SQL 查询版）
      * @param tagNameList 用户要拥有的标签
-     * @return
      */
     @Deprecated
     private List<User> searchUsersByTagsBySQL(List<String> tagNameList) {

@@ -1,7 +1,7 @@
 package com.mikle.syncup.ai.service.impl;
 
-import com.mikle.syncup.ai.model.AiToolResult;
-import com.mikle.syncup.ai.model.TeamIntent;
+import com.mikle.syncup.ai.model.tool.AiToolResult;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.service.AiToolCallLogService;
 import com.mikle.syncup.ai.service.AiToolExecutionService;
 import com.mikle.syncup.ai.tool.AiToolRegistry;
@@ -53,7 +53,8 @@ public class AiToolExecutionServiceImpl implements AiToolExecutionService {
         if (intent == null) {
             return null;
         }
-        return "activityType=" + intent.getActivityType()
+        return "activityCategory=" + intent.getActivityCategory()
+                + ", activityType=" + intent.getActivityType()
                 + ", teamId=" + intent.getTeamId()
                 + ", city=" + intent.getCity()
                 + ", memberCount=" + intent.getMemberCount()

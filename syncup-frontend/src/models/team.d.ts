@@ -9,6 +9,8 @@ export type TeamType = {
     name: string;
     description: string;
     expireTime?: Date;
+    activityCategory?: number;
+    activityCategoryName?: string;
     activityType?: string;
     city?: string;
     district?: string;

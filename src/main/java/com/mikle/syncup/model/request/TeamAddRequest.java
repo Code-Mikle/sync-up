@@ -34,6 +34,14 @@ public class TeamAddRequest implements Serializable {
     private String description;
 
     /**
+     * 活动大类
+     */
+    @NotNull
+    @Min(1)
+    @Max(9)
+    private Integer activityCategory;
+
+    /**
      * 最大人数
      */
     @NotNull

@@ -46,6 +46,11 @@ public class UserVO implements Serializable {
     private String email;
 
     /**
+     * 常驻城市
+     */
+    private String city;
+
+    /**
      * 标签列表 json
      */
     private String tags;
@@ -64,6 +69,11 @@ public class UserVO implements Serializable {
      *
      */
     private Date updateTime;
+
+    /**
+     * 最近活跃时间
+     */
+    private Date lastActiveTime;
 
     /**
      * 用户角色 0 - 普通用户 1 - 管理员

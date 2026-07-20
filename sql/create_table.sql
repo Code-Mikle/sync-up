@@ -13,9 +13,11 @@ create table user
     userPassword varchar(512) not null comment '密码',
     phone        varchar(128) null comment '电话',
     email        varchar(512) null comment '邮箱',
+    city         varchar(64) null comment '常驻城市',
     userStatus   int      default 0 not null comment '状态 0 - 正常',
     createTime   datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    lastActiveTime datetime null comment '最近活跃时间',
     isDelete     tinyint  default 0 not null comment '是否删除',
     userRole     int      default 0 not null comment '用户角色 0 - 普通用户 1 - 管理员',
     planetCode   varchar(512) null comment '星球编号',
@@ -32,6 +34,7 @@ create table team
     id          bigint auto_increment comment 'id' primary key,
     name        varchar(256) not null comment '队伍名称',
     description varchar(1024) null comment '描述',
+    activityCategory int default 9 null comment '活动大类',
     maxNum      int      default 1 not null comment '最大人数',
     expireTime  datetime null comment '过期时间',
     activityType varchar(64) null comment '活动类型',
@@ -50,7 +53,7 @@ create table team
 ) comment '队伍';
 
 create index idx_team_userId on team (userId);
-create index idx_team_search on team (status, city, activityType, startTime);
+create index idx_team_search on team (status, city, activityCategory, startTime);
 
 -- 用户队伍关系表
 create table user_team
@@ -77,6 +80,7 @@ create table ai_team_draft
     name            varchar(256) not null comment '队伍名称',
     description     varchar(1024) null comment '描述',
     maxNum          int not null comment '最大人数',
+    activityCategory int default 9 null comment '活动大类',
     activityType    varchar(64) null comment '活动类型',
     city            varchar(64) null comment '城市',
     district        varchar(64) null comment '区域',
@@ -138,26 +142,25 @@ create table ai_user_profile
 create unique index uk_ai_user_profile_userId on ai_user_profile (userId);
 create index idx_ai_user_profile_updateTime on ai_user_profile (updateTime);
 
--- AI 用户画像提取任务表
-create table ai_profile_extraction_task
+-- AI 用户画像草稿表
+create table ai_profile_draft
 (
     id             bigint auto_increment comment 'id' primary key,
-    taskId         varchar(64) not null comment '画像提取任务公开 id',
+    draftId        varchar(64) not null comment '画像草稿公开 id',
     userId         bigint not null comment '用户 id',
     sourceText     varchar(1024) not null comment '来源文本，已做最小化脱敏',
-    extractionJson text not null comment '提取出的结构化画像 JSON',
-    status         tinyint default 1 not null comment '0 - 待处理，1 - 已提取，2 - 已确认，3 - 已拒绝，4 - 失败',
-    retryCount     int default 0 not null comment '重试次数',
-    nextRetryAt    datetime null comment '下次重试时间',
-    lastError      varchar(1024) null comment '最后一次错误',
+    profileJson    text not null comment '待确认的结构化画像 JSON',
+    status         tinyint default 0 not null comment '0 - 待确认，1 - 已确认，2 - 已拒绝，3 - 已过期',
+    expiresAt      datetime not null comment '草稿过期时间',
+    confirmedAt    datetime null comment '用户确认时间',
     modelVersion   varchar(64) not null comment '提取模型或规则版本',
     createTime     datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
     isDelete       tinyint default 0 not null comment '是否删除'
-) comment 'AI 用户画像提取任务';
+) comment 'AI 用户画像草稿';
 
-create unique index uk_ai_profile_task_taskId on ai_profile_extraction_task (taskId);
-create index idx_ai_profile_task_user_status on ai_profile_extraction_task (userId, status, createTime);
+create unique index uk_ai_profile_draft_draftId on ai_profile_draft (draftId);
+create index idx_ai_profile_draft_user_status on ai_profile_draft (userId, status, expiresAt);
 
 -- AI 短期会话记忆表
 create table ai_chat_memory
@@ -177,6 +180,26 @@ create table ai_chat_memory
 create unique index uk_ai_chat_memory_memoryId on ai_chat_memory (memoryId);
 create index idx_ai_chat_memory_user_time on ai_chat_memory (userId, updateTime);
 create index idx_ai_chat_memory_expireAt on ai_chat_memory (expireAt);
+
+-- AI 用户可见聊天记录表
+create table ai_chat_message
+(
+    id           bigint auto_increment comment 'id' primary key,
+    userId       bigint not null comment '用户 id',
+    sessionId    varchar(64) not null comment 'AI 对话会话 id',
+    role         varchar(16) not null comment 'user / assistant / event',
+    content      varchar(2048) null comment '展示文本或事件文本，已做最小化脱敏',
+    responseJson mediumtext null comment 'AI 响应或事件载荷 JSON',
+    visible      tinyint default 1 not null comment '是否在聊天页展示',
+    expireAt     datetime not null comment '过期时间',
+    createTime   datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete     tinyint default 0 not null comment '是否删除'
+) comment 'AI 用户可见聊天记录';
+
+create index idx_ai_chat_message_user_session_time on ai_chat_message (userId, sessionId, createTime);
+create index idx_ai_chat_message_user_time on ai_chat_message (userId, createTime);
+create index idx_ai_chat_message_expireAt on ai_chat_message (expireAt);
 
 -- 标签表（可以不创建，因为标签字段已经放到用户表中）
 create table tag

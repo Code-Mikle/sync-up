@@ -2,7 +2,7 @@ package com.mikle.syncup.ai;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mikle.syncup.ai.model.TeamIntent;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.service.impl.MockTeamIntentParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

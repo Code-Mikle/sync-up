@@ -16,13 +16,14 @@ export type ProfileExtraction = {
 };
 
 export type AiProfileResponse = {
-    taskId?: string;
+    draftId?: string;
     userId?: number;
     status?: number;
     profile?: ProfileExtraction;
     sourceText?: string;
     modelVersion?: string;
     confirmedAt?: string | Date;
+    expiresAt?: string | Date;
     updateTime?: string | Date;
 };
 
@@ -42,6 +43,7 @@ export type TeamIntent = {
     sourceText?: string;
     teamId?: number;
     teamPassword?: string;
+    activityCategory?: number;
     activityType?: string;
     city?: string;
     district?: string;
@@ -65,6 +67,7 @@ export type TeamDraft = {
     name?: string;
     description?: string;
     maxNum?: number;
+    activityCategory?: number;
     activityType?: string;
     city?: string;
     district?: string;
@@ -79,6 +82,20 @@ export type AiTeamDraftConfirmResponse = {
     draftId: string;
     teamId: number;
     status: string;
+};
+
+export type AiTeamDeleteConfirmation = {
+    teamId: number;
+    name?: string;
+    description?: string;
+    activityCategory?: number;
+    activityType?: string;
+    city?: string;
+    district?: string;
+    startTime?: string | Date;
+    maxNum?: number;
+    hasJoinNum?: number;
+    warning?: string;
 };
 
 export type AiUserRecommendation = {
@@ -106,8 +123,27 @@ export type AiChatResponse = {
     intent?: TeamIntent;
     toolResults?: AiToolResult[];
     draft?: TeamDraft;
+    deleteConfirmation?: AiTeamDeleteConfirmation;
     needClarification?: boolean;
     clarificationQuestions?: string[];
+};
+
+export type AiChatMessage = {
+    id?: number;
+    sessionId?: string;
+    role: "user" | "assistant" | "event";
+    content?: string;
+    response?: AiChatResponse;
+    eventType?: string;
+    relatedTeamId?: number;
+    relatedDraftId?: string;
+    visible?: number;
+    createTime?: string | Date;
+};
+
+export type AiChatHistory = {
+    sessionId?: string;
+    messages?: AiChatMessage[];
 };
 
 export type SearchTeamsToolResult = AiToolResult & {

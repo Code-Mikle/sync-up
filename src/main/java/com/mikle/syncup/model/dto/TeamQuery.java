@@ -47,6 +47,11 @@ public class TeamQuery extends PageRequest {
     private Integer maxNum;
 
     /**
+     * 活动大类
+     */
+    private Integer activityCategory;
+
+    /**
      * 活动类型
      */
     private String activityType;

@@ -23,6 +23,7 @@
         <p class="team-card__desc">{{ team.description || '这个队伍暂时还没有描述。' }}</p>
 
         <div class="team-card__chips" v-if="hasStructuredInfo(team)">
+          <van-tag v-if="getActivityCategoryName(team)" plain round>{{ getActivityCategoryName(team) }}</van-tag>
           <van-tag v-if="team.activityType" plain round>{{ team.activityType }}</van-tag>
           <van-tag v-if="team.city || team.district" plain round>{{ formatLocation(team) }}</van-tag>
           <van-tag v-if="team.skillLevel" plain round>{{ team.skillLevel }}</van-tag>
@@ -103,7 +104,7 @@
 
 <script setup lang="ts">
 import {TeamType} from "../models/team";
-import {teamStatusEnum} from "../constants/team";
+import {getTeamActivityCategoryName, teamStatusEnum} from "../constants/team";
 import ikun from "../assets/ikun.png";
 import myAxios from "../plugins/myAxios";
 import {showConfirmDialog, showFailToast, showSuccessToast} from "vant";
@@ -156,7 +157,11 @@ const formatDate = (value?: Date | string) => {
 };
 
 const hasStructuredInfo = (team: TeamType) => {
-  return Boolean(team.activityType || team.city || team.district || team.skillLevel);
+  return Boolean(team.activityCategory || team.activityType || team.city || team.district || team.skillLevel);
+};
+
+const getActivityCategoryName = (team: TeamType) => {
+  return team.activityCategoryName || getTeamActivityCategoryName(team.activityCategory);
 };
 
 const formatLocation = (team: TeamType) => {

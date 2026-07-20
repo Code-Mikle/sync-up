@@ -1,9 +1,9 @@
 package com.mikle.syncup.ai.tool;
 
-import com.mikle.syncup.ai.model.AiToolResult;
-import com.mikle.syncup.ai.model.AiProfileResponse;
-import com.mikle.syncup.ai.model.AiUserProfile;
-import com.mikle.syncup.ai.model.TeamIntent;
+import com.mikle.syncup.ai.model.tool.AiToolResult;
+import com.mikle.syncup.ai.model.vo.AiProfileResponse;
+import com.mikle.syncup.ai.model.vo.AiUserProfile;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.service.AiUserProfileService;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
@@ -43,6 +43,7 @@ public class GetMyProfileTool implements AiTool {
         profile.setGender(loginUser.getGender());
         profile.setTags(loginUser.getTags());
         profile.setProfile(loginUser.getProfile());
+        profile.setCity(loginUser.getCity());
         profile.setPlanetCode(loginUser.getPlanetCode());
         profile.setCreateTime(loginUser.getCreateTime());
         try {

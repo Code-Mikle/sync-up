@@ -34,6 +34,9 @@ public class UserUpdateRequest implements Serializable {
     @Size(max = 254)
     private String email;
 
+    @Size(max = 64)
+    private String city;
+
     @Size(max = 1024)
     private String tags;
 

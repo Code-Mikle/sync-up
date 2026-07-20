@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai.model;
+package com.mikle.syncup.ai.model.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;

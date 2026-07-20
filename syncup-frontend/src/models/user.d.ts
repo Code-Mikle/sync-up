@@ -10,9 +10,11 @@ export type UserType = {
     gender:number;
     phone: string;
     email: string;
+    city?: string;
     userStatus: number;
     userRole: number;
     planetCode: string;
     tags: string | string[];
     createTime: Date;
+    lastActiveTime?: Date | string;
 };

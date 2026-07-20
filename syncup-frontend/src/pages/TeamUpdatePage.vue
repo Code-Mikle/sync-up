@@ -33,7 +33,21 @@
       </van-cell-group>
 
       <van-cell-group inset class="app-form__group">
-        <van-field v-model="teamData.activityType" label="活动类型" placeholder="如 羽毛球、徒步、探店" clearable />
+        <van-field name="activityCategory" label="活动大类">
+          <template #input>
+            <select v-model.number="teamData.activityCategory" class="category-select">
+              <option :value="undefined">不修改</option>
+              <option
+                  v-for="category in teamActivityCategoryOptions"
+                  :key="category.code"
+                  :value="category.code"
+              >
+                {{ category.name }}
+              </option>
+            </select>
+          </template>
+        </van-field>
+        <van-field v-model="teamData.activityType" label="具体活动" placeholder="如 羽毛球、城市骑行、火锅" clearable />
         <van-field v-model="teamData.city" label="城市" placeholder="如 西安" clearable />
         <van-field v-model="teamData.district" label="区域" placeholder="区县或商圈，可不填" clearable />
         <van-field
@@ -131,6 +145,7 @@ import myAxios from "../plugins/myAxios";
 import {showFailToast, showSuccessToast} from "vant";
 import {TeamType} from "../models/team";
 import {composeDateTime, formatDateTime, toDatePickerValue, toTimePickerValue} from "../utils/date";
+import {teamActivityCategoryOptions} from "../constants/team";
 
 const router = useRouter();
 const route = useRoute();
@@ -242,5 +257,13 @@ const onSubmit = async () => {
   margin-left: 8px;
   font-size: 13px;
   color: var(--app-text-muted);
+}
+
+.category-select {
+  width: 100%;
+  color: var(--app-text);
+  background: transparent;
+  border: 0;
+  outline: 0;
 }
 </style>

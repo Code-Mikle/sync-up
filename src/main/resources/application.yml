@@ -19,10 +19,12 @@ spring:
       password: ${LOCAL_REDIS_PASSWORD:}
   config:
     import: optional:file:.env[.properties]  # optional: 表示文件不存在时不报错
+
 server:
   port: ${LOCAL_SERVER_PORT:8080}
   servlet:
     context-path: /api  # 会给所有接口统一加前缀
+
 sa-token:
   token-name: Authorization
   token-prefix: Bearer
@@ -36,6 +38,7 @@ sa-token:
   is-read-cookie: true
   cookie-auto-fill-prefix: true
   is-log: false
+
 knife4j:
   enable: false
   setting:
@@ -50,7 +53,7 @@ sync-up:
       model: ${SYNC_UP_AI_AGENT_MODEL:qwen3.6-flash-2026-04-16}
       api-key: ${DASHSCOPE_API_KEY:}
       temperature: ${SYNC_UP_AI_AGENT_TEMPERATURE:0.1}
-      timeout-ms: ${SYNC_UP_AI_AGENT_TIMEOUT_MS:8000}
+      timeout-ms: ${SYNC_UP_AI_AGENT_TIMEOUT_MS:30000}
       max-tool-calls: ${SYNC_UP_AI_AGENT_MAX_TOOL_CALLS:3}
       max-input-length: ${SYNC_UP_AI_AGENT_MAX_INPUT_LENGTH:1000}
       memory:
@@ -58,6 +61,8 @@ sync-up:
         max-messages: ${SYNC_UP_AI_MEMORY_MAX_MESSAGES:20}
         redis-ttl-hours: ${SYNC_UP_AI_MEMORY_REDIS_TTL_HOURS:12}
         mysql-ttl-hours: ${SYNC_UP_AI_MEMORY_MYSQL_TTL_HOURS:24}
+      log-requests: ${SYNC_UP_AI_AGENT_LOG_REQUESTS:false}
+      log-responses: ${SYNC_UP_AI_AGENT_LOG_RESPONSES:false}
 
 
 springdoc:

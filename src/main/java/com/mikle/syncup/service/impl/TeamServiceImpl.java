@@ -11,6 +11,7 @@ import com.mikle.syncup.model.domain.Team;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.domain.UserTeam;
 import com.mikle.syncup.model.dto.TeamQuery;
+import com.mikle.syncup.model.enums.TeamActivityCategoryEnum;
 import com.mikle.syncup.model.enums.TeamStatusEnum;
 import com.mikle.syncup.model.request.TeamJoinRequest;
 import com.mikle.syncup.model.request.TeamQuitRequest;
@@ -79,6 +80,9 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         String description = team.getDescription();
         if (StringUtils.isNotBlank(description) && description.length() > 512) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "team description is too long");
+        }
+        if (!TeamActivityCategoryEnum.isValidCode(team.getActivityCategory())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "activity category is invalid");
         }
         int status = Optional.ofNullable(team.getStatus()).orElse(0);
         TeamStatusEnum statusEnum = TeamStatusEnum.getEnumByValue(status);
@@ -155,6 +159,13 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
             Integer maxNum = teamQuery.getMaxNum();
             if (maxNum != null && maxNum > 0) {
                 queryWrapper.eq("maxNum", maxNum);
+            }
+            Integer activityCategory = teamQuery.getActivityCategory();
+            if (activityCategory != null) {
+                if (!TeamActivityCategoryEnum.isValidCode(activityCategory)) {
+                    throw new BusinessException(ErrorCode.PARAMS_ERROR, "activity category is invalid");
+                }
+                queryWrapper.eq("activityCategory", activityCategory);
             }
             String activityType = teamQuery.getActivityType();
             if (StringUtils.isNotBlank(activityType)) {
@@ -233,6 +244,7 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
             User user = userService.getById(userId);
             TeamUserVO teamUserVO = new TeamUserVO();
             BeanUtils.copyProperties(team, teamUserVO);
+            fillActivityCategoryName(teamUserVO);
             if (user != null) {
                 UserVO userVO = new UserVO();
                 BeanUtils.copyProperties(user, userVO);
@@ -433,6 +445,10 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         team.setDistrict(trimToNull(team.getDistrict()));
         team.setSkillLevel(trimToNull(team.getSkillLevel()));
 
+        Integer activityCategory = team.getActivityCategory();
+        if (activityCategory != null && !TeamActivityCategoryEnum.isValidCode(activityCategory)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "activity category is invalid");
+        }
         validateTextLength(team.getActivityType(), 64, "activity type is too long");
         validateTextLength(team.getCity(), 64, "city is too long");
         validateTextLength(team.getDistrict(), 64, "district is too long");
@@ -466,5 +482,15 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
             return null;
         }
         return value.trim();
+    }
+
+    private void fillActivityCategoryName(TeamUserVO teamUserVO) {
+        if (teamUserVO == null || teamUserVO.getActivityCategory() == null) {
+            return;
+        }
+        TeamActivityCategoryEnum categoryEnum = TeamActivityCategoryEnum.getEnumByCode(teamUserVO.getActivityCategory());
+        if (categoryEnum != null) {
+            teamUserVO.setActivityCategoryName(categoryEnum.getName());
+        }
     }
 }

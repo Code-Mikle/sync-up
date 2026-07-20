@@ -1,8 +1,8 @@
 package com.mikle.syncup.ai.tool;
 
-import com.mikle.syncup.ai.model.AiToolResult;
-import com.mikle.syncup.ai.model.AiUserRecommendation;
-import com.mikle.syncup.ai.model.TeamIntent;
+import com.mikle.syncup.ai.model.tool.AiToolResult;
+import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;

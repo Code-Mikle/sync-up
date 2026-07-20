@@ -1,5 +1,6 @@
-package com.mikle.syncup.ai.model;
+package com.mikle.syncup.ai.model.vo;
 
+import com.mikle.syncup.ai.model.schema.ProfileExtraction;
 import lombok.Data;
 
 import java.util.Date;
@@ -7,7 +8,7 @@ import java.util.Date;
 @Data
 public class AiProfileResponse {
 
-    private String taskId;
+    private String draftId;
 
     private Long userId;
 
@@ -21,6 +22,7 @@ public class AiProfileResponse {
 
     private Date confirmedAt;
 
+    private Date expiresAt;
+
     private Date updateTime;
 }
-

@@ -1,5 +1,7 @@
-package com.mikle.syncup.ai.model;
+package com.mikle.syncup.ai.model.vo;
 
+import com.mikle.syncup.ai.model.tool.AiToolResult;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -7,7 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Data
-public class AiChatResponse implements Serializable {
+public class AiChatResponseVO implements Serializable {
 
     private String sessionId;
 
@@ -17,7 +19,9 @@ public class AiChatResponse implements Serializable {
 
     private List<AiToolResult> toolResults = new ArrayList<>();
 
-    private TeamDraft draft;
+    private TeamDraftVO draft;
+
+    private AiTeamDeleteConfirmationVO deleteConfirmation;
 
     private boolean needClarification;
 

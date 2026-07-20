@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai.model;
+package com.mikle.syncup.ai.model.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -10,33 +10,24 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.Date;
 
-@TableName(value = "ai_profile_extraction_task")
+@TableName(value = "ai_chat_memory")
 @Data
-public class AiProfileExtractionTask implements Serializable {
+public class AiChatMemory implements Serializable {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String taskId;
+    private String memoryId;
 
     private Long userId;
 
-    private String sourceText;
+    private String sessionId;
 
-    private String extractionJson;
+    private String messagesJson;
 
-    /**
-     * 0 - pending, 1 - extracted, 2 - confirmed, 3 - rejected, 4 - failed.
-     */
-    private Integer status;
+    private Integer messageCount;
 
-    private Integer retryCount;
-
-    private Date nextRetryAt;
-
-    private String lastError;
-
-    private String modelVersion;
+    private Date expireAt;
 
     private Date createTime;
 

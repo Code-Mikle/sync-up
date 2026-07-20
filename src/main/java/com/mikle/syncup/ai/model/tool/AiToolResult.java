@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai.model;
+package com.mikle.syncup.ai.model.tool;
 
 import lombok.Data;
 

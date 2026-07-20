@@ -1,7 +1,7 @@
 package com.mikle.syncup.ai.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.mikle.syncup.ai.model.AiToolCallLog;
+import com.mikle.syncup.ai.model.entity.AiToolCallLog;
 import com.mikle.syncup.model.domain.User;
 
 public interface AiToolCallLogService extends IService<AiToolCallLog> {

@@ -2,9 +2,9 @@ package com.mikle.syncup.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mikle.syncup.ai.model.AiToolResult;
-import com.mikle.syncup.ai.model.TeamIntent;
-import com.mikle.syncup.ai.model.AiProfileResponse;
+import com.mikle.syncup.ai.model.tool.AiToolResult;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.vo.AiProfileResponse;
 import com.mikle.syncup.ai.service.AiUserProfileService;
 import com.mikle.syncup.ai.tool.AiToolRegistry;
 import com.mikle.syncup.ai.tool.UpdateMyProfileTool;
@@ -23,6 +23,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
 
@@ -84,46 +85,46 @@ class AiUserProfileServiceTest {
                 "alter table ai_user_profile add index idx_ai_user_profile_updateTime (updateTime)");
 
         jdbcTemplate.execute("""
-                create table if not exists ai_profile_extraction_task
+                create table if not exists ai_profile_draft
                 (
                     id             bigint auto_increment comment 'id' primary key,
-                    taskId         varchar(64) not null comment '画像提取任务公开 id',
+                    draftId        varchar(64) not null comment '画像草稿公开 id',
                     userId         bigint not null comment '用户 id',
                     sourceText     varchar(1024) not null comment '来源文本，已做最小化脱敏',
-                    extractionJson text not null comment '提取出的结构化画像 JSON',
-                    status         tinyint default 1 not null comment '0 - 待处理，1 - 已提取，2 - 已确认，3 - 已拒绝，4 - 失败',
-                    retryCount     int default 0 not null comment '重试次数',
-                    nextRetryAt    datetime null comment '下次重试时间',
-                    lastError      varchar(1024) null comment '最后一次错误',
+                    profileJson    text not null comment '待确认的结构化画像 JSON',
+                    status         tinyint default 0 not null comment '0 - 待确认，1 - 已确认，2 - 已拒绝，3 - 已过期',
+                    expiresAt      datetime not null comment '草稿过期时间',
+                    confirmedAt    datetime null comment '用户确认时间',
                     modelVersion   varchar(64) not null comment '提取模型或规则版本',
                     createTime     datetime default CURRENT_TIMESTAMP null comment '创建时间',
                     updateTime     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
                     isDelete       tinyint default 0 not null comment '是否删除'
-                ) comment 'AI 用户画像提取任务'
+                ) comment 'AI 用户画像草稿'
                 """);
-        addIndexIfMissing("ai_profile_extraction_task", "uk_ai_profile_task_taskId",
-                "alter table ai_profile_extraction_task add unique index uk_ai_profile_task_taskId (taskId)");
-        addIndexIfMissing("ai_profile_extraction_task", "idx_ai_profile_task_user_status",
-                "alter table ai_profile_extraction_task add index idx_ai_profile_task_user_status (userId, status, createTime)");
+        addIndexIfMissing("ai_profile_draft", "uk_ai_profile_draft_draftId",
+                "alter table ai_profile_draft add unique index uk_ai_profile_draft_draftId (draftId)");
+        addIndexIfMissing("ai_profile_draft", "idx_ai_profile_draft_user_status",
+                "alter table ai_profile_draft add index idx_ai_profile_draft_user_status (userId, status, expiresAt)");
     }
 
     @Test
-    void profileExtraction_shouldExtractConfirmAndReadCurrentProfile() throws Exception {
+    void profileDraft_shouldExtractConfirmAndReadCurrentProfile() throws Exception {
         User user = null;
         try {
             user = createTestUser();
             String token = loginToken(user);
 
-            JsonNode extractResponse = extractProfile(token, "我在西安雁塔，周末晚上想找羽毛球搭子，预算50以内，中等水平，喜欢小队安静");
-            String taskId = extractResponse.at("/data/taskId").asText();
+            JsonNode extractResponse = createProfileDraft(token, "我在西安雁塔，周末晚上想找羽毛球搭子，预算50以内，中等水平，喜欢小队安静");
+            String draftId = extractResponse.at("/data/draftId").asText();
 
-            Assertions.assertFalse(taskId.isBlank());
+            Assertions.assertFalse(draftId.isBlank());
+            Assertions.assertEquals(0, extractResponse.at("/data/status").asInt());
             Assertions.assertEquals("西安", extractResponse.at("/data/profile/city").asText());
             Assertions.assertTrue(extractResponse.at("/data/profile/activityTypes").toString().contains("羽毛球"));
             Assertions.assertTrue(extractResponse.at("/data/profile/availableTimes").toString().contains("周末"));
             Assertions.assertFalse(extractResponse.at("/data/sourceText").asText().contains("@"));
 
-            JsonNode confirmResponse = confirmProfile(token, taskId, 0);
+            JsonNode confirmResponse = confirmProfile(token, draftId, 0);
 
             Assertions.assertEquals("西安", confirmResponse.at("/data/profile/city").asText());
             Assertions.assertTrue(confirmResponse.at("/data/profile/skillLevels").toString().contains("中等"));
@@ -138,17 +139,17 @@ class AiUserProfileServiceTest {
     }
 
     @Test
-    void profileExtraction_rejectTask_shouldNotCreateCurrentProfile() throws Exception {
+    void profileDraft_rejectDraft_shouldNotCreateCurrentProfile() throws Exception {
         User user = null;
         try {
             user = createTestUser();
             String token = loginToken(user);
-            JsonNode extractResponse = extractProfile(token, "深圳周末健身，新手，预算30以内");
-            String taskId = extractResponse.at("/data/taskId").asText();
+            JsonNode extractResponse = createProfileDraft(token, "深圳周末健身，新手，预算30以内");
+            String draftId = extractResponse.at("/data/draftId").asText();
 
-            JsonNode rejectResponse = rejectProfile(token, taskId, 0);
+            JsonNode rejectResponse = rejectProfile(token, draftId, 0);
 
-            Assertions.assertEquals(3, rejectResponse.at("/data/status").asInt());
+            Assertions.assertEquals(2, rejectResponse.at("/data/status").asInt());
             Assertions.assertEquals(0L, countCurrentProfiles(user.getId()));
         } finally {
             cleanupUserAndProfile(user);
@@ -156,22 +157,43 @@ class AiUserProfileServiceTest {
     }
 
     @Test
-    void profileExtraction_otherUserTask_shouldBeRejected() throws Exception {
+    void profileDraft_otherUserDraft_shouldBeRejected() throws Exception {
         User owner = null;
         User other = null;
         try {
             owner = createTestUser();
             other = createTestUser();
-            JsonNode extractResponse = extractProfile(loginToken(owner), "杭州周末骑行，进阶");
-            String taskId = extractResponse.at("/data/taskId").asText();
+            JsonNode extractResponse = createProfileDraft(loginToken(owner), "杭州周末骑行，进阶");
+            String draftId = extractResponse.at("/data/draftId").asText();
 
-            JsonNode response = confirmProfile(loginToken(other), taskId, 40101);
+            JsonNode response = confirmProfile(loginToken(other), draftId, 40101);
 
             Assertions.assertEquals(40101, response.at("/code").asInt());
             Assertions.assertEquals(0L, countCurrentProfiles(owner.getId()));
         } finally {
             cleanupUserAndProfile(owner);
             cleanupUserAndProfile(other);
+        }
+    }
+
+    @Test
+    void profileDraft_expiredDraft_shouldBeRejected() throws Exception {
+        User user = null;
+        try {
+            user = createTestUser();
+            String token = loginToken(user);
+            JsonNode createResponse = createProfileDraft(token, "西安周末桌游，新手友好");
+            String draftId = createResponse.at("/data/draftId").asText();
+            jdbcTemplate.update("update ai_profile_draft set expiresAt = ? where draftId = ?",
+                    new Date(System.currentTimeMillis() - 60 * 1000),
+                    draftId);
+
+            JsonNode response = confirmProfile(token, draftId, 40000);
+
+            Assertions.assertEquals(40000, response.at("/code").asInt());
+            Assertions.assertEquals(0L, countCurrentProfiles(user.getId()));
+        } finally {
+            cleanupUserAndProfile(user);
         }
     }
 
@@ -191,8 +213,8 @@ class AiUserProfileServiceTest {
             Assertions.assertEquals(0L, countCurrentProfiles(user.getId()));
 
             AiProfileResponse draft = objectMapper.convertValue(result.getData(), AiProfileResponse.class);
-            Assertions.assertNotNull(draft.getTaskId());
-            aiUserProfileService.confirmExtraction(draft.getTaskId(), null, user);
+            Assertions.assertNotNull(draft.getDraftId());
+            aiUserProfileService.confirmDraft(draft.getDraftId(), null, user);
 
             User updatedUser = userService.getById(user.getId());
             Assertions.assertTrue(updatedUser.getProfile().contains("羽毛球"));
@@ -267,8 +289,8 @@ class AiUserProfileServiceTest {
         return root.at("/data/tokenPrefix").asText() + " " + root.at("/data/token").asText();
     }
 
-    private JsonNode extractProfile(String token, String sourceText) throws Exception {
-        String content = mockMvc.perform(post("/ai/profile/extract")
+    private JsonNode createProfileDraft(String token, String sourceText) throws Exception {
+        String content = mockMvc.perform(post("/ai/profile-draft")
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("sourceText", sourceText))))
@@ -280,8 +302,8 @@ class AiUserProfileServiceTest {
         return objectMapper.readTree(content);
     }
 
-    private JsonNode confirmProfile(String token, String taskId, int expectedCode) throws Exception {
-        String content = mockMvc.perform(post("/ai/profile-task/{taskId}/confirm", taskId)
+    private JsonNode confirmProfile(String token, String draftId, int expectedCode) throws Exception {
+        String content = mockMvc.perform(post("/ai/profile-draft/{draftId}/confirm", draftId)
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
@@ -293,8 +315,8 @@ class AiUserProfileServiceTest {
         return objectMapper.readTree(content);
     }
 
-    private JsonNode rejectProfile(String token, String taskId, int expectedCode) throws Exception {
-        String content = mockMvc.perform(post("/ai/profile-task/{taskId}/reject", taskId)
+    private JsonNode rejectProfile(String token, String draftId, int expectedCode) throws Exception {
+        String content = mockMvc.perform(post("/ai/profile-draft/{draftId}/reject", draftId)
                         .header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(expectedCode))
@@ -331,7 +353,7 @@ class AiUserProfileServiceTest {
             return;
         }
         jdbcTemplate.update("delete from ai_user_profile where userId = ?", user.getId());
-        jdbcTemplate.update("delete from ai_profile_extraction_task where userId = ?", user.getId());
+        jdbcTemplate.update("delete from ai_profile_draft where userId = ?", user.getId());
         userMapper.deleteByIdPhysically(user.getId());
     }
 }

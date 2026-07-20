@@ -1,8 +1,8 @@
 package com.mikle.syncup.ai.tool;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.mikle.syncup.ai.model.AiToolResult;
-import com.mikle.syncup.ai.model.TeamIntent;
+import com.mikle.syncup.ai.model.tool.AiToolResult;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
@@ -46,6 +46,7 @@ public class SearchTeamsTool implements AiTool {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         TeamQuery teamQuery = new TeamQuery();
+        teamQuery.setActivityCategory(intent.getActivityCategory());
         teamQuery.setActivityType(intent.getActivityType());
         teamQuery.setCity(intent.getCity());
         teamQuery.setDistrict(intent.getDistrict());

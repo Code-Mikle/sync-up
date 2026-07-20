@@ -40,6 +40,13 @@ public class TeamUpdateRequest implements Serializable {
     private String description;
 
     /**
+     * 活动大类
+     */
+    @Min(1)
+    @Max(9)
+    private Integer activityCategory;
+
+    /**
      * 过期时间
      */
     private Date expireTime;

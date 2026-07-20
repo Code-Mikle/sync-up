@@ -79,6 +79,7 @@ class TeamServiceTest {
                         Team team = new Team();
                         team.setName("t" + idx + UUID.randomUUID().toString().substring(0, 6));
                         team.setDescription("lock test");
+                        team.setActivityCategory(9);
                         team.setMaxNum(5);
                         team.setStatus(0);
                         team.setExpireTime(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000));
@@ -180,6 +181,7 @@ class TeamServiceTest {
                     new BigDecimal("30.00"), "入门", 6);
 
             TeamQuery query = new TeamQuery();
+            query.setActivityCategory(1);
             query.setActivityType("羽毛球");
             query.setCity("西安");
             query.setStartTimeBegin(new Date(System.currentTimeMillis() + 12 * 60 * 60 * 1000));
@@ -268,6 +270,7 @@ class TeamServiceTest {
         Team team = new Team();
         team.setName("t_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
         team.setDescription("stage0 test");
+        team.setActivityCategory(9);
         team.setMaxNum(maxNum);
         team.setStatus(0);
         team.setExpireTime(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000));
@@ -279,6 +282,7 @@ class TeamServiceTest {
         Team team = new Team();
         team.setName("t_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
         team.setDescription("stage0.5 test");
+        team.setActivityCategory(resolveActivityCategory(activityType));
         team.setMaxNum(maxNum);
         team.setStatus(0);
         team.setExpireTime(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000));
@@ -290,6 +294,13 @@ class TeamServiceTest {
         team.setBudgetPerPerson(budgetPerPerson);
         team.setSkillLevel(skillLevel);
         return teamService.addTeam(team, creator);
+    }
+
+    private int resolveActivityCategory(String activityType) {
+        if ("徒步".equals(activityType)) {
+            return 2;
+        }
+        return 1;
     }
 
     private void cleanupUserAndTeams(User user) {

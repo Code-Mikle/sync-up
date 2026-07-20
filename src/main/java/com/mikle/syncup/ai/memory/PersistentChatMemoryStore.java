@@ -3,7 +3,7 @@ package com.mikle.syncup.ai.memory;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.mikle.syncup.ai.config.AiAgentProperties;
 import com.mikle.syncup.ai.mapper.AiChatMemoryMapper;
-import com.mikle.syncup.ai.model.AiChatMemory;
+import com.mikle.syncup.ai.model.entity.AiChatMemory;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageDeserializer;
 import dev.langchain4j.data.message.ChatMessageSerializer;

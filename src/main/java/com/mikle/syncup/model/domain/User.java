@@ -60,6 +60,11 @@ public class User implements Serializable {
     private String email;
 
     /**
+     * 常驻城市
+     */
+    private String city;
+
+    /**
      * 标签列表 json
      */
     private String tags;
@@ -83,6 +88,11 @@ public class User implements Serializable {
      *
      */
     private Date updateTime;
+
+    /**
+     * 最近活跃时间
+     */
+    private Date lastActiveTime;
 
     /**
      * 是否删除

@@ -2,7 +2,7 @@ package com.mikle.syncup.ai.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mikle.syncup.ai.mapper.AiToolCallLogMapper;
-import com.mikle.syncup.ai.model.AiToolCallLog;
+import com.mikle.syncup.ai.model.entity.AiToolCallLog;
 import com.mikle.syncup.ai.service.AiToolCallLogService;
 import com.mikle.syncup.model.domain.User;
 import org.slf4j.Logger;

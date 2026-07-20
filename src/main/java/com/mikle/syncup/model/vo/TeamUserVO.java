@@ -30,6 +30,16 @@ public class TeamUserVO implements Serializable {
     private String description;
 
     /**
+     * 活动大类编码
+     */
+    private Integer activityCategory;
+
+    /**
+     * 活动大类名称
+     */
+    private String activityCategoryName;
+
+    /**
      * 最大人数
      */
     private Integer maxNum;

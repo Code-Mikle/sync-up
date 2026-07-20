@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mikle.syncup.common.BaseResponse;
 import com.mikle.syncup.common.ErrorCode;
+import com.mikle.syncup.common.PageResult;
 import com.mikle.syncup.common.ResultUtils;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -98,7 +100,9 @@ public class UserController {
             queryWrapper.like("username", username);
         }
         List<User> userList = userService.list(queryWrapper);
-        List<User> list = userList.stream().map(user -> userService.getSafetyUser(user)).collect(Collectors.toList());
+        List<User> list = userList.stream()
+                .map(user -> userService.getSafetyUser(user))
+                .collect(Collectors.toList());
         return ResultUtils.success(list);
     }
 
@@ -108,7 +112,11 @@ public class UserController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         List<User> userList = userService.searchUsersByTags(tagNameList);
-        return ResultUtils.success(userList.stream().map(userService::getPublicUser).toList());
+        return ResultUtils.success(
+                userList.stream()
+                        .map(userService::getPublicUser)
+                        .toList()
+        );
     }
 
     @GetMapping("/search/keywords")
@@ -121,35 +129,55 @@ public class UserController {
         return ResultUtils.success(userPage);
     }
 
-    // todo 推荐多个，未实现
     @GetMapping("/recommend")
     public BaseResponse<Page<UserSearchResultVO>> recommendUsers(long pageSize, long pageNum, HttpServletRequest request) {
         if (pageNum <= 0 || pageSize <= 0 || pageSize > 20) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "分页参数错误");
         }
         User loginUser = userService.getLoginUser(request);
-        String redisKey = String.format("syncup:user:recommend:public:v2:%s:%s:%s", loginUser.getId(), pageNum, pageSize);
+        String redisKey = String.format("syncup:user:recommend:public:v3:%s:%s:%s", loginUser.getId(), pageNum, pageSize);
         ValueOperations<String, Object> valueOperations = redisTemplate.opsForValue();
-        // 如果有缓存，直接读缓存
-        Page<UserSearchResultVO> userPage = (Page<UserSearchResultVO>) valueOperations.get(redisKey);
-        if (userPage != null) {
-            return ResultUtils.success(userPage);
+        Object cachedValue = valueOperations.get(redisKey);
+        if (cachedValue instanceof PageResult<?> cachedPage) {
+            Page<UserSearchResultVO> cachedUserPage = toUserSearchResultPage(cachedPage);
+            if (cachedUserPage != null) {
+                return ResultUtils.success(cachedUserPage);
+            }
         }
         // 无缓存，查数据库
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("id", "username", "avatarUrl", "gender", "tags", "createTime", "planetCode")
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tags", "createTime", "lastActiveTime", "planetCode")
                 .ne("id", loginUser.getId())
                 .and(qw -> qw.eq("userStatus", 0).or().isNull("userStatus"));
         Page<User> entityPage = userService.page(new Page<>(pageNum, pageSize), queryWrapper);
-        userPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
-        userPage.setRecords(entityPage.getRecords().stream().map(userService::getPublicUser).toList());
+        Page<UserSearchResultVO> userPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
+        userPage.setRecords(entityPage.getRecords()
+                .stream()
+                .map(userService::getPublicUser)
+                .toList()
+        );
         // 写缓存
         try {
-            valueOperations.set(redisKey, userPage, 30000, TimeUnit.MILLISECONDS);
+            valueOperations.set(redisKey, PageResult.of(userPage), 30000, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             log.error("redis set key error", e);
         }
         return ResultUtils.success(userPage);
+    }
+
+    private Page<UserSearchResultVO> toUserSearchResultPage(PageResult<?> pageResult) {
+        List<UserSearchResultVO> records = new ArrayList<>();
+        if (pageResult.getRecords() != null) {
+            for (Object record : pageResult.getRecords()) {
+                if (!(record instanceof UserSearchResultVO userSearchResultVO)) {
+                    return null;
+                }
+                records.add(userSearchResultVO);
+            }
+        }
+        Page<UserSearchResultVO> page = new Page<>(pageResult.getCurrent(), pageResult.getSize(), pageResult.getTotal());
+        page.setRecords(records);
+        return page;
     }
 
 
@@ -189,7 +217,11 @@ public class UserController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User user = userService.getLoginUser(request);
-        return ResultUtils.success(userService.matchUsers(num, user).stream().map(userService::getPublicUser).toList());
+        return ResultUtils.success(
+                userService.matchUsers(num, user)
+                .stream()
+                .map(userService::getPublicUser)
+                .toList()
+        );
     }
-
 }

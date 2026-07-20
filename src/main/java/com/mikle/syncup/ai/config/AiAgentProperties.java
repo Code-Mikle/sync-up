@@ -16,7 +16,7 @@ public class AiAgentProperties {
 
     private String baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 
-    private String model = "qwen3.6-flash-2026-04-16";
+    private String model;
 
     private String apiKey;
 
@@ -27,6 +27,10 @@ public class AiAgentProperties {
     private int maxToolCalls = 3;
 
     private int maxInputLength = 1000;
+
+    private boolean logRequests = false;
+
+    private boolean logResponses = false;
 
     private Memory memory = new Memory();
 

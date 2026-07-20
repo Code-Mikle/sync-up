@@ -1,6 +1,6 @@
 package com.mikle.syncup.ai.service.impl;
 
-import com.mikle.syncup.ai.model.ProfileExtraction;
+import com.mikle.syncup.ai.model.schema.ProfileExtraction;
 import com.mikle.syncup.ai.service.ProfileExtractionParser;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;

@@ -217,12 +217,16 @@ public class TeamController {
         if (teamList == null || teamList.isEmpty() || loginUser == null) {
             return;
         }
-        List<Long> teamIdList = teamList.stream().map(TeamUserVO::getId).collect(Collectors.toList());
+        List<Long> teamIdList = teamList.stream()
+                .map(TeamUserVO::getId)
+                .collect(Collectors.toList());
         QueryWrapper<UserTeam> userTeamQueryWrapper = new QueryWrapper<>();
         userTeamQueryWrapper.eq("userId", loginUser.getId());
         userTeamQueryWrapper.in("teamId", teamIdList);
         List<UserTeam> userTeamList = userTeamService.list(userTeamQueryWrapper);
-        Set<Long> hasJoinTeamIdSet = userTeamList.stream().map(UserTeam::getTeamId).collect(Collectors.toSet());
+        Set<Long> hasJoinTeamIdSet = userTeamList.stream()
+                .map(UserTeam::getTeamId)
+                .collect(Collectors.toSet());
         teamList.forEach(team -> team.setHasJoin(hasJoinTeamIdSet.contains(team.getId())));
     }
 
@@ -230,7 +234,9 @@ public class TeamController {
         if (teamList == null || teamList.isEmpty()) {
             return;
         }
-        List<Long> teamIdList = teamList.stream().map(TeamUserVO::getId).collect(Collectors.toList());
+        List<Long> teamIdList = teamList.stream()
+                .map(TeamUserVO::getId)
+                .collect(Collectors.toList());
         QueryWrapper<UserTeam> userTeamQueryWrapper = new QueryWrapper<>();
         userTeamQueryWrapper.in("teamId", teamIdList);
         List<UserTeam> userTeamList = userTeamService.list(userTeamQueryWrapper);

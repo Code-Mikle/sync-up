@@ -29,6 +29,7 @@
         <van-cell title="性别" is-link :value="getGenderText(user.gender)" @click="toEdit('gender', '性别', user.gender)"/>
         <van-cell title="电话" is-link :value="user.phone || '-'" @click="toEdit('phone', '电话', user.phone)"/>
         <van-cell title="邮箱" is-link :value="user.email || '-'" @click="toEdit('email', '邮箱', user.email)"/>
+        <van-cell title="城市" is-link :value="user.city || '-'" @click="toEdit('city', '城市', user.city)"/>
       </section>
 
       <section class="user-field-group">

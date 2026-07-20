@@ -19,9 +19,13 @@ public class UserSearchResultVO implements Serializable {
 
     private Integer gender;
 
+    private String city;
+
     private String tags;
 
     private Date createTime;
+
+    private Date lastActiveTime;
 
     private String planetCode;
 

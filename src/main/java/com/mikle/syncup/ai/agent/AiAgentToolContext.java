@@ -1,8 +1,9 @@
 package com.mikle.syncup.ai.agent;
 
-import com.mikle.syncup.ai.model.AiToolResult;
-import com.mikle.syncup.ai.model.TeamDraft;
-import com.mikle.syncup.ai.model.TeamIntent;
+import com.mikle.syncup.ai.model.tool.AiToolResult;
+import com.mikle.syncup.ai.model.vo.AiTeamDeleteConfirmationVO;
+import com.mikle.syncup.ai.model.vo.TeamDraftVO;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.model.domain.User;
 import lombok.Data;
 import org.springframework.stereotype.Component;
@@ -10,6 +11,11 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * // Tool methods are invoked synchronously by LangChain4j in the current request thread.
+ * // If we switch to async/streaming/parallel tool execution, replace this ThreadLocal bridge
+ * // with an invocation-scoped tool context.
+ */
 @Component
 public class AiAgentToolContext {
 
@@ -37,6 +43,7 @@ public class AiAgentToolContext {
         snapshot.setLoginUser(state.getLoginUser());
         snapshot.getToolResults().addAll(state.getToolResults());
         snapshot.setDraft(state.getDraft());
+        snapshot.setDeleteConfirmation(state.getDeleteConfirmation());
         snapshot.setIntent(state.getIntent());
         return snapshot;
     }
@@ -54,7 +61,9 @@ public class AiAgentToolContext {
 
         private List<AiToolResult> toolResults = new ArrayList<>();
 
-        private TeamDraft draft;
+        private TeamDraftVO draft;
+
+        private AiTeamDeleteConfirmationVO deleteConfirmation;
 
         private TeamIntent intent;
     }

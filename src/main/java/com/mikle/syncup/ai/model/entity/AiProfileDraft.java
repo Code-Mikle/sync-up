@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai.model;
+package com.mikle.syncup.ai.model.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -10,27 +10,31 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.Date;
 
-@TableName(value = "ai_user_profile")
+@TableName(value = "ai_profile_draft")
 @Data
-public class AiUserProfileEntity implements Serializable {
+public class AiProfileDraft implements Serializable {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private Long userId;
+    private String draftId;
 
-    private String profileJson;
+    private Long userId;
 
     private String sourceText;
 
-    private String modelVersion;
+    private String profileJson;
 
     /**
-     * 1 - confirmed.
+     * 0 - pending, 1 - confirmed, 2 - rejected, 3 - expired.
      */
     private Integer status;
 
+    private Date expiresAt;
+
     private Date confirmedAt;
+
+    private String modelVersion;
 
     private Date createTime;
 
@@ -42,4 +46,3 @@ public class AiUserProfileEntity implements Serializable {
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }
-

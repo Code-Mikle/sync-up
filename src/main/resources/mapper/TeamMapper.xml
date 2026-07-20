@@ -8,6 +8,7 @@
             <id property="id" column="id" jdbcType="BIGINT"/>
             <result property="name" column="name" jdbcType="VARCHAR"/>
             <result property="description" column="description" jdbcType="VARCHAR"/>
+            <result property="activityCategory" column="activityCategory" jdbcType="INTEGER"/>
             <result property="maxNum" column="maxNum" jdbcType="INTEGER"/>
             <result property="expireTime" column="expireTime" jdbcType="TIMESTAMP"/>
             <result property="activityType" column="activityType" jdbcType="VARCHAR"/>
@@ -27,7 +28,7 @@
 
 
     <sql id="Base_Column_List">
-        id,name,description,
+        id,name,description,activityCategory,
         maxNum,expireTime,activityType,
         city,district,startTime,
         durationMinutes,budgetPerPerson,skillLevel,

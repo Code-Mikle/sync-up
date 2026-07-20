@@ -10,6 +10,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.util.DigestUtils;
 
@@ -55,6 +57,30 @@ class UserServiceTest {
     @Resource
     private ObjectMapper objectMapper;
 
+    @Resource
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void ensureUserRecommendationColumns() {
+        addUserColumnIfMissing("city", "alter table user add column city varchar(64) null comment '常驻城市' after email");
+        addUserColumnIfMissing("lastActiveTime", "alter table user add column lastActiveTime datetime null comment '最近活跃时间' after updateTime");
+    }
+
+    private void addUserColumnIfMissing(String columnName, String ddl) {
+        Integer count = jdbcTemplate.queryForObject("""
+                        select count(1)
+                        from information_schema.columns
+                        where table_schema = database()
+                          and table_name = 'user'
+                          and column_name = ?
+                        """,
+                Integer.class,
+                columnName);
+        if (count == null || count == 0) {
+            jdbcTemplate.execute(ddl);
+        }
+    }
+
     @Test
     void saveAndGetUser_shouldUseGeneratedTestData() {
         User user = null;
@@ -76,6 +102,7 @@ class UserServiceTest {
             User updateUser = new User();
             updateUser.setId(user.getId());
             updateUser.setUsername("updated_" + randomSuffix());
+            updateUser.setCity("  Xi'an  ");
 
             User loginUser = User.builder()
                     .id(user.getId())
@@ -86,6 +113,7 @@ class UserServiceTest {
 
             Assertions.assertEquals(1, updated);
             Assertions.assertEquals(updateUser.getUsername(), userService.getById(user.getId()).getUsername());
+            Assertions.assertEquals("Xi'an", userService.getById(user.getId()).getCity());
         } finally {
             deletePhysically(user);
         }
@@ -145,6 +173,7 @@ class UserServiceTest {
 
             Assertions.assertFalse(upgradedUser.getUserPassword().matches("^[a-fA-F0-9]{32}$"));
             Assertions.assertTrue(PASSWORD_ENCODER.matches(rawPassword, upgradedUser.getUserPassword()));
+            Assertions.assertNotNull(upgradedUser.getLastActiveTime());
         } finally {
             deletePhysically(user);
         }
@@ -172,12 +201,13 @@ class UserServiceTest {
                             .header("Authorization", authorization)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(String.format(
-                                    "{\"id\":%d,\"username\":\"safe_name\",\"userRole\":1,\"userStatus\":1,\"userPassword\":\"hacked\"}",
+                                    "{\"id\":%d,\"username\":\"safe_name\",\"city\":\"Xi'an\",\"userRole\":1,\"userStatus\":1,\"userPassword\":\"hacked\"}",
                                     user.getId())))
                     .andExpect(status().isOk());
 
             User updated = userService.getById(user.getId());
             Assertions.assertEquals("safe_name", updated.getUsername());
+            Assertions.assertEquals("Xi'an", updated.getCity());
             Assertions.assertEquals(0, updated.getUserRole());
             Assertions.assertEquals(0, updated.getUserStatus());
             Assertions.assertEquals(originalPassword, updated.getUserPassword());

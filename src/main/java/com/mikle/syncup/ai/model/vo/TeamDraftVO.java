@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai.model;
+package com.mikle.syncup.ai.model.vo;
 
 import lombok.Data;
 
@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.util.Date;
 
 @Data
-public class TeamDraft implements Serializable {
+public class TeamDraftVO implements Serializable {
 
     private String draftId;
 
@@ -18,6 +18,8 @@ public class TeamDraft implements Serializable {
     private String description;
 
     private Integer maxNum;
+
+    private Integer activityCategory;
 
     private String activityType;
 

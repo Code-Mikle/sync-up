@@ -1,6 +1,6 @@
 package com.mikle.syncup.ai.service;
 
-import com.mikle.syncup.ai.model.ProfileExtraction;
+import com.mikle.syncup.ai.model.schema.ProfileExtraction;
 
 public interface ProfileExtractionParser {
 

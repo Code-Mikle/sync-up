@@ -1,8 +1,8 @@
 package com.mikle.syncup.ai.tool;
 
-import com.mikle.syncup.ai.model.AiProfileResponse;
-import com.mikle.syncup.ai.model.AiToolResult;
-import com.mikle.syncup.ai.model.TeamIntent;
+import com.mikle.syncup.ai.model.vo.AiProfileResponse;
+import com.mikle.syncup.ai.model.tool.AiToolResult;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.service.AiUserProfileService;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
@@ -45,7 +45,7 @@ public class UpdateMyProfileTool implements AiTool {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "profileText is too long");
         }
 
-        AiProfileResponse extraction = aiUserProfileService.extractProfile(profileText, loginUser);
+        AiProfileResponse extraction = aiUserProfileService.createProfileDraft(profileText, loginUser);
         return AiToolResult.success(name(), type(), "created a profile draft for user confirmation", extraction);
     }
 

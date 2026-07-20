@@ -6,11 +6,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.MissingNode;
 import com.mikle.syncup.ai.agent.AiAgentToolContext;
 import com.mikle.syncup.ai.agent.AiAssistantTools;
-import com.mikle.syncup.ai.model.AiTeamDraft;
-import com.mikle.syncup.ai.model.AiToolResult;
-import com.mikle.syncup.ai.model.TeamDraft;
-import com.mikle.syncup.ai.model.TeamIntent;
+import com.mikle.syncup.ai.model.entity.AiTeamDraft;
+import com.mikle.syncup.ai.model.tool.AiToolResult;
+import com.mikle.syncup.ai.model.vo.TeamDraftVO;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.service.AiTeamDraftService;
+import com.mikle.syncup.ai.service.AiChatMessageService;
+import com.mikle.syncup.ai.service.AiConversationContextService;
 import com.mikle.syncup.ai.service.TeamIntentParser;
 import com.mikle.syncup.ai.tool.AiToolRegistry;
 import dev.langchain4j.agent.tool.Tool;
@@ -94,9 +96,17 @@ class AiChatServiceTest {
     @Resource
     private JdbcTemplate jdbcTemplate;
 
+    @Resource
+    private AiChatMessageService aiChatMessageService;
+
+    @Resource
+    private AiConversationContextService aiConversationContextService;
+
     @BeforeEach
     void ensureAiTeamDraftTable() {
         addUserProfileColumnIfMissing();
+        addUserColumnIfMissing("city", "alter table user add column city varchar(64) null comment '常驻城市' after email");
+        addUserColumnIfMissing("lastActiveTime", "alter table user add column lastActiveTime datetime null comment '最近活跃时间' after updateTime");
         jdbcTemplate.execute("""
                 create table if not exists ai_team_draft
                 (
@@ -107,6 +117,7 @@ class AiChatServiceTest {
                     name            varchar(256) not null comment '队伍名称',
                     description     varchar(1024) null comment '描述',
                     maxNum          int not null comment '最大人数',
+                    activityCategory int default 9 null comment '活动大类',
                     activityType    varchar(64) null comment '活动类型',
                     city            varchar(64) null comment '城市',
                     district        varchar(64) null comment '区域',
@@ -123,11 +134,13 @@ class AiChatServiceTest {
                     isDelete        tinyint default 0 not null comment '是否删除'
                 ) comment 'AI 队伍草稿'
                 """);
+        addAiTeamDraftActivityCategoryColumnIfMissing();
         addIndexIfMissing("uk_ai_team_draft_draftId",
                 "alter table ai_team_draft add unique index uk_ai_team_draft_draftId (draftId)");
         addIndexIfMissing("idx_ai_team_draft_user_status",
                 "alter table ai_team_draft add index idx_ai_team_draft_user_status (userId, status, expiresAt)");
         ensureAiToolCallLogTable();
+        ensureAiChatMessageTable();
     }
 
     private void addUserProfileColumnIfMissing() {
@@ -141,6 +154,35 @@ class AiChatServiceTest {
                 Integer.class);
         if (count == null || count == 0) {
             jdbcTemplate.execute("alter table user add column profile varchar(1024) null comment '个人简介 / 自我介绍' after tags");
+        }
+    }
+
+    private void addUserColumnIfMissing(String columnName, String ddl) {
+        Integer count = jdbcTemplate.queryForObject("""
+                        select count(1)
+                        from information_schema.columns
+                        where table_schema = database()
+                          and table_name = 'user'
+                          and column_name = ?
+                        """,
+                Integer.class,
+                columnName);
+        if (count == null || count == 0) {
+            jdbcTemplate.execute(ddl);
+        }
+    }
+
+    private void addAiTeamDraftActivityCategoryColumnIfMissing() {
+        Integer count = jdbcTemplate.queryForObject("""
+                        select count(1)
+                        from information_schema.columns
+                        where table_schema = database()
+                          and table_name = 'ai_team_draft'
+                          and column_name = 'activityCategory'
+                        """,
+                Integer.class);
+        if (count == null || count == 0) {
+            jdbcTemplate.execute("alter table ai_team_draft add column activityCategory int default 9 null comment '活动大类' after maxNum");
         }
     }
 
@@ -188,6 +230,46 @@ class AiChatServiceTest {
                 "alter table ai_tool_call_log add index idx_ai_tool_call_log_action_status (actionType, status)");
     }
 
+    private void ensureAiChatMessageTable() {
+        jdbcTemplate.execute("""
+                create table if not exists ai_chat_message
+                (
+                    id           bigint auto_increment comment 'id' primary key,
+                    userId       bigint not null comment '用户 id',
+                    sessionId    varchar(64) not null comment 'AI 对话会话 id',
+                    role         varchar(16) not null comment 'user / assistant / event',
+                    content      varchar(2048) null comment '展示文本或事件文本，已做最小化脱敏',
+                    responseJson mediumtext null comment 'AI 响应或事件载荷 JSON',
+                    visible      tinyint default 1 not null comment '是否在聊天页展示',
+                    expireAt     datetime not null comment '过期时间',
+                    createTime   datetime default CURRENT_TIMESTAMP null comment '创建时间',
+                    updateTime   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+                    isDelete     tinyint default 0 not null comment '是否删除'
+                ) comment 'AI 用户可见聊天记录'
+                """);
+        addChatMessageIndexIfMissing("idx_ai_chat_message_user_session_time",
+                "alter table ai_chat_message add index idx_ai_chat_message_user_session_time (userId, sessionId, createTime)");
+        addChatMessageIndexIfMissing("idx_ai_chat_message_user_time",
+                "alter table ai_chat_message add index idx_ai_chat_message_user_time (userId, createTime)");
+        addChatMessageIndexIfMissing("idx_ai_chat_message_expireAt",
+                "alter table ai_chat_message add index idx_ai_chat_message_expireAt (expireAt)");
+    }
+
+    private void addChatMessageIndexIfMissing(String indexName, String ddl) {
+        Integer count = jdbcTemplate.queryForObject("""
+                        select count(1)
+                        from information_schema.statistics
+                        where table_schema = database()
+                          and table_name = 'ai_chat_message'
+                          and index_name = ?
+                        """,
+                Integer.class,
+                indexName);
+        if (count == null || count == 0) {
+            jdbcTemplate.execute(ddl);
+        }
+    }
+
     private void addToolCallLogIndexIfMissing(String indexName, String ddl) {
         Integer count = jdbcTemplate.queryForObject("""
                         select count(1)
@@ -216,69 +298,20 @@ class AiChatServiceTest {
     }
 
     @Test
-    void chat_missingActivityType_shouldClarifyAndNotCallTools() throws Exception {
+    void chat_agentUnavailable_shouldReturnFallbackAndNotCallBusinessTools() throws Exception {
         User user = null;
         try {
             user = createTestUser();
 
-            JsonNode response = chat(loginToken(user), "我想在西安找搭子，预算50以内");
+            JsonNode response = chat(loginToken(user), "find badminton partners in xian");
 
-            Assertions.assertTrue(response.at("/data/needClarification").asBoolean());
-            Assertions.assertTrue(response.at("/data/intent/missingFields").toString().contains("activityType"));
+            Assertions.assertFalse(response.at("/data/sessionId").asText().isBlank());
+            Assertions.assertEquals("AI 助手暂时不可用，请稍后再试。", response.at("/data/reply").asText());
+            Assertions.assertFalse(response.at("/data/needClarification").asBoolean());
+            Assertions.assertTrue(response.at("/data/intent").isMissingNode() || response.at("/data/intent").isNull());
             Assertions.assertEquals(0, response.at("/data/toolResults").size());
         } finally {
             cleanupUserAndTeams(user);
-        }
-    }
-
-    @Test
-    void chat_irrelevantInput_shouldNotCallBusinessTools() throws Exception {
-        User user = null;
-        try {
-            user = createTestUser();
-
-            JsonNode response = chat(loginToken(user), "帮我解释一下 Java 的泛型");
-
-            Assertions.assertFalse(response.at("/data/needClarification").asBoolean());
-            Assertions.assertFalse(response.at("/data/intent/teamRelated").asBoolean());
-            Assertions.assertEquals(0, response.at("/data/toolResults").size());
-        } finally {
-            cleanupUserAndTeams(user);
-        }
-    }
-
-    @Test
-    void chat_validTeamIntent_shouldCallSearchTeamsTool() throws Exception {
-        User creator = null;
-        User loginUser = null;
-        try {
-            creator = createTestUser("[\"羽毛球\",\"中等\"]");
-            loginUser = createTestUser("[\"羽毛球\"]");
-            long teamId = createStructuredTeam(creator, "羽毛球", "西安", new BigDecimal("45.00"), 6);
-
-            JsonNode response = chat(loginToken(loginUser), "我想这个周末在西安找羽毛球搭子，预算每人50以内");
-
-            Assertions.assertFalse(response.at("/data/needClarification").asBoolean());
-            JsonNode searchResult = findToolResult(response, "searchTeams");
-            Assertions.assertFalse(searchResult.isMissingNode());
-            JsonNode teams = searchResult.at("/data");
-            Assertions.assertTrue(teams.isArray());
-            Assertions.assertTrue(teams.toString().contains(String.valueOf(teamId)));
-            JsonNode recommendResult = findToolResult(response, "recommendUsers");
-            Assertions.assertFalse(recommendResult.isMissingNode());
-            JsonNode users = recommendResult.at("/data");
-            Assertions.assertTrue(users.isArray());
-            Assertions.assertTrue(users.toString().contains(String.valueOf(creator.getId())));
-            Assertions.assertTrue(users.findPath("userAccount").isMissingNode());
-            Assertions.assertTrue(users.findPath("phone").isMissingNode());
-            Assertions.assertTrue(users.findPath("email").isMissingNode());
-            Assertions.assertEquals(1L,
-                    countAuditLogs(loginUser.getId(), response.at("/data/sessionId").asText(), "tool", "searchTeams", "success"));
-            Assertions.assertEquals(1L,
-                    countAuditLogs(loginUser.getId(), response.at("/data/sessionId").asText(), "tool", "recommendUsers", "success"));
-        } finally {
-            cleanupUserAndTeams(creator);
-            cleanupUserAndTeams(loginUser);
         }
     }
 
@@ -322,21 +355,17 @@ class AiChatServiceTest {
     }
 
     @Test
-    void chat_createTeamRequest_shouldOnlyReturnDraftAndNotWriteTeam() throws Exception {
+    void chat_createTeamRequest_agentUnavailable_shouldNotCreateDraftOrTeam() throws Exception {
         User user = null;
         try {
             user = createTestUser();
             long beforeCount = countTeamsCreatedBy(user.getId());
 
-            JsonNode response = chat(loginToken(user), "帮我在西安创建一个4人的羽毛球队伍，预算每人50以内");
+            JsonNode response = chat(loginToken(user), "create a badminton team in xian");
 
-            Assertions.assertFalse(response.at("/data/draft").isMissingNode());
-            Assertions.assertFalse(response.at("/data/draft/draftId").asText().isBlank());
-            Assertions.assertFalse(findToolResult(response, "recommendUsers").isMissingNode());
-            Assertions.assertFalse(findToolResult(response, "createTeamDraft").isMissingNode());
+            Assertions.assertTrue(response.at("/data/draft").isMissingNode() || response.at("/data/draft").isNull());
+            Assertions.assertEquals(0, response.at("/data/toolResults").size());
             Assertions.assertEquals(beforeCount, countTeamsCreatedBy(user.getId()));
-            Assertions.assertEquals(1L,
-                    countAuditLogs(user.getId(), response.at("/data/sessionId").asText(), "tool", "createTeamDraft", "success"));
         } finally {
             cleanupUserAndTeams(user);
         }
@@ -348,8 +377,7 @@ class AiChatServiceTest {
         try {
             user = createTestUser();
             long beforeCount = countTeamsCreatedBy(user.getId());
-            JsonNode chatResponse = chat(loginToken(user), "帮我在西安创建一个4人的羽毛球队伍，预算每人50以内");
-            String draftId = chatResponse.at("/data/draft/draftId").asText();
+            String draftId = createPendingDraft(user);
 
             JsonNode confirmResponse = confirmDraft(loginToken(user), draftId, 0);
 
@@ -369,8 +397,7 @@ class AiChatServiceTest {
         try {
             user = createTestUser();
             String token = loginToken(user);
-            JsonNode chatResponse = chat(token, "帮我在西安创建一个4人的羽毛球队伍，预算每人50以内");
-            String draftId = chatResponse.at("/data/draft/draftId").asText();
+            String draftId = createPendingDraft(user);
 
             confirmDraft(token, draftId, 0);
             JsonNode secondResponse = confirmDraft(token, draftId, 40000);
@@ -390,8 +417,7 @@ class AiChatServiceTest {
         try {
             owner = createTestUser();
             other = createTestUser();
-            JsonNode chatResponse = chat(loginToken(owner), "帮我在西安创建一个4人的羽毛球队伍，预算每人50以内");
-            String draftId = chatResponse.at("/data/draft/draftId").asText();
+            String draftId = createPendingDraft(owner);
 
             JsonNode response = confirmDraft(loginToken(other), draftId, 40101);
 
@@ -416,6 +442,7 @@ class AiChatServiceTest {
             draft.setName("expired_ai_draft");
             draft.setDescription("expired draft test");
             draft.setMaxNum(4);
+            draft.setActivityCategory(1);
             draft.setActivityType("羽毛球");
             draft.setCity("西安");
             draft.setStatus(0);
@@ -492,6 +519,8 @@ class AiChatServiceTest {
         Assertions.assertTrue(aiToolRegistry.contains("searchTeams"));
         Assertions.assertTrue(aiToolRegistry.contains("recommendUsers"));
         Assertions.assertTrue(aiToolRegistry.contains("createTeamDraft"));
+        Assertions.assertTrue(aiToolRegistry.contains("prepareDeleteTeam"));
+        Assertions.assertTrue(aiToolRegistry.contains("deleteTeam"));
         Assertions.assertTrue(aiToolRegistry.contains("listMyCreatedTeams"));
         Assertions.assertTrue(aiToolRegistry.contains("getMyProfile"));
         Assertions.assertTrue(aiToolRegistry.contains("updateMyProfile"));
@@ -501,7 +530,7 @@ class AiChatServiceTest {
     }
 
     @Test
-    void agentTools_shouldNotExposeJoinOrQuitWithoutConfirmation() {
+    void agentTools_shouldNotExposeUnsafeWriteToolsWithoutConfirmation() {
         Set<String> exposedToolNames = Arrays.stream(AiAssistantTools.class.getDeclaredMethods())
                 .map(method -> method.getAnnotation(Tool.class))
                 .filter(java.util.Objects::nonNull)
@@ -510,6 +539,8 @@ class AiChatServiceTest {
 
         Assertions.assertFalse(exposedToolNames.contains("joinTeam"));
         Assertions.assertFalse(exposedToolNames.contains("quitTeam"));
+        Assertions.assertFalse(exposedToolNames.contains("deleteTeam"));
+        Assertions.assertTrue(exposedToolNames.contains("prepareDeleteTeam"));
     }
 
     @Test
@@ -517,6 +548,11 @@ class AiChatServiceTest {
         User user = null;
         try {
             user = createTestUser("[\"羽毛球\",\"健身\"]");
+            User updateUser = new User();
+            updateUser.setId(user.getId());
+            updateUser.setCity("西安");
+            userService.updateById(updateUser);
+            user.setCity("西安");
 
             AiToolResult result = aiToolRegistry.execute("getMyProfile", new TeamIntent(), user);
 
@@ -524,6 +560,7 @@ class AiChatServiceTest {
             JsonNode profile = objectMapper.valueToTree(result.getData());
             Assertions.assertEquals(user.getId(), profile.at("/id").asLong());
             Assertions.assertEquals(user.getUsername(), profile.at("/username").asText());
+            Assertions.assertEquals("西安", profile.at("/city").asText());
             Assertions.assertTrue(profile.findPath("userAccount").isMissingNode());
             Assertions.assertTrue(profile.findPath("phone").isMissingNode());
             Assertions.assertTrue(profile.findPath("email").isMissingNode());
@@ -618,10 +655,11 @@ class AiChatServiceTest {
             aiAgentToolContext.start(sessionId, user);
 
             aiAssistantTools.createTeamDraft(
+                    1,
                     "足球",
                     "西安",
                     "西安市运动公园",
-                    "2026-07-18 17:00:00",
+                    "2026-07-20 17:00:00",
                     180,
                     11,
                     "明天下午足球活动",
@@ -632,19 +670,21 @@ class AiChatServiceTest {
 
             AiAgentToolContext.State state = aiAgentToolContext.snapshot();
             TeamIntent intent = state.getIntent();
-            TeamDraft draft = state.getDraft();
+            TeamDraftVO draft = state.getDraft();
 
             Assertions.assertNotNull(intent);
+            Assertions.assertEquals(1, intent.getActivityCategory());
             Assertions.assertEquals("足球", intent.getActivityType());
             Assertions.assertEquals("西安", intent.getCity());
             Assertions.assertEquals("西安市运动公园", intent.getDistrict());
             Assertions.assertEquals(11, intent.getMemberCount());
             Assertions.assertEquals(new BigDecimal("0.0"), intent.getBudgetMax());
             Assertions.assertEquals(180, intent.getDurationMinutes());
-            Assertions.assertEquals("2026-07-18 17:00:00", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(intent.getStartTime()));
+            Assertions.assertEquals("2026-07-20 17:00:00", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(intent.getStartTime()));
             Assertions.assertTrue(intent.isCreateTeamRequested());
 
             Assertions.assertNotNull(draft);
+            Assertions.assertEquals(1, draft.getActivityCategory());
             Assertions.assertEquals("足球", draft.getActivityType());
             Assertions.assertEquals("西安", draft.getCity());
             Assertions.assertEquals("西安市运动公园", draft.getDistrict());
@@ -653,6 +693,191 @@ class AiChatServiceTest {
             Assertions.assertEquals(180, draft.getDurationMinutes());
         } finally {
             aiAgentToolContext.clear();
+            cleanupUserAndTeams(user);
+        }
+    }
+
+    @Test
+    void agentCreateTeamDraft_withoutCity_shouldUseLoginUserCity() throws Exception {
+        User user = null;
+        try {
+            user = createTestUser();
+            User updateUser = new User();
+            updateUser.setId(user.getId());
+            updateUser.setCity("西安");
+            userService.updateById(updateUser);
+            user.setCity("西安");
+            String sessionId = UUID.randomUUID().toString();
+            aiAgentToolContext.start(sessionId, user);
+
+            aiAssistantTools.createTeamDraft(
+                    4,
+                    "桌游",
+                    null,
+                    "钟楼附近",
+                    "2026-07-21 14:00:00",
+                    null,
+                    6,
+                    "钟楼桌游局",
+                    "明天下午 2 点在钟楼附近玩桌游，队伍人数上限 6 人。",
+                    null,
+                    null
+            );
+
+            AiAgentToolContext.State state = aiAgentToolContext.snapshot();
+
+            Assertions.assertNotNull(state.getIntent());
+            Assertions.assertEquals("西安", state.getIntent().getCity());
+            Assertions.assertEquals("钟楼附近", state.getIntent().getDistrict());
+            Assertions.assertNotNull(state.getDraft());
+            Assertions.assertEquals("西安", state.getDraft().getCity());
+            Assertions.assertEquals("钟楼附近", state.getDraft().getDistrict());
+            Assertions.assertEquals(6, state.getDraft().getMaxNum());
+        } finally {
+            aiAgentToolContext.clear();
+            cleanupUserAndTeams(user);
+        }
+    }
+
+    @Test
+    void agentCreateTeamDraft_withoutCityAndUserCity_shouldNotSaveDraft() throws Exception {
+        User user = null;
+        try {
+            user = createTestUser();
+            String sessionId = UUID.randomUUID().toString();
+            aiAgentToolContext.start(sessionId, user);
+
+            String resultJson = aiAssistantTools.createTeamDraft(
+                    4,
+                    "桌游",
+                    null,
+                    "钟楼附近",
+                    "2026-07-21 14:00:00",
+                    null,
+                    6,
+                    "钟楼桌游局",
+                    "明天下午 2 点在钟楼附近玩桌游，队伍人数上限 6 人。",
+                    null,
+                    null
+            );
+
+            JsonNode result = objectMapper.readTree(resultJson);
+            AiAgentToolContext.State state = aiAgentToolContext.snapshot();
+
+            Assertions.assertFalse(result.at("/success").asBoolean());
+            Assertions.assertTrue(result.at("/summary").asText().contains("城市"));
+            Assertions.assertNull(state.getDraft());
+            Assertions.assertEquals(0L, countPendingDrafts(user.getId()));
+        } finally {
+            aiAgentToolContext.clear();
+            cleanupUserAndTeams(user);
+        }
+    }
+
+    @Test
+    void prepareDeleteTeam_shouldReturnConfirmationAndNotDeleteTeam() {
+        User user = null;
+        try {
+            user = createTestUser();
+            long teamId = createStructuredTeam(user, "桌游", "西安", BigDecimal.ZERO, 6);
+            TeamIntent intent = new TeamIntent();
+            intent.setTeamId(teamId);
+
+            AiToolResult result = aiToolRegistry.execute("prepareDeleteTeam", intent, user);
+
+            Assertions.assertTrue(result.isSuccess());
+            JsonNode confirmation = objectMapper.valueToTree(result.getData());
+            Assertions.assertEquals(teamId, confirmation.at("/teamId").asLong());
+            Assertions.assertEquals("西安", confirmation.at("/city").asText());
+            Assertions.assertEquals(1, countTeamsCreatedBy(user.getId()));
+        } finally {
+            cleanupUserAndTeams(user);
+        }
+    }
+
+    @Test
+    void agentToolCall_prepareDeleteTeam_shouldSetDeleteConfirmation() {
+        User user = null;
+        try {
+            user = createTestUser();
+            long teamId = createStructuredTeam(user, "桌游", "西安", BigDecimal.ZERO, 6);
+            aiAgentToolContext.start(UUID.randomUUID().toString(), user);
+
+            aiAssistantTools.prepareDeleteTeam(teamId);
+
+            AiAgentToolContext.State state = aiAgentToolContext.snapshot();
+            Assertions.assertNotNull(state.getDeleteConfirmation());
+            Assertions.assertEquals(teamId, state.getDeleteConfirmation().getTeamId());
+        } finally {
+            aiAgentToolContext.clear();
+            cleanupUserAndTeams(user);
+        }
+    }
+
+    @Test
+    void confirmDeleteTeam_shouldDeleteAfterUserConfirmation() throws Exception {
+        User user = null;
+        try {
+            user = createTestUser();
+            long teamId = createStructuredTeam(user, "桌游", "西安", BigDecimal.ZERO, 6);
+            String sessionId = UUID.randomUUID().toString();
+
+            JsonNode response = confirmDeleteTeam(loginToken(user), teamId, sessionId, 0);
+
+            Assertions.assertTrue(response.at("/data/success").asBoolean());
+            Assertions.assertEquals(teamId, response.at("/data/data/teamId").asLong());
+            Assertions.assertEquals(0, countTeamsCreatedBy(user.getId()));
+            Assertions.assertEquals(1L,
+                    countAuditLogs(user.getId(), sessionId, "tool", "deleteTeam", "success"));
+        } finally {
+            cleanupUserAndTeams(user);
+        }
+    }
+
+    @Test
+    void confirmDeleteTeam_otherUserTeam_shouldBeRejected() throws Exception {
+        User owner = null;
+        User other = null;
+        try {
+            owner = createTestUser();
+            other = createTestUser();
+            long teamId = createStructuredTeam(owner, "桌游", "西安", BigDecimal.ZERO, 6);
+            String sessionId = UUID.randomUUID().toString();
+
+            JsonNode response = confirmDeleteTeam(loginToken(other), teamId, sessionId, 40101);
+
+            Assertions.assertEquals(40101, response.at("/code").asInt());
+            Assertions.assertEquals(1, countTeamsCreatedBy(owner.getId()));
+            Assertions.assertEquals(1L,
+                    countAuditLogs(other.getId(), sessionId, "tool", "deleteTeam", "failed"));
+        } finally {
+            cleanupUserAndTeams(owner);
+            cleanupUserAndTeams(other);
+        }
+    }
+
+    @Test
+    void conversationContext_shouldSummarizeRecentBusinessEventsForReferences() {
+        User user = null;
+        try {
+            user = createTestUser();
+            String sessionId = UUID.randomUUID().toString();
+            long createdTeamId = 9900001L;
+            long deletedTeamId = 9900002L;
+
+            aiChatMessageService.saveTeamDraftConfirmedEvent(user, sessionId, "draft_context_test", createdTeamId);
+            aiChatMessageService.saveTeamDeletedEvent(user, sessionId, deletedTeamId);
+
+            String context = aiConversationContextService.buildRecentBusinessContext(user, sessionId);
+
+            Assertions.assertTrue(context.contains("当前会话近期业务事件"));
+            Assertions.assertTrue(context.contains("TEAM_CREATED"));
+            Assertions.assertTrue(context.contains("TEAM#" + createdTeamId));
+            Assertions.assertTrue(context.contains("TEAM_DELETED"));
+            Assertions.assertTrue(context.contains("TEAM#" + deletedTeamId));
+            Assertions.assertTrue(context.contains("刚刚"));
+            Assertions.assertTrue(context.contains("必须先生成确认"));
+        } finally {
             cleanupUserAndTeams(user);
         }
     }
@@ -758,14 +983,46 @@ class AiChatServiceTest {
                 .andExpect(jsonPath("$.code").value(expectedCode))
                 .andReturn()
                 .getResponse()
+                        .getContentAsString();
+        return objectMapper.readTree(content);
+    }
+
+    private JsonNode confirmDeleteTeam(String token, long teamId, String sessionId, int expectedCode) throws Exception {
+        String content = mockMvc.perform(post("/ai/team/{teamId}/delete/confirm", teamId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("sessionId", sessionId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(expectedCode))
+                .andReturn()
+                .getResponse()
                 .getContentAsString();
         return objectMapper.readTree(content);
+    }
+
+    private String createPendingDraft(User user) {
+        AiTeamDraft draft = new AiTeamDraft();
+        draft.setDraftId(UUID.randomUUID().toString());
+        draft.setSessionId(UUID.randomUUID().toString());
+        draft.setUserId(user.getId());
+        draft.setName("pending_ai_draft");
+        draft.setDescription("pending draft test");
+        draft.setMaxNum(4);
+        draft.setActivityCategory(1);
+        draft.setActivityType("badminton");
+        draft.setCity("xian");
+        draft.setStatus(0);
+        draft.setStartTime(new Date(System.currentTimeMillis() + 2 * 24 * 60 * 60 * 1000));
+        draft.setExpiresAt(new Date(System.currentTimeMillis() + 30 * 60 * 1000));
+        Assertions.assertTrue(aiTeamDraftService.save(draft));
+        return draft.getDraftId();
     }
 
     private long createStructuredTeam(User creator, String activityType, String city, BigDecimal budgetPerPerson, int maxNum) {
         Team team = new Team();
         team.setName("ai_t_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
         team.setDescription("ai stage 1.1 test");
+        team.setActivityCategory(resolveActivityCategory(activityType));
         team.setMaxNum(maxNum);
         team.setStatus(0);
         team.setExpireTime(new Date(System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000));
@@ -776,6 +1033,16 @@ class AiChatServiceTest {
         team.setBudgetPerPerson(budgetPerPerson);
         team.setSkillLevel("中等");
         return teamService.addTeam(team, creator);
+    }
+
+    private int resolveActivityCategory(String activityType) {
+        if ("徒步".equals(activityType)) {
+            return 2;
+        }
+        if ("桌游".equals(activityType)) {
+            return 4;
+        }
+        return 1;
     }
 
     private long countTeamsCreatedBy(long userId) {
@@ -829,6 +1096,18 @@ class AiChatServiceTest {
                 status);
     }
 
+    private Long countPendingDrafts(long userId) {
+        return jdbcTemplate.queryForObject("""
+                        select count(1)
+                        from ai_team_draft
+                        where isDelete = 0
+                          and status = 0
+                          and userId = ?
+                        """,
+                Long.class,
+                userId);
+    }
+
     private void cleanupUserAndTeams(User user) {
         if (user == null || user.getId() <= 0) {
             return;
@@ -841,6 +1120,7 @@ class AiChatServiceTest {
     }
 
     private void deleteAiTestDataPhysically(long userId) {
+        jdbcTemplate.update("delete from ai_chat_message where userId = ?", userId);
         jdbcTemplate.update("""
                         delete from ai_tool_call_log
                         where userId = ?

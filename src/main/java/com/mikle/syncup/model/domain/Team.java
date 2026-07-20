@@ -36,6 +36,11 @@ public class Team implements Serializable {
     private String description;
 
     /**
+     * 活动大类
+     */
+    private Integer activityCategory;
+
+    /**
      * 最大人数
      */
     private Integer maxNum;

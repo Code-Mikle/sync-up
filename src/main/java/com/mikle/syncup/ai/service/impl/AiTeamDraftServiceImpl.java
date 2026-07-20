@@ -3,9 +3,10 @@ package com.mikle.syncup.ai.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mikle.syncup.ai.exception.DraftExpiredException;
 import com.mikle.syncup.ai.mapper.AiTeamDraftMapper;
-import com.mikle.syncup.ai.model.AiTeamDraft;
-import com.mikle.syncup.ai.model.AiTeamDraftConfirmResponse;
-import com.mikle.syncup.ai.model.TeamDraft;
+import com.mikle.syncup.ai.model.entity.AiTeamDraft;
+import com.mikle.syncup.ai.model.vo.AiTeamDraftConfirmResponse;
+import com.mikle.syncup.ai.model.vo.TeamDraftVO;
+import com.mikle.syncup.ai.service.AiChatMessageService;
 import com.mikle.syncup.ai.service.AiTeamDraftService;
 import com.mikle.syncup.ai.service.AiToolCallLogService;
 import com.mikle.syncup.common.ErrorCode;
@@ -39,8 +40,11 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
     @Resource
     private AiToolCallLogService aiToolCallLogService;
 
+    @Resource
+    private AiChatMessageService aiChatMessageService;
+
     @Override
-    public TeamDraft saveDraft(TeamDraft draft, User loginUser, String sessionId) {
+    public TeamDraftVO saveDraft(TeamDraftVO draft, User loginUser, String sessionId) {
         if (draft == null || loginUser == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
@@ -75,6 +79,14 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
                     null,
                     System.currentTimeMillis() - start
             );
+            if (confirmedDraft != null) {
+                aiChatMessageService.saveTeamDraftConfirmedEvent(
+                        loginUser,
+                        confirmedDraft.getSessionId(),
+                        response.getDraftId(),
+                        response.getTeamId()
+                );
+            }
             return response;
         } catch (RuntimeException e) {
             if (StringUtils.isNotBlank(normalizedDraftId)) {
@@ -128,6 +140,7 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
         team.setMaxNum(draft.getMaxNum());
         team.setStatus(0);
         team.setExpireTime(resolveTeamExpireTime(draft, now));
+        team.setActivityCategory(draft.getActivityCategory());
         team.setActivityType(draft.getActivityType());
         team.setCity(draft.getCity());
         team.setDistrict(draft.getDistrict());
@@ -178,8 +191,8 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
         return new Date(now.getTime() + 7L * 24 * 60 * 60 * 1000);
     }
 
-    private TeamDraft toTeamDraft(AiTeamDraft entity) {
-        TeamDraft draft = new TeamDraft();
+    private TeamDraftVO toTeamDraft(AiTeamDraft entity) {
+        TeamDraftVO draft = new TeamDraftVO();
         BeanUtils.copyProperties(entity, draft);
         return draft;
     }

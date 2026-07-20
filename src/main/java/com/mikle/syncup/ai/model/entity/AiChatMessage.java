@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai.model;
+package com.mikle.syncup.ai.model.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
@@ -10,22 +10,36 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.Date;
 
-@TableName(value = "ai_chat_memory")
+@TableName(value = "ai_chat_message")
 @Data
-public class AiChatMemory implements Serializable {
+public class AiChatMessage implements Serializable {
 
     @TableId(type = IdType.AUTO)
     private Long id;
-
-    private String memoryId;
 
     private Long userId;
 
     private String sessionId;
 
-    private String messagesJson;
+    /**
+     * user / assistant / event.
+     */
+    private String role;
 
-    private Integer messageCount;
+    /**
+     * Text shown to user or event text used by memory.
+     */
+    private String content;
+
+    /**
+     * Serialized assistant response or event payload.
+     */
+    private String responseJson;
+
+    /**
+     * 1 - shown in chat history, 0 - hidden event for context/state recovery.
+     */
+    private Integer visible;
 
     private Date expireAt;
 
@@ -39,4 +53,3 @@ public class AiChatMemory implements Serializable {
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }
-

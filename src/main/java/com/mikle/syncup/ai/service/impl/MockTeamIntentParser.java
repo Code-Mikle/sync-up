@@ -1,6 +1,6 @@
 package com.mikle.syncup.ai.service.impl;
 
-import com.mikle.syncup.ai.model.TeamIntent;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.service.TeamIntentParser;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
