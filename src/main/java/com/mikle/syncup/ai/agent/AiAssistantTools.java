@@ -16,7 +16,7 @@ import com.mikle.syncup.ai.tool.ListMyCreatedTeamsTool;
 import com.mikle.syncup.ai.tool.RecommendUsersTool;
 import com.mikle.syncup.ai.tool.PrepareDeleteTeamTool;
 import com.mikle.syncup.ai.tool.SearchTeamsTool;
-import com.mikle.syncup.ai.tool.UpdateMyProfileTool;
+import com.mikle.syncup.ai.tool.PrepareProfileUpdateTool;
 import com.mikle.syncup.model.domain.User;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -48,50 +48,58 @@ public class AiAssistantTools {
     @Resource
     private ObjectMapper objectMapper;
 
-    @Tool(name = SearchTeamsTool.TOOL_NAME, value = "Search public available teams by activity category, city, budget and skill level. Call it without filters for general team recommendations. activityCategory codes: 1=运动健身, 2=户外出行, 3=游戏电竞, 4=桌游剧本, 5=休闲娱乐, 6=美食探店, 7=学习成长, 8=旅行出游, 9=其他.")
-    public String searchTeams(@P(value = "Optional activity category code. Use 2 for 户外运动/户外出行. Do not convert broad categories into specific activities.", required = false) Integer activityCategory,
-                              @P(value = "Optional specific activity text, for example 羽毛球, 骑行, 徒步. Do not guess a specific activity when the user only gives a broad category.", required = false) String activityType,
-                              @P(value = "City name, for example 西安.", required = false) String city,
-                              @P(value = "District or business area.", required = false) String district,
-                              @P(value = "Start time in yyyy-MM-dd HH:mm:ss if user provides an exact or relative time.", required = false) String startTime,
-                              @P(value = "Maximum budget per person.", required = false) Double budgetMax,
-                              @P(value = "Skill level, for example 入门, 中等, 熟练.", required = false) String skillLevel) {
+    @Tool(
+            name = SearchTeamsTool.TOOL_NAME,
+            value = "查询和筛选当前公开可用的队伍。用户想搜索、浏览、筛选或泛化推荐队伍时调用。用户没有提供筛选条件时，所有可选参数留空并直接调用。" +
+                    "只有用户明确要求根据自己的资料、兴趣或标签推荐时，才需要先读取用户公开资料。")
+    public String searchTeams(
+            @P(value = "活动大类编码：1=运动健身, 2=户外出行, 3=游戏电竞, 4=桌游剧本, 5=休闲娱乐, 6=美食探店, 7=学习成长, " +
+                    "8=旅行出游, 9=其他。使用最接近的宽泛类别，不得虚构具体活动。", required = false) Integer activityCategory,
+            @P(value = "具体活动名称,例如“足球”、“羽毛球”、“骑行”。若用户仅给出宽泛类别，则留空。", required = false
+            ) String activityType,
+            @P(value = "用户明确提供的城市。用户只提供地标、商圈或场馆时不要推断城市，应留空，由后端尝试补齐。", required = false) String city,
+            @P(value = "区域、场馆、地标或商圈。例如“钟楼附近”或“西安市运动公园”。", required = false) String district,
+            @P(value = "开始时间，格式为 yyyy-MM-dd HH:mm:ss。当用户提及“明天”、“周末”、“下午五点”等相对时间时，" +
+                    "需根据对话日期推断具体时间。", required = false) String startTime,
+            @P(value = "每人最高预算", required = false) Double budgetMax,
+            @P(value = "技能熟练度，分为入门, 中等, 熟练。", required = false) String skillLevel) {
         TeamIntent intent = buildIntent(activityCategory, activityType, city, district, startTime, null, budgetMax, skillLevel, null);
         return executeAndRemember(SearchTeamsTool.TOOL_NAME, intent);
     }
 
-    @Tool(name = RecommendUsersTool.TOOL_NAME, value = "Recommend users or partners. If activityType and tag are omitted, recommend based on the current user's tags and profile.")
-    public String recommendUsers(@P(value = "Optional activity type or primary tag. Omit it when the user only asks for general partner recommendations.", required = false) String activityType,
-                                 @P(value = "Optional additional tag. Omit it when the user does not provide a specific preference.", required = false) String tag) {
+    @Tool(
+            name = RecommendUsersTool.TOOL_NAME,
+            value = "根据当前登录用户已保存的标签，推荐适合成为搭子的其他用户。无需从本轮消息中提取活动类型或临时标签。" +
+                    "只返回允许公开展示的用户资料。")
+    public String recommendUsers() {
         TeamIntent intent = new TeamIntent();
-        if (StringUtils.isNotBlank(activityType)) {
-            intent.setActivityType(activityType.trim());
-            intent.getTags().add(activityType.trim());
-        }
-        if (StringUtils.isNotBlank(tag) && !intent.getTags().contains(tag.trim())) {
-            intent.getTags().add(tag.trim());
-        }
         intent.setTeamRelated(true);
         return executeAndRemember(RecommendUsersTool.TOOL_NAME, intent);
     }
 
-    @Tool(name = GetTeamDetailsTool.TOOL_NAME, value = "Get public details of a team by team id.")
-    public String getTeamDetails(@P(value = "Team id.", required = true) Long teamId) {
+    @Tool(name = GetTeamDetailsTool.TOOL_NAME, value = "根据队伍 id 获取队伍的公开详情")
+    public String getTeamDetails(@P(value = "队伍 id", required = true) Long teamId) {
         TeamIntent intent = new TeamIntent();
         intent.setTeamId(teamId);
         intent.setTeamRelated(true);
         return executeAndRemember(GetTeamDetailsTool.TOOL_NAME, intent);
     }
 
-    @Tool(name = ListMyCreatedTeamsTool.TOOL_NAME, value = "List teams created by current logged-in user.")
+    @Tool(name = ListMyCreatedTeamsTool.TOOL_NAME, value = "查询当前用户创建的队伍")
     public String listMyCreatedTeams() {
         TeamIntent intent = new TeamIntent();
         intent.setTeamRelated(true);
         return executeAndRemember(ListMyCreatedTeamsTool.TOOL_NAME, intent);
     }
 
-    @Tool(name = PrepareDeleteTeamTool.TOOL_NAME, value = "Prepare a delete-team confirmation card. This does not delete anything. Use it when the user asks to delete/cancel/remove a team they created and you can identify the team id from the current conversation, for example 已创建队伍 #392. If the user says 刚刚创建的那个队伍, use the most recent confirmed team id in chat memory. If no team id is known, call listMyCreatedTeams first or ask the user which team to delete.")
-    public String prepareDeleteTeam(@P(value = "Team id to delete. Must come from user input, previous confirmed team id in the conversation, or listMyCreatedTeams result; do not invent it.", required = true) Long teamId) {
+    @Tool(
+            name = PrepareDeleteTeamTool.TOOL_NAME,
+            value = "为删除当前用户创建的队伍生成待确认卡片，不执行实际删除。仅在用户明确要求删除、取消或移除自己创建的队伍，" +
+                    "并且能够确定队伍 ID 时调用。无法确定目标队伍时，先查询当前用户创建的队伍或向用户确认。")
+    public String prepareDeleteTeam(
+            @P(value = "要删除的队伍 ID。必须来自用户明确输入、当前对话中的已确认结果或查询工具返回结果，不得编造。", required = true)
+            Long teamId)
+    {
         TeamIntent intent = new TeamIntent();
         intent.setTeamId(teamId);
         intent.setTeamRelated(true);
@@ -105,37 +113,50 @@ public class AiAssistantTools {
         return toJson(result);
     }
 
-    @Tool(name = ListMyJoinedTeamsTool.TOOL_NAME, value = "List teams joined by current logged-in user.")
+    @Tool(name = ListMyJoinedTeamsTool.TOOL_NAME, value = "查询当前登录用户创建的队伍")
     public String listMyJoinedTeams() {
         TeamIntent intent = new TeamIntent();
         intent.setTeamRelated(true);
         return executeAndRemember(ListMyJoinedTeamsTool.TOOL_NAME, intent);
     }
 
-    @Tool(name = GetMyProfileTool.TOOL_NAME, value = "Get current logged-in user's public profile fields, including city. Do not use for general team recommendations unless the user explicitly asks to recommend by my profile, interests or tags.")
+    @Tool(name = GetMyProfileTool.TOOL_NAME, value = "获取当前登录用户的公开资料字段（包含城市）")
     public String getMyProfile() {
         return executeAndRemember(GetMyProfileTool.TOOL_NAME, new TeamIntent());
     }
 
-    @Tool(name = UpdateMyProfileTool.TOOL_NAME, value = "Update current logged-in user's self introduction and confirmed structured profile. Only use when user explicitly asks to update their own profile or self introduction.")
-    public String updateMyProfile(@P(value = "The user's self introduction text to save. Do not include phone, email, password, token or API key.", required = true) String profileText) {
+    @Tool(
+            name = PrepareProfileUpdateTool.TOOL_NAME,
+            value = "根据用户明确提出的修改内容，生成当前用户公开资料的待确认修改草稿。" +
+                    "该工具不会执行正式写入。仅当用户明确要求修改自己的公开资料或个人简介时调用。")
+    public String prepareMyProfileUpdate(@P(value = "用户明确要求保存的公开资料内容。不得包含手机号、邮箱、密码、Token、API Key 等敏感信息。", required = true) String profileText) {
         TeamIntent intent = new TeamIntent();
         intent.setProfileText(profileText);
-        return executeAndRemember(UpdateMyProfileTool.TOOL_NAME, intent);
+        return executeAndRemember(PrepareProfileUpdateTool.TOOL_NAME, intent);
     }
 
-    @Tool(name = CreateTeamDraftTool.TOOL_NAME, value = "Create a team draft for user confirmation. This does not write final team tables. If the user did not provide city, omit city and this tool will use the current user's city when available. Never guess city from landmarks such as 钟楼. If both user input and current profile have no city, ask the user for city. If teamName or description is not provided, use a concise default based on known activity, time and place. activityCategory codes: 1=运动健身, 2=户外出行, 3=游戏电竞, 4=桌游剧本, 5=休闲娱乐, 6=美食探店, 7=学习成长, 8=旅行出游, 9=其他.")
-    public String createTeamDraft(@P(value = "Required activity category code. Use the closest broad category, not a guessed specific activity.", required = true) Integer activityCategory,
-                                  @P(value = "Optional specific activity text, for example 足球, 羽毛球, 骑行, 徒步. Leave empty when user only gives a broad category.", required = false) String activityType,
-                                  @P(value = "Optional city name explicitly provided by the user, for example 西安. Do not infer it from a landmark or business area; leave empty when the user only says 钟楼附近, 体育场附近, 商场名, etc.", required = false) String city,
-                                  @P(value = "District, venue, landmark or business area, for example 钟楼附近 or 西安市运动公园.", required = false) String district,
-                                  @P(value = "Start time in yyyy-MM-dd HH:mm:ss. Infer relative time from the conversation date when user says 明天/周末/下午五点.", required = false) String startTime,
-                                  @P(value = "Activity duration in minutes, for example 180 for 3 hours.", required = false) Integer durationMinutes,
-                                  @P(value = "Maximum team member count.", required = true) Integer memberCount,
-                                  @P(value = "Optional team name. Generate a short natural name if the user did not provide one.", required = false) String teamName,
-                                  @P(value = "Optional team description. Generate a short factual description from known activity, time and place if the user did not provide one.", required = false) String description,
-                                  @P(value = "Maximum budget per person. Use 0 when user says free, no fee, 无需支付, 不收费.", required = false) Double budgetMax,
-                                  @P(value = "Skill level, for example 入门, 中等, 熟练.", required = false) String skillLevel) {
+    @Tool(
+            name = CreateTeamDraftTool.TOOL_NAME,
+            value = "根据用户提供的信息生成创建队伍的待确认草稿。该工具不会创建正式队伍。" +
+                    "当用户明确要求创建、发起或组建队伍时调用。未提供城市时，将由后端尝试使用当前用户的常驻城市。")
+    public String createTeamDraft(
+            @P(value = "活动大类编码：1=运动健身, 2=户外出行, 3=游戏电竞, 4=桌游剧本, 5=休闲娱乐, 6=美食探店, 7=学习成长, " +
+                            "8=旅行出游, 9=其他。使用最接近的宽泛类别，不得虚构具体活动。", required = true
+            ) Integer activityCategory,
+            @P(value = "具体活动名称,例如“足球”、“羽毛球”、“骑行”。若用户仅给出宽泛类别，则留空。", required = false) String activityType,
+            @P(value = "用户明确提供的城市。用户只提供地标、商圈或场馆时不要推断城市，应留空，由后端尝试补齐。", required = false
+            ) String city,
+            @P(value = "区域、场馆、地标或商圈。例如“钟楼附近”或“西安市运动公园”。", required = false) String district,
+            @P(value = "开始时间，格式为 yyyy-MM-dd HH:mm:ss。当用户提及“明天”、“周末”、“下午五点”等相对时间时，" +
+                    "需根据对话日期推断具体时间。", required = false
+            ) String startTime,
+            @P(value = "活动时长（分钟）", required = false) Integer durationMinutes,
+            @P(value = "队伍总人数上限", required = true) Integer memberCount,
+            @P(value = "队伍名。如果用户没有提供，则生成一个简短的默认名称。", required = false) String teamName,
+            @P(value = "可选的队伍描述。若用户未提供，则根据已知的活动、时间与地点生成一段简短的事实性描述。", required = false
+            ) String description,
+            @P(value = "每个人的最大花费。如果没有提供默认为 0。", required = false) Double budgetMax,
+            @P(value = "技能熟练度，分为入门, 中等, 熟练。", required = false) String skillLevel) {
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
         String resolvedCity = resolveDraftCity(city, state.getLoginUser());
         TeamIntent intent = buildIntent(activityCategory, activityType, resolvedCity, district, startTime, durationMinutes, budgetMax, skillLevel, memberCount);

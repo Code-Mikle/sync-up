@@ -316,14 +316,12 @@ class AiChatServiceTest {
     }
 
     @Test
-    void recommendUsers_noMatch_shouldReturnEmptyList() {
+    void recommendUsers_withoutCurrentUserTags_shouldReturnEmptyList() {
         User loginUser = null;
         try {
             loginUser = createTestUser();
-            TeamIntent intent = new TeamIntent();
-            intent.setActivityType("stage16_no_match_" + UUID.randomUUID().toString().replace("-", ""));
 
-            AiToolResult result = aiToolRegistry.execute("recommendUsers", intent, loginUser);
+            AiToolResult result = aiToolRegistry.execute("recommendUsers", new TeamIntent(), loginUser);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode users = objectMapper.valueToTree(result.getData());
@@ -340,10 +338,8 @@ class AiChatServiceTest {
         try {
             String uniqueTag = "stage16_self_" + UUID.randomUUID().toString().replace("-", "");
             loginUser = createTestUser("[\"" + uniqueTag + "\"]");
-            TeamIntent intent = new TeamIntent();
-            intent.setActivityType(uniqueTag);
 
-            AiToolResult result = aiToolRegistry.execute("recommendUsers", intent, loginUser);
+            AiToolResult result = aiToolRegistry.execute("recommendUsers", new TeamIntent(), loginUser);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode users = objectMapper.valueToTree(result.getData());
@@ -352,6 +348,39 @@ class AiChatServiceTest {
         } finally {
             cleanupUserAndTeams(loginUser);
         }
+    }
+
+    @Test
+    void recommendUsers_shouldUseCurrentUserTags() {
+        User loginUser = null;
+        User matchedUser = null;
+        try {
+            String uniqueTag = "stage16_match_" + UUID.randomUUID().toString().replace("-", "");
+            loginUser = createTestUser("[\"" + uniqueTag + "\"]");
+            matchedUser = createTestUser("[\"" + uniqueTag + "\"]");
+
+            AiToolResult result = aiToolRegistry.execute("recommendUsers", new TeamIntent(), loginUser);
+
+            Assertions.assertTrue(result.isSuccess());
+            JsonNode users = objectMapper.valueToTree(result.getData());
+            Assertions.assertTrue(users.isArray());
+            boolean containsMatchedUser = false;
+            boolean containsLoginUser = false;
+            for (JsonNode user : users) {
+                containsMatchedUser |= user.path("id").asLong() == matchedUser.getId();
+                containsLoginUser |= user.path("id").asLong() == loginUser.getId();
+            }
+            Assertions.assertTrue(containsMatchedUser);
+            Assertions.assertFalse(containsLoginUser);
+        } finally {
+            cleanupUserAndTeams(loginUser);
+            cleanupUserAndTeams(matchedUser);
+        }
+    }
+
+    @Test
+    void agentRecommendUsersTool_shouldNotAcceptTemporaryTags() throws Exception {
+        Assertions.assertEquals(0, AiAssistantTools.class.getDeclaredMethod("recommendUsers").getParameterCount());
     }
 
     @Test

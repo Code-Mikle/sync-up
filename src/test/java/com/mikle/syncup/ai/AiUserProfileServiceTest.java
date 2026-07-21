@@ -7,7 +7,7 @@ import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.vo.AiProfileResponse;
 import com.mikle.syncup.ai.service.AiUserProfileService;
 import com.mikle.syncup.ai.tool.AiToolRegistry;
-import com.mikle.syncup.ai.tool.UpdateMyProfileTool;
+import com.mikle.syncup.ai.tool.PrepareProfileUpdateTool;
 import com.mikle.syncup.mapper.UserMapper;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.service.UserService;
@@ -205,7 +205,7 @@ class AiUserProfileServiceTest {
             TeamIntent intent = new TeamIntent();
             intent.setProfileText("我在西安雁塔，周末晚上打羽毛球，中等水平，预算50以内，邮箱 test@example.com");
 
-            AiToolResult result = aiToolRegistry.execute(UpdateMyProfileTool.TOOL_NAME, intent, user);
+            AiToolResult result = aiToolRegistry.execute(PrepareProfileUpdateTool.TOOL_NAME, intent, user);
 
             Assertions.assertTrue(result.isSuccess());
             Assertions.assertEquals("draft", result.getType());

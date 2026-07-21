@@ -53,7 +53,7 @@ sync-up:
       model: ${SYNC_UP_AI_AGENT_MODEL:qwen3.6-flash-2026-04-16}
       api-key: ${DASHSCOPE_API_KEY:}
       temperature: ${SYNC_UP_AI_AGENT_TEMPERATURE:0.1}
-      timeout-ms: ${SYNC_UP_AI_AGENT_TIMEOUT_MS:30000}
+      timeout-ms: ${SYNC_UP_AI_AGENT_TIMEOUT_MS:60000}
       max-tool-calls: ${SYNC_UP_AI_AGENT_MAX_TOOL_CALLS:3}
       max-input-length: ${SYNC_UP_AI_AGENT_MAX_INPUT_LENGTH:1000}
       memory:

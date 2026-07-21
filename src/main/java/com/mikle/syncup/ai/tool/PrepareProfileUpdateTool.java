@@ -12,9 +12,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 @Component
-public class UpdateMyProfileTool implements AiTool {
+public class PrepareProfileUpdateTool implements AiTool {
 
-    public static final String TOOL_NAME = "updateMyProfile";
+    public static final String TOOL_NAME = "prepare_profile_update";
 
     private static final int MAX_PROFILE_LENGTH = 500;
 

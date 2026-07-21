@@ -8,7 +8,6 @@ import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.service.UserService;
 import jakarta.annotation.Resource;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -43,53 +42,21 @@ public class RecommendUsersTool implements AiTool {
         }
         Map<Long, AiUserRecommendation> recommendationMap = new LinkedHashMap<>();
 
-        List<String> desiredTags = buildDesiredTags(intent);
-        if (!desiredTags.isEmpty()) {
-            List<User> tagMatchedUsers = userService.searchUsersByTags(desiredTags);
-            for (User user : tagMatchedUsers) {
-                addRecommendation(recommendationMap, user, loginUser, buildTagReasons(desiredTags));
-                if (recommendationMap.size() >= DEFAULT_LIMIT) {
-                    break;
-                }
-            }
-        }
-
-        if (recommendationMap.size() < DEFAULT_LIMIT) {
-            List<User> matchedUsers = userService.matchUsers(DEFAULT_LIMIT, loginUser);
-            for (User user : matchedUsers) {
-                addRecommendation(recommendationMap, user, loginUser, List.of("与当前用户标签相近"));
-                if (recommendationMap.size() >= DEFAULT_LIMIT) {
-                    break;
-                }
+        List<User> matchedUsers = userService.matchUsers(DEFAULT_LIMIT, loginUser);
+        for (User user : matchedUsers) {
+            addRecommendation(recommendationMap, user, loginUser, List.of("与当前用户标签相近"));
+            if (recommendationMap.size() >= DEFAULT_LIMIT) {
+                break;
             }
         }
 
         List<AiUserRecommendation> recommendations = new ArrayList<>(recommendationMap.values());
-        return AiToolResult.success(name(), type(), "recommended " + recommendations.size() + " users", recommendations);
-    }
-
-    private List<String> buildDesiredTags(TeamIntent intent) {
-        List<String> tags = new ArrayList<>();
-        if (intent == null) {
-            return tags;
-        }
-        if (StringUtils.isNotBlank(intent.getActivityType())) {
-            tags.add(intent.getActivityType().trim());
-        }
-        if (intent.getTags() != null) {
-            for (String tag : intent.getTags()) {
-                if (StringUtils.isNotBlank(tag) && !tags.contains(tag.trim())) {
-                    tags.add(tag.trim());
-                }
-            }
-        }
-        return tags;
-    }
-
-    private List<String> buildTagReasons(List<String> desiredTags) {
-        return desiredTags.stream()
-                .map(tag -> "标签匹配：" + tag)
-                .toList();
+        return AiToolResult.success(
+                name(),
+                type(),
+                "recommended " + recommendations.size() + " users based on current user's tags",
+                recommendations
+        );
     }
 
     private void addRecommendation(Map<Long, AiUserRecommendation> recommendationMap,
