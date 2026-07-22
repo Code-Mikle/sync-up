@@ -1,9 +1,12 @@
 package com.mikle.syncup.ai;
 
+import com.mikle.syncup.ai.exception.InvalidToolArgumentsException;
 import com.mikle.syncup.ai.mapper.AiChatMemoryMapper;
 import com.mikle.syncup.ai.memory.PersistentChatMemoryStore;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ChatMessageSerializer;
 import dev.langchain4j.data.message.UserMessage;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
@@ -106,6 +109,67 @@ class AiChatMemoryStoreTest {
         } finally {
             persistentChatMemoryStore.deleteMessages(memoryId);
         }
+    }
+
+    @Test
+    void updateMessages_withInvalidToolArguments_shouldRejectAndClearMemory() {
+        String memoryId = buildMemoryId();
+        try {
+            AiMessage invalidToolCall = buildInvalidToolCallMessage();
+
+            Assertions.assertThrows(
+                    InvalidToolArgumentsException.class,
+                    () -> persistentChatMemoryStore.updateMessages(memoryId, List.of(invalidToolCall))
+            );
+
+            Assertions.assertEquals(0L, countMemoryRows(memoryId));
+            Assertions.assertTrue(persistentChatMemoryStore.getMessages(memoryId).isEmpty());
+        } finally {
+            persistentChatMemoryStore.deleteMessages(memoryId);
+        }
+    }
+
+    @Test
+    void getMessages_withCorruptedStoredToolArguments_shouldSelfHeal() {
+        String memoryId = buildMemoryId();
+        try {
+            String messagesJson = ChatMessageSerializer.messagesToJson(List.of(buildInvalidToolCallMessage()));
+            jdbcTemplate.update("""
+                            insert into ai_chat_memory(memoryId, userId, sessionId, messagesJson, messageCount, expireAt)
+                            values (?, ?, ?, ?, ?, ?)
+                            """,
+                    memoryId,
+                    10001L,
+                    memoryId.substring(memoryId.indexOf(':') + 1),
+                    messagesJson,
+                    1,
+                    new Date(System.currentTimeMillis() + 60_000));
+
+            List<ChatMessage> messages = persistentChatMemoryStore.getMessages(memoryId);
+
+            Assertions.assertTrue(messages.isEmpty());
+            Assertions.assertEquals(0L, countMemoryRows(memoryId));
+        } finally {
+            persistentChatMemoryStore.deleteMessages(memoryId);
+        }
+    }
+
+    private AiMessage buildInvalidToolCallMessage() {
+        ToolExecutionRequest request = ToolExecutionRequest.builder()
+                .id("invalid-tool-call")
+                .name("createTeamDraft")
+                .arguments("{\"activityCategory\":1,\"budgetMax\":}")
+                .build();
+        return AiMessage.from(List.of(request));
+    }
+
+    private long countMemoryRows(String memoryId) {
+        Long count = jdbcTemplate.queryForObject(
+                "select count(1) from ai_chat_memory where memoryId = ?",
+                Long.class,
+                memoryId
+        );
+        return count == null ? 0 : count;
     }
 
     private void addIndexIfMissing(String indexName, String ddl) {

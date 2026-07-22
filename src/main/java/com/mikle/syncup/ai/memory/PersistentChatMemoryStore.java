@@ -2,8 +2,10 @@ package com.mikle.syncup.ai.memory;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.mikle.syncup.ai.config.AiAgentProperties;
+import com.mikle.syncup.ai.exception.InvalidToolArgumentsException;
 import com.mikle.syncup.ai.mapper.AiChatMemoryMapper;
 import com.mikle.syncup.ai.model.entity.AiChatMemory;
+import com.mikle.syncup.ai.validation.AiToolArgumentsValidator;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageDeserializer;
 import dev.langchain4j.data.message.ChatMessageSerializer;
@@ -39,6 +41,9 @@ public class PersistentChatMemoryStore implements ChatMemoryStore {
     @Resource
     private AiAgentProperties aiAgentProperties;
 
+    @Resource
+    private AiToolArgumentsValidator aiToolArgumentsValidator;
+
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
         String normalizedMemoryId = normalizeMemoryId(memoryId);
@@ -47,7 +52,7 @@ public class PersistentChatMemoryStore implements ChatMemoryStore {
         }
         String cachedJson = getFromRedis(normalizedMemoryId);
         if (StringUtils.isNotBlank(cachedJson)) {
-            return parseMessages(cachedJson);
+            return parseAndValidateMessages(normalizedMemoryId, cachedJson, "redis");
         }
 
         AiChatMemory memory = aiChatMemoryMapper.selectOne(new QueryWrapper<AiChatMemory>()
@@ -60,8 +65,15 @@ public class PersistentChatMemoryStore implements ChatMemoryStore {
             deleteMessages(normalizedMemoryId);
             return Collections.emptyList();
         }
-        writeToRedis(normalizedMemoryId, memory.getMessagesJson());
-        return parseMessages(memory.getMessagesJson());
+        List<ChatMessage> messages = parseAndValidateMessages(
+                normalizedMemoryId,
+                memory.getMessagesJson(),
+                "mysql"
+        );
+        if (!messages.isEmpty()) {
+            writeToRedis(normalizedMemoryId, memory.getMessagesJson());
+        }
+        return messages;
     }
 
     @Override
@@ -69,6 +81,14 @@ public class PersistentChatMemoryStore implements ChatMemoryStore {
         String normalizedMemoryId = normalizeMemoryId(memoryId);
         if (StringUtils.isBlank(normalizedMemoryId)) {
             return;
+        }
+        try {
+            aiToolArgumentsValidator.validateMessages(messages);
+        } catch (InvalidToolArgumentsException e) {
+            log.warn("Reject invalid AI chat memory before persistence. memoryId={}, toolName={}, error={}",
+                    normalizedMemoryId, e.getToolName(), e.getMessage());
+            deleteMessages(normalizedMemoryId);
+            throw e;
         }
         String messagesJson = sanitizeMessagesJson(ChatMessageSerializer.messagesToJson(messages));
         MemoryIdParts parts = parseMemoryId(normalizedMemoryId);
@@ -144,11 +164,18 @@ public class PersistentChatMemoryStore implements ChatMemoryStore {
         }
     }
 
-    private List<ChatMessage> parseMessages(String messagesJson) {
+    private List<ChatMessage> parseAndValidateMessages(String memoryId, String messagesJson, String source) {
         try {
-            return ChatMessageDeserializer.messagesFromJson(messagesJson);
-        } catch (Exception e) {
-            log.warn("parse AI chat memory failed", e);
+            List<ChatMessage> messages = ChatMessageDeserializer.messagesFromJson(messagesJson);
+            aiToolArgumentsValidator.validateMessages(messages);
+            return messages;
+        } catch (RuntimeException e) {
+            String toolName = e instanceof InvalidToolArgumentsException invalidException
+                    ? invalidException.getToolName()
+                    : null;
+            log.warn("Discard corrupted AI chat memory. memoryId={}, source={}, toolName={}, errorType={}",
+                    memoryId, source, toolName, e.getClass().getSimpleName());
+            deleteMessages(memoryId);
             return Collections.emptyList();
         }
     }
