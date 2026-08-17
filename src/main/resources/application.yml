@@ -50,7 +50,7 @@ sync-up:
       enabled: ${SYNC_UP_AI_AGENT_ENABLED:false}
       provider: ${SYNC_UP_AI_AGENT_PROVIDER:dashscope}
       base-url: ${SYNC_UP_AI_AGENT_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
-      model: ${SYNC_UP_AI_AGENT_MODEL:qwen3.6-flash-2026-04-16}
+      model: ${SYNC_UP_AI_AGENT_MODEL:qwen3.7-max-2026-05-20}
       api-key: ${DASHSCOPE_API_KEY:}
       temperature: ${SYNC_UP_AI_AGENT_TEMPERATURE:0.1}
       timeout-ms: ${SYNC_UP_AI_AGENT_TIMEOUT_MS:60000}

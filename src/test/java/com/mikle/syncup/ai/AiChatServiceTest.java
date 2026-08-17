@@ -321,7 +321,7 @@ class AiChatServiceTest {
         try {
             loginUser = createTestUser();
 
-            AiToolResult result = aiToolRegistry.execute("recommendUsers", new TeamIntent(), loginUser);
+            AiToolResult result = aiToolRegistry.execute("recommend_users", new TeamIntent(), loginUser);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode users = objectMapper.valueToTree(result.getData());
@@ -339,7 +339,7 @@ class AiChatServiceTest {
             String uniqueTag = "stage16_self_" + UUID.randomUUID().toString().replace("-", "");
             loginUser = createTestUser("[\"" + uniqueTag + "\"]");
 
-            AiToolResult result = aiToolRegistry.execute("recommendUsers", new TeamIntent(), loginUser);
+            AiToolResult result = aiToolRegistry.execute("recommend_users", new TeamIntent(), loginUser);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode users = objectMapper.valueToTree(result.getData());
@@ -359,7 +359,7 @@ class AiChatServiceTest {
             loginUser = createTestUser("[\"" + uniqueTag + "\"]");
             matchedUser = createTestUser("[\"" + uniqueTag + "\"]");
 
-            AiToolResult result = aiToolRegistry.execute("recommendUsers", new TeamIntent(), loginUser);
+            AiToolResult result = aiToolRegistry.execute("recommend_users", new TeamIntent(), loginUser);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode users = objectMapper.valueToTree(result.getData());
@@ -504,13 +504,13 @@ class AiChatServiceTest {
 
             JsonNode response = getTeamDetails(loginToken(loginUser), teamId, sessionId, 0);
 
-            Assertions.assertEquals("getTeamDetails", response.at("/data/toolName").asText());
+            Assertions.assertEquals("get_team_details", response.at("/data/toolName").asText());
             Assertions.assertTrue(response.at("/data/success").asBoolean());
             Assertions.assertEquals(teamId, response.at("/data/data/id").asLong());
             Assertions.assertEquals(1, response.at("/data/data/hasJoinNum").asInt());
             Assertions.assertFalse(response.at("/data/data/hasJoin").asBoolean());
             Assertions.assertEquals(1L,
-                    countAuditLogs(loginUser.getId(), sessionId, "tool", "getTeamDetails", "success"));
+                    countAuditLogs(loginUser.getId(), sessionId, "tool", "get_team_details", "success"));
         } finally {
             cleanupUserAndTeams(creator);
             cleanupUserAndTeams(loginUser);
@@ -528,7 +528,7 @@ class AiChatServiceTest {
 
             Assertions.assertEquals(40001, response.at("/code").asInt());
             Assertions.assertEquals(1L,
-                    countAuditLogs(user.getId(), sessionId, "tool", "getTeamDetails", "failed"));
+                    countAuditLogs(user.getId(), sessionId, "tool", "get_team_details", "failed"));
         } finally {
             cleanupUserAndTeams(user);
         }
@@ -545,17 +545,17 @@ class AiChatServiceTest {
 
     @Test
     void stage17Tools_shouldBeRegisteredInWhitelist() {
-        Assertions.assertTrue(aiToolRegistry.contains("searchTeams"));
-        Assertions.assertTrue(aiToolRegistry.contains("recommendUsers"));
-        Assertions.assertTrue(aiToolRegistry.contains("createTeamDraft"));
-        Assertions.assertTrue(aiToolRegistry.contains("prepareDeleteTeam"));
-        Assertions.assertTrue(aiToolRegistry.contains("deleteTeam"));
-        Assertions.assertTrue(aiToolRegistry.contains("listMyCreatedTeams"));
-        Assertions.assertTrue(aiToolRegistry.contains("getMyProfile"));
-        Assertions.assertTrue(aiToolRegistry.contains("updateMyProfile"));
-        Assertions.assertTrue(aiToolRegistry.contains("listMyJoinedTeams"));
-        Assertions.assertTrue(aiToolRegistry.contains("joinTeam"));
-        Assertions.assertTrue(aiToolRegistry.contains("quitTeam"));
+        Assertions.assertTrue(aiToolRegistry.contains("search_teams"));
+        Assertions.assertTrue(aiToolRegistry.contains("recommend_users"));
+        Assertions.assertTrue(aiToolRegistry.contains("create_team_draft"));
+        Assertions.assertTrue(aiToolRegistry.contains("delete_team_confirmation"));
+        Assertions.assertTrue(aiToolRegistry.contains("delete_team"));
+        Assertions.assertTrue(aiToolRegistry.contains("list_my_created_teams"));
+        Assertions.assertTrue(aiToolRegistry.contains("get_my_profile"));
+        Assertions.assertTrue(aiToolRegistry.contains("profile_update_draft"));
+        Assertions.assertTrue(aiToolRegistry.contains("list_my_joined_teams"));
+        Assertions.assertTrue(aiToolRegistry.contains("join_team"));
+        Assertions.assertTrue(aiToolRegistry.contains("quit_team"));
     }
 
     @Test
@@ -566,10 +566,11 @@ class AiChatServiceTest {
                 .map(Tool::name)
                 .collect(Collectors.toSet());
 
-        Assertions.assertFalse(exposedToolNames.contains("joinTeam"));
-        Assertions.assertFalse(exposedToolNames.contains("quitTeam"));
-        Assertions.assertFalse(exposedToolNames.contains("deleteTeam"));
-        Assertions.assertTrue(exposedToolNames.contains("prepareDeleteTeam"));
+        Assertions.assertFalse(exposedToolNames.contains("join_team"));
+        Assertions.assertFalse(exposedToolNames.contains("quit_team"));
+        Assertions.assertFalse(exposedToolNames.contains("delete_team"));
+        Assertions.assertTrue(exposedToolNames.contains("delete_team_confirmation"));
+        Assertions.assertTrue(exposedToolNames.contains(AiAssistantTools.SHOW_MY_PROFILE_CARD_TOOL_NAME));
     }
 
     @Test
@@ -583,7 +584,7 @@ class AiChatServiceTest {
             userService.updateById(updateUser);
             user.setCity("西安");
 
-            AiToolResult result = aiToolRegistry.execute("getMyProfile", new TeamIntent(), user);
+            AiToolResult result = aiToolRegistry.execute("get_my_profile", new TeamIntent(), user);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode profile = objectMapper.valueToTree(result.getData());
@@ -610,12 +611,12 @@ class AiChatServiceTest {
 
             TeamIntent joinIntent = new TeamIntent();
             joinIntent.setTeamId(teamId);
-            AiToolResult joinResult = aiToolRegistry.execute("joinTeam", joinIntent, loginUser);
+            AiToolResult joinResult = aiToolRegistry.execute("join_team", joinIntent, loginUser);
 
             Assertions.assertTrue(joinResult.isSuccess());
             Assertions.assertEquals(1L, countUserTeam(loginUser.getId(), teamId));
 
-            AiToolResult listResult = aiToolRegistry.execute("listMyJoinedTeams", new TeamIntent(), loginUser);
+            AiToolResult listResult = aiToolRegistry.execute("list_my_joined_teams", new TeamIntent(), loginUser);
             JsonNode joinedTeams = objectMapper.valueToTree(listResult.getData());
             Assertions.assertTrue(joinedTeams.isArray());
             Assertions.assertTrue(joinedTeams.toString().contains(String.valueOf(teamId)));
@@ -623,7 +624,7 @@ class AiChatServiceTest {
 
             TeamIntent quitIntent = new TeamIntent();
             quitIntent.setTeamId(teamId);
-            AiToolResult quitResult = aiToolRegistry.execute("quitTeam", quitIntent, loginUser);
+            AiToolResult quitResult = aiToolRegistry.execute("quit_team", quitIntent, loginUser);
 
             Assertions.assertTrue(quitResult.isSuccess());
             Assertions.assertEquals(0L, countUserTeam(loginUser.getId(), teamId));
@@ -642,7 +643,7 @@ class AiChatServiceTest {
 
             BusinessException exception = Assertions.assertThrows(
                     BusinessException.class,
-                    () -> aiToolRegistry.execute("joinTeam", new TeamIntent(), currentUser)
+                    () -> aiToolRegistry.execute("join_team", new TeamIntent(), currentUser)
             );
 
             Assertions.assertNotNull(exception);
@@ -661,7 +662,7 @@ class AiChatServiceTest {
             long ownerTeamId = createStructuredTeam(owner, "羽毛球", "西安", new BigDecimal("45.00"), 6);
             long otherTeamId = createStructuredTeam(other, "健身", "西安", new BigDecimal("30.00"), 5);
 
-            AiToolResult result = aiToolRegistry.execute("listMyCreatedTeams", new TeamIntent(), owner);
+            AiToolResult result = aiToolRegistry.execute("list_my_created_teams", new TeamIntent(), owner);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode teams = objectMapper.valueToTree(result.getData());
@@ -812,7 +813,7 @@ class AiChatServiceTest {
             TeamIntent intent = new TeamIntent();
             intent.setTeamId(teamId);
 
-            AiToolResult result = aiToolRegistry.execute("prepareDeleteTeam", intent, user);
+            AiToolResult result = aiToolRegistry.execute("delete_team_confirmation", intent, user);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode confirmation = objectMapper.valueToTree(result.getData());
@@ -832,7 +833,7 @@ class AiChatServiceTest {
             long teamId = createStructuredTeam(user, "桌游", "西安", BigDecimal.ZERO, 6);
             aiAgentToolContext.start(UUID.randomUUID().toString(), user);
 
-            aiAssistantTools.prepareDeleteTeam(teamId);
+            String res = aiAssistantTools.deleteTeamConfirmation(teamId);
 
             AiAgentToolContext.State state = aiAgentToolContext.snapshot();
             Assertions.assertNotNull(state.getDeleteConfirmation());
@@ -857,7 +858,7 @@ class AiChatServiceTest {
             Assertions.assertEquals(teamId, response.at("/data/data/teamId").asLong());
             Assertions.assertEquals(0, countTeamsCreatedBy(user.getId()));
             Assertions.assertEquals(1L,
-                    countAuditLogs(user.getId(), sessionId, "tool", "deleteTeam", "success"));
+                    countAuditLogs(user.getId(), sessionId, "tool", "delete_team", "success"));
         } finally {
             cleanupUserAndTeams(user);
         }
@@ -878,7 +879,7 @@ class AiChatServiceTest {
             Assertions.assertEquals(40101, response.at("/code").asInt());
             Assertions.assertEquals(1, countTeamsCreatedBy(owner.getId()));
             Assertions.assertEquals(1L,
-                    countAuditLogs(other.getId(), sessionId, "tool", "deleteTeam", "failed"));
+                    countAuditLogs(other.getId(), sessionId, "tool", "delete_team", "failed"));
         } finally {
             cleanupUserAndTeams(owner);
             cleanupUserAndTeams(other);

@@ -2,6 +2,8 @@ create database if not exists sync_up_db;
 
 use sync_up_db;
 
+# TRUNCATE TABLE ai_tool_call_log;
+
 -- 用户表
 create table user
 (

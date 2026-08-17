@@ -19,7 +19,7 @@ import java.util.List;
 @Component
 public class GetTeamDetailsTool implements AiTool {
 
-    public static final String TOOL_NAME = "getTeamDetails";
+    public static final String TOOL_NAME = "get_team_details";
 
     @Resource
     private TeamService teamService;

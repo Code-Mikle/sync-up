@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.vo.AiTeamDeleteConfirmationVO;
+import com.mikle.syncup.ai.model.vo.AiUiBlockVO;
 import com.mikle.syncup.ai.model.vo.TeamDraftVO;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.service.AiTeamDraftService;
@@ -14,9 +15,9 @@ import com.mikle.syncup.ai.tool.GetTeamDetailsTool;
 import com.mikle.syncup.ai.tool.ListMyJoinedTeamsTool;
 import com.mikle.syncup.ai.tool.ListMyCreatedTeamsTool;
 import com.mikle.syncup.ai.tool.RecommendUsersTool;
-import com.mikle.syncup.ai.tool.PrepareDeleteTeamTool;
+import com.mikle.syncup.ai.tool.DeleteTeamConfirmationTool;
 import com.mikle.syncup.ai.tool.SearchTeamsTool;
-import com.mikle.syncup.ai.tool.PrepareProfileUpdateTool;
+import com.mikle.syncup.ai.tool.ProfileUpdateDraftTool;
 import com.mikle.syncup.model.domain.User;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -33,6 +34,8 @@ import java.util.Date;
 
 @Component
 public class AiAssistantTools {
+
+    public static final String SHOW_MY_PROFILE_CARD_TOOL_NAME = "show_my_profile_card";
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -64,7 +67,7 @@ public class AiAssistantTools {
             @P(value = "每人最高预算", required = false) Double budgetMax,
             @P(value = "技能熟练度，分为入门, 中等, 熟练。", required = false) String skillLevel) {
         TeamIntent intent = buildIntent(activityCategory, activityType, city, district, startTime, null, budgetMax, skillLevel, null);
-        return executeAndRemember(SearchTeamsTool.TOOL_NAME, intent);
+        return executeAndRemember(SearchTeamsTool.TOOL_NAME, intent, AiUiBlockVO.TEAM_LIST, "search");
     }
 
     @Tool(
@@ -74,7 +77,7 @@ public class AiAssistantTools {
     public String recommendUsers() {
         TeamIntent intent = new TeamIntent();
         intent.setTeamRelated(true);
-        return executeAndRemember(RecommendUsersTool.TOOL_NAME, intent);
+        return executeAndRemember(RecommendUsersTool.TOOL_NAME, intent, AiUiBlockVO.USER_RECOMMENDATIONS, null);
     }
 
     @Tool(name = GetTeamDetailsTool.TOOL_NAME, value = "根据队伍 id 获取队伍的公开详情")
@@ -89,14 +92,14 @@ public class AiAssistantTools {
     public String listMyCreatedTeams() {
         TeamIntent intent = new TeamIntent();
         intent.setTeamRelated(true);
-        return executeAndRemember(ListMyCreatedTeamsTool.TOOL_NAME, intent);
+        return executeAndRemember(ListMyCreatedTeamsTool.TOOL_NAME, intent, AiUiBlockVO.TEAM_LIST, "created");
     }
 
     @Tool(
-            name = PrepareDeleteTeamTool.TOOL_NAME,
+            name = DeleteTeamConfirmationTool.TOOL_NAME,
             value = "为删除当前用户创建的队伍生成待确认卡片，不执行实际删除。仅在用户明确要求删除、取消或移除自己创建的队伍，" +
                     "并且能够确定队伍 ID 时调用。无法确定目标队伍时，先查询当前用户创建的队伍或向用户确认。")
-    public String prepareDeleteTeam(
+    public String deleteTeamConfirmation(
             @P(value = "要删除的队伍 ID。必须来自用户明确输入、当前对话中的已确认结果或查询工具返回结果，不得编造。", required = true)
             Long teamId)
     {
@@ -105,34 +108,56 @@ public class AiAssistantTools {
         intent.setTeamRelated(true);
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
         state.setIntent(mergeIntent(state.getIntent(), intent));
-        AiToolResult result = aiToolExecutionService.execute(PrepareDeleteTeamTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
+        AiToolResult result = aiToolExecutionService.execute(DeleteTeamConfirmationTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
         if (result.getData() instanceof AiTeamDeleteConfirmationVO confirmation) {
             state.setDeleteConfirmation(confirmation);
+            state.getUiBlocks().add(AiUiBlockVO.of(AiUiBlockVO.TEAM_DELETE_CONFIRMATION, confirmation));
         }
         state.getToolResults().add(result);
         return toJson(result);
     }
 
-    @Tool(name = ListMyJoinedTeamsTool.TOOL_NAME, value = "查询当前登录用户创建的队伍")
+    @Tool(name = ListMyJoinedTeamsTool.TOOL_NAME, value = "查询当前登录用户已经加入的队伍")
     public String listMyJoinedTeams() {
         TeamIntent intent = new TeamIntent();
         intent.setTeamRelated(true);
-        return executeAndRemember(ListMyJoinedTeamsTool.TOOL_NAME, intent);
+        return executeAndRemember(ListMyJoinedTeamsTool.TOOL_NAME, intent, AiUiBlockVO.TEAM_LIST, "joined");
     }
 
-    @Tool(name = GetMyProfileTool.TOOL_NAME, value = "获取当前登录用户的公开资料字段（包含城市）")
+    @Tool(
+            name = GetMyProfileTool.TOOL_NAME,
+            value = "读取当前登录用户的公开资料，用于回答昵称、性别、城市、标签等具体字段问题。" +
+                    "该工具只提供回答所需数据，不展示完整资料卡片；用户明确要求查看完整资料卡片时改用 show_my_profile_card。")
     public String getMyProfile() {
         return executeAndRemember(GetMyProfileTool.TOOL_NAME, new TeamIntent());
     }
 
     @Tool(
-            name = PrepareProfileUpdateTool.TOOL_NAME,
+            name = SHOW_MY_PROFILE_CARD_TOOL_NAME,
+            value = "读取并展示当前登录用户的完整公开资料卡片。仅当用户明确要求查看、展示或打开完整个人资料时调用；" +
+                    "询问昵称、性别、城市等单个字段时不要调用。")
+    public String showMyProfileCard() {
+        return executeAndRemember(
+                GetMyProfileTool.TOOL_NAME,
+                new TeamIntent(),
+                AiUiBlockVO.PROFILE_CARD,
+                null
+        );
+    }
+
+    @Tool(
+            name = ProfileUpdateDraftTool.TOOL_NAME,
             value = "根据用户明确提出的修改内容，生成当前用户公开资料的待确认修改草稿。" +
                     "该工具不会执行正式写入。仅当用户明确要求修改自己的公开资料或个人简介时调用。")
-    public String prepareMyProfileUpdate(@P(value = "用户明确要求保存的公开资料内容。不得包含手机号、邮箱、密码、Token、API Key 等敏感信息。", required = true) String profileText) {
+    public String myProfileUpdateDraft(@P(value = "用户明确要求保存的公开资料内容。不得包含手机号、邮箱、密码、Token、API Key 等敏感信息。", required = true) String profileText) {
         TeamIntent intent = new TeamIntent();
         intent.setProfileText(profileText);
-        return executeAndRemember(PrepareProfileUpdateTool.TOOL_NAME, intent);
+        return executeAndRemember(
+                ProfileUpdateDraftTool.TOOL_NAME,
+                intent,
+                AiUiBlockVO.PROFILE_UPDATE_CONFIRMATION,
+                null
+        );
     }
 
     @Tool(
@@ -169,6 +194,7 @@ public class AiAssistantTools {
             TeamDraftVO savedDraft = aiTeamDraftService.saveDraft(draft, state.getLoginUser(), state.getSessionId());
             result.setData(savedDraft);
             state.setDraft(savedDraft);
+            state.getUiBlocks().add(AiUiBlockVO.of(AiUiBlockVO.TEAM_DRAFT_CONFIRMATION, savedDraft));
         }
         state.getToolResults().add(result);
         return toJson(result);
@@ -228,10 +254,20 @@ public class AiAssistantTools {
     }
 
     private String executeAndRemember(String toolName, TeamIntent intent) {
+        return executeAndRemember(toolName, intent, null, null);
+    }
+
+    private String executeAndRemember(String toolName,
+                                      TeamIntent intent,
+                                      String uiBlockType,
+                                      String uiBlockVariant) {
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
         state.setIntent(mergeIntent(state.getIntent(), intent));
         AiToolResult result = aiToolExecutionService.execute(toolName, intent, state.getLoginUser(), state.getSessionId());
         state.getToolResults().add(result);
+        if (result.isSuccess() && uiBlockType != null) {
+            state.getUiBlocks().add(AiUiBlockVO.of(uiBlockType, uiBlockVariant, result.getData()));
+        }
         return toJson(result);
     }
 

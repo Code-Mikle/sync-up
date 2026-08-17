@@ -15,7 +15,7 @@ import java.util.Map;
 @Component
 public class QuitTeamTool implements AiTool {
 
-    public static final String TOOL_NAME = "quitTeam";
+    public static final String TOOL_NAME = "quit_team";
 
     @Resource
     private TeamService teamService;

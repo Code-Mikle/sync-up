@@ -2,6 +2,7 @@ package com.mikle.syncup.ai.agent;
 
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.vo.AiTeamDeleteConfirmationVO;
+import com.mikle.syncup.ai.model.vo.AiUiBlockVO;
 import com.mikle.syncup.ai.model.vo.TeamDraftVO;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.model.domain.User;
@@ -42,6 +43,7 @@ public class AiAgentToolContext {
         snapshot.setSessionId(state.getSessionId());
         snapshot.setLoginUser(state.getLoginUser());
         snapshot.getToolResults().addAll(state.getToolResults());
+        snapshot.getUiBlocks().addAll(state.getUiBlocks());
         snapshot.setDraft(state.getDraft());
         snapshot.setDeleteConfirmation(state.getDeleteConfirmation());
         snapshot.setIntent(state.getIntent());
@@ -60,6 +62,8 @@ public class AiAgentToolContext {
         private User loginUser;
 
         private List<AiToolResult> toolResults = new ArrayList<>();
+
+        private List<AiUiBlockVO> uiBlocks = new ArrayList<>();
 
         private TeamDraftVO draft;
 

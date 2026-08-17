@@ -117,11 +117,26 @@ export type AiToolResult = {
     data?: unknown;
 };
 
+export type AiUiBlockType =
+    | "team_list"
+    | "user_recommendations"
+    | "profile_card"
+    | "profile_update_confirmation"
+    | "team_draft_confirmation"
+    | "team_delete_confirmation";
+
+export type AiUiBlock = {
+    type: AiUiBlockType;
+    variant?: "search" | "joined" | "created" | string;
+    data?: unknown;
+};
+
 export type AiChatResponse = {
     sessionId: string;
     reply: string;
     intent?: TeamIntent;
     toolResults?: AiToolResult[];
+    uiBlocks?: AiUiBlock[];
     draft?: TeamDraft;
     deleteConfirmation?: AiTeamDeleteConfirmation;
     needClarification?: boolean;

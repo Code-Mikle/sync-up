@@ -62,36 +62,32 @@
             </article>
 
             <article
-                v-for="toolResult in getVisibleToolResults(message.response)"
-                :key="`${message.id}-${toolResult.toolName}`"
+                v-for="(uiBlock, index) in getContentUiBlocks(message.response)"
+                :key="`${message.id}-${uiBlock.type}-${uiBlock.variant || index}`"
                 class="tool-card"
-                :class="`tool-card--${toolResult.toolName}`"
+                :class="`tool-card--${uiBlock.type}`"
             >
               <header>
-                <van-icon :name="getToolIcon(toolResult.toolName)" size="18" />
-                <h2>{{ getToolTitle(toolResult.toolName) }}</h2>
-                <van-tag round :type="toolResult.success ? 'success' : 'danger'">
-                  {{ toolResult.success ? "完成" : "失败" }}
-                </van-tag>
+                <van-icon :name="getUiBlockIcon(uiBlock)" size="18" />
+                <h2>{{ getUiBlockTitle(uiBlock) }}</h2>
               </header>
-              <p v-if="shouldShowToolSummary(toolResult)">{{ getToolSummary(toolResult) }}</p>
 
-              <div class="profile-result" v-if="toolResult.toolName === 'getMyProfile'">
+              <div class="profile-result" v-if="uiBlock.type === 'profile_card'">
                 <div class="profile-result__avatar">
-                  <img v-if="getProfileData(toolResult)?.avatarUrl" :src="getProfileData(toolResult)?.avatarUrl" alt="" />
+                  <img v-if="getProfileData(uiBlock)?.avatarUrl" :src="getProfileData(uiBlock)?.avatarUrl" alt="" />
                   <van-icon v-else name="contact-o" size="22" />
                 </div>
                 <div class="profile-result__main">
-                  <h3>{{ getProfileData(toolResult)?.username || "未命名用户" }}</h3>
-                  <p>{{ getProfileData(toolResult)?.profile || "还没有填写自我介绍" }}</p>
+                  <h3>{{ getProfileData(uiBlock)?.username || "未命名用户" }}</h3>
+                  <p>{{ getProfileData(uiBlock)?.profile || "还没有填写自我介绍" }}</p>
                   <div class="profile-result__meta">
-                    <span v-if="getProfileData(toolResult)?.planetCode">星球编号 {{ getProfileData(toolResult)?.planetCode }}</span>
-                    <span v-if="getProfileData(toolResult)?.structuredProfile?.city">{{ getProfileData(toolResult)?.structuredProfile?.city }}</span>
-                    <span v-if="getProfileActivities(toolResult).length">{{ getProfileActivities(toolResult).join("、") }}</span>
+                    <span v-if="getProfileData(uiBlock)?.planetCode">星球编号 {{ getProfileData(uiBlock)?.planetCode }}</span>
+                    <span v-if="getProfileData(uiBlock)?.structuredProfile?.city">{{ getProfileData(uiBlock)?.structuredProfile?.city }}</span>
+                    <span v-if="getProfileActivities(uiBlock).length">{{ getProfileActivities(uiBlock).join("、") }}</span>
                   </div>
-                  <div class="profile-result__tags" v-if="formatUserTags(getProfileData(toolResult)?.tags).length">
+                  <div class="profile-result__tags" v-if="formatUserTags(getProfileData(uiBlock)?.tags).length">
                     <van-tag
-                        v-for="tag in formatUserTags(getProfileData(toolResult)?.tags)"
+                        v-for="tag in formatUserTags(getProfileData(uiBlock)?.tags)"
                         :key="`profile-${tag}`"
                         round
                     >
@@ -101,33 +97,33 @@
                 </div>
               </div>
 
-              <div class="operation-result" v-else-if="isOperationTool(toolResult.toolName)">
-                <van-icon :name="toolResult.success ? 'checked' : 'warning-o'" size="22" />
+              <div class="operation-result" v-else-if="uiBlock.type === 'profile_update_confirmation'">
+                <van-icon name="edit" size="22" />
                 <div>
-                  <h3>{{ getOperationTitle(toolResult) }}</h3>
-                  <p>{{ getOperationDescription(toolResult) }}</p>
-                  <div class="profile-draft-actions" v-if="isPendingProfileDraft(toolResult)">
+                  <h3>{{ getProfileUpdateTitle(uiBlock) }}</h3>
+                  <p>{{ getProfileUpdateDescription(uiBlock) }}</p>
+                  <div class="profile-draft-actions" v-if="isPendingProfileDraft(uiBlock)">
                     <van-button
                         size="small"
                         round
                         type="primary"
-                        :loading="processingProfileDraftId === getProfileDraftId(toolResult)"
-                        @click="confirmProfileDraft(toolResult)"
+                        :loading="processingProfileDraftId === getProfileDraftId(uiBlock)"
+                        @click="confirmProfileDraft(uiBlock)"
                     >确认更新</van-button>
                     <van-button
                         size="small"
                         round
                         plain
-                        :disabled="processingProfileDraftId === getProfileDraftId(toolResult)"
-                        @click="rejectProfileDraft(toolResult)"
+                        :disabled="processingProfileDraftId === getProfileDraftId(uiBlock)"
+                        @click="rejectProfileDraft(uiBlock)"
                     >拒绝</van-button>
                   </div>
                 </div>
               </div>
 
-              <div class="team-result-list" v-else-if="isTeamListTool(toolResult.toolName)">
+              <div class="team-result-list" v-else-if="uiBlock.type === 'team_list'">
                 <article
-                    v-for="team in getTeams(toolResult)"
+                    v-for="team in getTeams(uiBlock)"
                     :key="team.id"
                     class="team-result-card"
                 >
@@ -176,15 +172,15 @@
                   </div>
                 </article>
                 <van-empty
-                    v-if="getTeams(toolResult).length === 0"
+                    v-if="getTeams(uiBlock).length === 0"
                     image-size="64"
                     description="暂时没有找到符合条件的队伍"
                 />
               </div>
 
-              <div class="user-recommend-list" v-else-if="toolResult.toolName === 'recommendUsers'">
+              <div class="user-recommend-list" v-else-if="uiBlock.type === 'user_recommendations'">
                 <article
-                    v-for="user in getRecommendedUsers(toolResult)"
+                    v-for="user in getRecommendedUsers(uiBlock)"
                     :key="user.id"
                     class="user-recommend-card"
                 >
@@ -212,34 +208,34 @@
                   </div>
                 </article>
                 <van-empty
-                    v-if="getRecommendedUsers(toolResult).length === 0"
+                    v-if="getRecommendedUsers(uiBlock).length === 0"
                     image-size="64"
                     description="暂时没有推荐到合适用户"
                 />
               </div>
             </article>
 
-            <article class="draft-card" v-if="message.response.draft">
+            <article class="draft-card" v-if="getTeamDraft(message.response)">
               <header>
                 <van-icon name="records-o" size="18" />
                 <h2>队伍草稿</h2>
               </header>
               <div class="draft-card__body">
-                <h3>{{ message.response.draft.name || "未命名队伍" }}</h3>
-                <p>{{ message.response.draft.description || "确认前不会写入业务表。" }}</p>
+                <h3>{{ getTeamDraft(message.response)?.name || "未命名队伍" }}</h3>
+                <p>{{ getTeamDraft(message.response)?.description || "确认前不会写入业务表。" }}</p>
                 <div class="draft-card__grid">
-                  <span>大类：{{ formatActivityCategory(message.response.draft.activityCategory) || "待补充" }}</span>
-                  <span>活动：{{ message.response.draft.activityType || "待补充" }}</span>
-                  <span>城市：{{ message.response.draft.city || "待补充" }}</span>
-                  <span>人数：{{ formatCount(message.response.draft.maxNum) }}</span>
-                  <span>预算：{{ formatBudget(message.response.draft.budgetPerPerson) }}</span>
-                  <span>时间：{{ formatDate(message.response.draft.startTime) }}</span>
-                  <span>有效期：{{ formatDate(message.response.draft.expiresAt) }}</span>
+                  <span>大类：{{ formatActivityCategory(getTeamDraft(message.response)?.activityCategory) || "待补充" }}</span>
+                  <span>活动：{{ getTeamDraft(message.response)?.activityType || "待补充" }}</span>
+                  <span>城市：{{ getTeamDraft(message.response)?.city || "待补充" }}</span>
+                  <span>人数：{{ formatCount(getTeamDraft(message.response)?.maxNum) }}</span>
+                  <span>预算：{{ formatBudget(getTeamDraft(message.response)?.budgetPerPerson) }}</span>
+                  <span>时间：{{ formatDate(getTeamDraft(message.response)?.startTime) }}</span>
+                  <span>有效期：{{ formatDate(getTeamDraft(message.response)?.expiresAt) }}</span>
                 </div>
               </div>
-              <div class="draft-card__status" v-if="getConfirmedTeamId(message.response.draft.draftId)">
+              <div class="draft-card__status" v-if="getConfirmedTeamId(getTeamDraft(message.response)?.draftId)">
                 <van-icon name="checked" />
-                <span>已创建队伍 #{{ getConfirmedTeamId(message.response.draft.draftId) }}</span>
+                <span>已创建队伍 #{{ getConfirmedTeamId(getTeamDraft(message.response)?.draftId) }}</span>
                 <van-button size="small" round plain @click="goTeamPage">
                   查看
                 </van-button>
@@ -253,47 +249,47 @@
                     size="small"
                     round
                     type="primary"
-                    :loading="isConfirmingDraft(message.response.draft.draftId)"
-                    @click="confirmDraft(message.response.draft.draftId)"
+                    :loading="isConfirmingDraft(getTeamDraft(message.response)?.draftId)"
+                    @click="confirmDraft(getTeamDraft(message.response)?.draftId)"
                 >
                   确认创建
                 </van-button>
               </div>
             </article>
 
-            <article class="delete-card" v-if="message.response.deleteConfirmation">
+            <article class="delete-card" v-if="getDeleteConfirmation(message.response)">
               <header>
                 <van-icon name="delete-o" size="18" />
                 <h2>删除队伍确认</h2>
               </header>
               <div class="draft-card__body">
-                <h3>{{ message.response.deleteConfirmation.name || `队伍 #${message.response.deleteConfirmation.teamId}` }}</h3>
-                <p>{{ message.response.deleteConfirmation.description || "确认后会删除该队伍。" }}</p>
+                <h3>{{ getDeleteConfirmation(message.response)?.name || `队伍 #${getDeleteConfirmation(message.response)?.teamId}` }}</h3>
+                <p>{{ getDeleteConfirmation(message.response)?.description || "确认后会删除该队伍。" }}</p>
                 <div class="draft-card__grid">
-                  <span>编号：#{{ message.response.deleteConfirmation.teamId }}</span>
-                  <span>大类：{{ formatActivityCategory(message.response.deleteConfirmation.activityCategory) || "待补充" }}</span>
-                  <span>活动：{{ message.response.deleteConfirmation.activityType || "待补充" }}</span>
-                  <span>地点：{{ formatDeleteLocation(message.response.deleteConfirmation) }}</span>
-                  <span>人数：{{ formatCount(message.response.deleteConfirmation.maxNum) }}</span>
-                  <span>已加入：{{ message.response.deleteConfirmation.hasJoinNum ?? 0 }} 人</span>
-                  <span>时间：{{ formatDate(message.response.deleteConfirmation.startTime) }}</span>
+                  <span>编号：#{{ getDeleteConfirmation(message.response)?.teamId }}</span>
+                  <span>大类：{{ formatActivityCategory(getDeleteConfirmation(message.response)?.activityCategory) || "待补充" }}</span>
+                  <span>活动：{{ getDeleteConfirmation(message.response)?.activityType || "待补充" }}</span>
+                  <span>地点：{{ formatDeleteLocation(getDeleteConfirmation(message.response)!) }}</span>
+                  <span>人数：{{ formatCount(getDeleteConfirmation(message.response)?.maxNum) }}</span>
+                  <span>已加入：{{ getDeleteConfirmation(message.response)?.hasJoinNum ?? 0 }} 人</span>
+                  <span>时间：{{ formatDate(getDeleteConfirmation(message.response)?.startTime) }}</span>
                 </div>
               </div>
-              <div class="draft-card__status delete-card__status" v-if="isTeamDeleted(message.response.deleteConfirmation.teamId)">
+              <div class="draft-card__status delete-card__status" v-if="isTeamDeleted(getDeleteConfirmation(message.response)!.teamId)">
                 <van-icon name="checked" />
-                <span>已删除队伍 #{{ message.response.deleteConfirmation.teamId }}</span>
+                <span>已删除队伍 #{{ getDeleteConfirmation(message.response)?.teamId }}</span>
               </div>
               <div class="draft-card__actions delete-card__actions" v-else>
                 <p>
                   <van-icon name="warning-o" />
-                  {{ message.response.deleteConfirmation.warning || "确认后会删除该队伍，并移除已有成员关系。" }}
+                  {{ getDeleteConfirmation(message.response)?.warning || "确认后会删除该队伍，并移除已有成员关系。" }}
                 </p>
                 <van-button
                     size="small"
                     round
                     type="danger"
-                    :loading="isDeletingTeam(message.response.deleteConfirmation.teamId)"
-                    @click="confirmDeleteTeam(message.response.deleteConfirmation.teamId)"
+                    :loading="isDeletingTeam(getDeleteConfirmation(message.response)!.teamId)"
+                    @click="confirmDeleteTeam(getDeleteConfirmation(message.response)!.teamId)"
                 >
                   确认删除
                 </van-button>
@@ -350,8 +346,10 @@ import {
   AiTeamDeleteConfirmation,
   AiTeamDraftConfirmResponse,
   AiToolResult,
+  AiUiBlock,
   AiUserProfileData,
-  AiUserRecommendation
+  AiUserRecommendation,
+  TeamDraft
 } from "../models/ai";
 import {TeamType} from "../models/team";
 import {UserType} from "../models/user";
@@ -636,50 +634,108 @@ const loadTeamDetails = async (teamId?: number) => {
   }
 };
 
-const getVisibleToolResults = (response: AiChatResponse) => {
-  return (response.toolResults ?? []).filter(toolResult => {
-    if (toolResult.toolName === 'createTeamDraft' && toolResult.success && response.draft) {
-      return false;
-    }
-    if (toolResult.toolName === 'prepareDeleteTeam' && toolResult.success && response.deleteConfirmation) {
-      return false;
-    }
-    return true;
-  });
+const CONTENT_UI_BLOCK_TYPES = new Set<AiUiBlock['type']>([
+  'team_list',
+  'user_recommendations',
+  'profile_card',
+  'profile_update_confirmation',
+]);
+
+const LEGACY_TOOL_NAME_ALIASES: Record<string, string> = {
+  searchTeams: 'search_teams',
+  listMyJoinedTeams: 'list_my_joined_teams',
+  listMyCreatedTeams: 'list_my_created_teams',
+  recommendUsers: 'recommend_users',
+  updateMyProfile: 'profile_update_draft',
+  prepareProfileUpdate: 'profile_update_draft',
+  prepare_profile_update: 'profile_update_draft',
+  createTeamDraft: 'create_team_draft',
+  prepareDeleteTeam: 'delete_team_confirmation',
+};
+
+const normalizeLegacyToolName = (toolName: string) => {
+  return LEGACY_TOOL_NAME_ALIASES[toolName] || toolName;
+};
+
+const legacyToolResultToUiBlock = (toolResult: AiToolResult): AiUiBlock | undefined => {
+  if (!toolResult.success) {
+    return undefined;
+  }
+  switch (normalizeLegacyToolName(toolResult.toolName)) {
+    case 'search_teams':
+      return {type: 'team_list', variant: 'search', data: toolResult.data};
+    case 'list_my_joined_teams':
+      return {type: 'team_list', variant: 'joined', data: toolResult.data};
+    case 'list_my_created_teams':
+      return {type: 'team_list', variant: 'created', data: toolResult.data};
+    case 'recommend_users':
+      return {type: 'user_recommendations', data: toolResult.data};
+    case 'profile_update_draft':
+      return {type: 'profile_update_confirmation', data: toolResult.data};
+    default:
+      return undefined;
+  }
+};
+
+const getUiBlocks = (response: AiChatResponse): AiUiBlock[] => {
+  if (response.uiBlocks?.length) {
+    return response.uiBlocks;
+  }
+
+  const blocks = (response.toolResults ?? [])
+      .map(legacyToolResultToUiBlock)
+      .filter((block): block is AiUiBlock => Boolean(block));
+  if (response.draft) {
+    blocks.push({type: 'team_draft_confirmation', data: response.draft});
+  }
+  if (response.deleteConfirmation) {
+    blocks.push({type: 'team_delete_confirmation', data: response.deleteConfirmation});
+  }
+  return blocks;
+};
+
+const getContentUiBlocks = (response: AiChatResponse) => {
+  return getUiBlocks(response).filter(block => CONTENT_UI_BLOCK_TYPES.has(block.type));
+};
+
+const findUiBlock = (response: AiChatResponse, type: AiUiBlock['type']) => {
+  return getUiBlocks(response).find(block => block.type === type);
+};
+
+const getTeamDraft = (response: AiChatResponse): TeamDraft | undefined => {
+  const block = findUiBlock(response, 'team_draft_confirmation');
+  if (block?.data && typeof block.data === 'object' && !Array.isArray(block.data)) {
+    return block.data as TeamDraft;
+  }
+  return response.draft;
+};
+
+const getDeleteConfirmation = (response: AiChatResponse): AiTeamDeleteConfirmation | undefined => {
+  const block = findUiBlock(response, 'team_delete_confirmation');
+  if (block?.data && typeof block.data === 'object' && !Array.isArray(block.data)) {
+    return block.data as AiTeamDeleteConfirmation;
+  }
+  return response.deleteConfirmation;
 };
 
 const normalizeAssistantReply = (response: AiChatResponse) => {
-  const toolNames = (response.toolResults ?? []).map(tool => tool.toolName);
-  if (response.deleteConfirmation) {
+  const reply = cleanAssistantText(response.reply);
+  if (reply) {
+    return reply;
+  }
+  if (getDeleteConfirmation(response)) {
     return '我找到了要删除的队伍，请确认后再删除。';
   }
-  if (toolNames.includes('getMyProfile')) {
-    return '这是你的个人资料。';
-  }
-  if (toolNames.includes('updateMyProfile')) {
-    return '我整理了一份个人画像草稿，确认后才会更新资料。';
-  }
-  if (toolNames.includes('listMyJoinedTeams')) {
-    const teams = getTeamsByToolName(response, 'listMyJoinedTeams');
-    return teams.length ? `你目前加入了 ${teams.length} 个队伍。` : '你暂时还没有加入队伍。';
-  }
-  if (toolNames.includes('listMyCreatedTeams')) {
-    const teams = getTeamsByToolName(response, 'listMyCreatedTeams');
-    return teams.length ? `你目前创建了 ${teams.length} 个队伍。` : '你暂时还没有创建队伍。';
-  }
-  if (toolNames.includes('joinTeam')) {
-    return '已帮你加入队伍。';
-  }
-  if (toolNames.includes('quitTeam')) {
-    return '已帮你退出队伍。';
-  }
-  if (response.draft) {
+  if (getTeamDraft(response)) {
     return '我整理了一份队伍草稿，确认后才会正式创建。';
   }
-  if (response.needClarification) {
-    return cleanAssistantText(response.reply) || '我还需要你补充一点信息。';
+  if (findUiBlock(response, 'profile_update_confirmation')) {
+    return '我整理了一份个人画像草稿，确认后才会更新资料。';
   }
-  return cleanAssistantText(response.reply) || '我已经处理好了。';
+  if (response.needClarification) {
+    return '我还需要你补充一点信息。';
+  }
+  return '我已经处理好了。';
 };
 
 const cleanAssistantText = (text?: string) => {
@@ -698,171 +754,116 @@ const shouldShowIntentCard = (response: AiChatResponse) => {
   if (!response.intent?.teamRelated) {
     return false;
   }
-  const toolNames = (response.toolResults ?? []).map(tool => tool.toolName);
-  const cardWorthyTools = ['searchTeams', 'createTeamDraft', 'prepareDeleteTeam'];
+  const uiBlocks = getUiBlocks(response);
   return Boolean(response.needClarification)
-      || Boolean(response.draft)
-      || Boolean(response.deleteConfirmation)
-      || toolNames.some(toolName => cardWorthyTools.includes(toolName));
+      || uiBlocks.some(block => [
+        'team_list',
+        'team_draft_confirmation',
+        'team_delete_confirmation',
+      ].includes(block.type));
 };
 
-const isTeamListTool = (toolName: string) => {
-  return ['searchTeams', 'listMyJoinedTeams', 'listMyCreatedTeams'].includes(toolName);
-};
-
-const isOperationTool = (toolName: string) => {
-  return ['joinTeam', 'quitTeam', 'updateMyProfile'].includes(toolName);
-};
-
-const shouldShowToolSummary = (toolResult: AiToolResult) => {
-  if (toolResult.toolName === 'createTeamDraft') {
-    return !toolResult.success;
+const getUiBlockTitle = (uiBlock: AiUiBlock) => {
+  if (uiBlock.type === 'team_list') {
+    return {
+      joined: '我加入的队伍',
+      created: '我创建的队伍',
+      search: '队伍查询',
+    }[uiBlock.variant || 'search'] || '队伍列表';
   }
-  return !['getMyProfile', 'joinTeam', 'quitTeam', 'updateMyProfile'].includes(toolResult.toolName);
-};
-
-const getToolSummary = (toolResult: AiToolResult) => {
-  if (!toolResult.success) {
-    return toolResult.summary || '操作没有完成';
-  }
-  const teams = getTeams(toolResult);
-  if (toolResult.toolName === 'listMyJoinedTeams') {
-    return teams.length ? `你当前加入了 ${teams.length} 个队伍。` : '你暂时还没有加入队伍。';
-  }
-  if (toolResult.toolName === 'listMyCreatedTeams') {
-    return teams.length ? `你当前创建了 ${teams.length} 个队伍。` : '你暂时还没有创建队伍。';
-  }
-  return toolResult.summary || '工具已执行';
-};
-
-const getToolTitle = (toolName: string) => {
-  const titleMap: Record<string, string> = {
-    searchTeams: '队伍查询',
-    getTeamDetails: '队伍详情',
-    recommendUsers: '搭子推荐',
-    createTeamDraft: '草稿生成',
-    prepareDeleteTeam: '删除确认',
-    getMyProfile: '我的资料',
-    updateMyProfile: '画像更新草稿',
-    listMyJoinedTeams: '我加入的队伍',
-    listMyCreatedTeams: '我创建的队伍',
-    joinTeam: '已加入队伍',
-    quitTeam: '已退出队伍',
+  const titleMap: Record<AiUiBlock['type'], string> = {
+    team_list: '队伍列表',
+    user_recommendations: '搭子推荐',
+    profile_card: '我的资料',
+    profile_update_confirmation: '画像更新草稿',
+    team_draft_confirmation: '队伍草稿',
+    team_delete_confirmation: '删除队伍确认',
   };
-  return titleMap[toolName] || toolName;
+  return titleMap[uiBlock.type];
 };
 
-const getToolIcon = (toolName: string) => {
-  const iconMap: Record<string, string> = {
-    searchTeams: 'friends-o',
-    getTeamDetails: 'notes-o',
-    recommendUsers: 'contact-o',
-    createTeamDraft: 'records-o',
-    prepareDeleteTeam: 'delete-o',
-    getMyProfile: 'manager-o',
-    updateMyProfile: 'edit',
-    listMyJoinedTeams: 'friends-o',
-    listMyCreatedTeams: 'cluster-o',
-    joinTeam: 'add-o',
-    quitTeam: 'close',
+const getUiBlockIcon = (uiBlock: AiUiBlock) => {
+  if (uiBlock.type === 'team_list' && uiBlock.variant === 'created') {
+    return 'cluster-o';
+  }
+  const iconMap: Record<AiUiBlock['type'], string> = {
+    team_list: 'friends-o',
+    user_recommendations: 'contact-o',
+    profile_card: 'manager-o',
+    profile_update_confirmation: 'edit',
+    team_draft_confirmation: 'records-o',
+    team_delete_confirmation: 'delete-o',
   };
-  return iconMap[toolName] || 'setting-o';
+  return iconMap[uiBlock.type];
 };
 
-const getTeams = (toolResult: AiToolResult): TeamType[] => {
-  return Array.isArray(toolResult.data) ? toolResult.data as TeamType[] : [];
+const getTeams = (uiBlock: AiUiBlock): TeamType[] => {
+  return Array.isArray(uiBlock.data) ? uiBlock.data as TeamType[] : [];
 };
 
-const getTeamsByToolName = (response: AiChatResponse, toolName: string): TeamType[] => {
-  const toolResult = (response.toolResults ?? []).find(item => item.toolName === toolName);
-  return toolResult ? getTeams(toolResult) : [];
+const getRecommendedUsers = (uiBlock: AiUiBlock): AiUserRecommendation[] => {
+  return Array.isArray(uiBlock.data) ? uiBlock.data as AiUserRecommendation[] : [];
 };
 
-const getRecommendedUsers = (toolResult: AiToolResult): AiUserRecommendation[] => {
-  return Array.isArray(toolResult.data) ? toolResult.data as AiUserRecommendation[] : [];
-};
-
-const getProfileData = (toolResult: AiToolResult): AiUserProfileData | undefined => {
-  if (!toolResult.data || Array.isArray(toolResult.data) || typeof toolResult.data !== 'object') {
+const getProfileData = (uiBlock: AiUiBlock): AiUserProfileData | undefined => {
+  if (!uiBlock.data || Array.isArray(uiBlock.data) || typeof uiBlock.data !== 'object') {
     return undefined;
   }
-  return toolResult.data as AiUserProfileData;
+  return uiBlock.data as AiUserProfileData;
 };
 
-const getProfileActivities = (toolResult: AiToolResult) => {
-  const profile = getProfileData(toolResult)?.structuredProfile;
+const getProfileActivities = (uiBlock: AiUiBlock) => {
+  const profile = getProfileData(uiBlock)?.structuredProfile;
   return [
     ...(profile?.activityTypes ?? []),
     ...(profile?.interests ?? []),
   ].filter((item, index, array) => item && array.indexOf(item) === index).slice(0, 4);
 };
 
-const getProfileResponse = (toolResult: AiToolResult): AiProfileResponse | undefined => {
-  if (!toolResult.data || Array.isArray(toolResult.data) || typeof toolResult.data !== 'object') {
+const getProfileResponse = (uiBlock: AiUiBlock): AiProfileResponse | undefined => {
+  if (!uiBlock.data || Array.isArray(uiBlock.data) || typeof uiBlock.data !== 'object') {
     return undefined;
   }
-  return toolResult.data as AiProfileResponse;
+  return uiBlock.data as AiProfileResponse;
 };
 
-const getOperationTitle = (toolResult: AiToolResult) => {
-  if (!toolResult.success) {
-    return '操作失败';
-  }
-  const titleMap: Record<string, string> = {
-    updateMyProfile: getProfileDraftStatus(toolResult) === 'confirmed'
-        ? '个人资料已更新'
-        : getProfileDraftStatus(toolResult) === 'rejected'
-            ? '已拒绝画像草稿'
-            : '请确认画像草稿',
-    joinTeam: '已加入队伍',
-    quitTeam: '已退出队伍',
-  };
-  return titleMap[toolResult.toolName] || '操作已完成';
+const getProfileUpdateTitle = (uiBlock: AiUiBlock) => {
+  return getProfileDraftStatus(uiBlock) === 'confirmed'
+      ? '个人资料已更新'
+      : getProfileDraftStatus(uiBlock) === 'rejected'
+          ? '已拒绝画像草稿'
+          : '请确认画像草稿';
 };
 
-const getOperationDescription = (toolResult: AiToolResult) => {
-  if (!toolResult.success) {
-    return toolResult.summary || '你可以稍后再试，或补充必要信息。';
+const getProfileUpdateDescription = (uiBlock: AiUiBlock) => {
+  const profile = getProfileResponse(uiBlock)?.profile;
+  const city = profile?.city ? `，城市偏好：${profile.city}` : '';
+  const activities = profile?.activityTypes?.length ? `，活动：${profile.activityTypes.join('、')}` : '';
+  if (getProfileDraftStatus(uiBlock) === 'confirmed') {
+    return `已更新你的自我介绍和结构化画像${city}${activities}。`;
   }
-  if (toolResult.toolName === 'updateMyProfile') {
-    const profile = getProfileResponse(toolResult)?.profile;
-    const city = profile?.city ? `，城市偏好：${profile.city}` : '';
-    const activities = profile?.activityTypes?.length ? `，活动：${profile.activityTypes.join('、')}` : '';
-    if (getProfileDraftStatus(toolResult) === 'confirmed') {
-      return `已更新你的自我介绍和结构化画像${city}${activities}。`;
-    }
-    if (getProfileDraftStatus(toolResult) === 'rejected') {
-      return '这份画像草稿已拒绝，不会修改个人资料。';
-    }
-    return `请检查这份结构化画像${city}${activities}，确认后才会写入个人资料。`;
+  if (getProfileDraftStatus(uiBlock) === 'rejected') {
+    return '这份画像草稿已拒绝，不会修改个人资料。';
   }
-  if (toolResult.toolName === 'joinTeam') {
-    return '我已经帮你加入该队伍，后续可以在“我加入的队伍”里查看。';
-  }
-  if (toolResult.toolName === 'quitTeam') {
-    return '我已经帮你退出该队伍。';
-  }
-  return toolResult.summary || '操作已完成。';
+  return `请检查这份结构化画像${city}${activities}，确认后才会写入个人资料。`;
 };
 
-const getProfileDraftId = (toolResult: AiToolResult) => {
-  const profileResponse = getProfileResponse(toolResult);
+const getProfileDraftId = (uiBlock: AiUiBlock) => {
+  const profileResponse = getProfileResponse(uiBlock);
   return profileResponse?.draftId;
 };
 
-const getProfileDraftStatus = (toolResult: AiToolResult) => {
-  const draftId = getProfileDraftId(toolResult);
+const getProfileDraftStatus = (uiBlock: AiUiBlock) => {
+  const draftId = getProfileDraftId(uiBlock);
   return draftId ? profileDraftStatus.value[draftId] : undefined;
 };
 
-const isPendingProfileDraft = (toolResult: AiToolResult) => {
-  return toolResult.toolName === 'updateMyProfile'
-      && !!getProfileDraftId(toolResult)
-      && !getProfileDraftStatus(toolResult);
+const isPendingProfileDraft = (uiBlock: AiUiBlock) => {
+  return !!getProfileDraftId(uiBlock) && !getProfileDraftStatus(uiBlock);
 };
 
-const confirmProfileDraft = async (toolResult: AiToolResult) => {
-  const draftId = getProfileDraftId(toolResult);
+const confirmProfileDraft = async (uiBlock: AiUiBlock) => {
+  const draftId = getProfileDraftId(uiBlock);
   if (!draftId || processingProfileDraftId.value) {
     return;
   }
@@ -883,8 +884,8 @@ const confirmProfileDraft = async (toolResult: AiToolResult) => {
   }
 };
 
-const rejectProfileDraft = async (toolResult: AiToolResult) => {
-  const draftId = getProfileDraftId(toolResult);
+const rejectProfileDraft = async (uiBlock: AiUiBlock) => {
+  const draftId = getProfileDraftId(uiBlock);
   if (!draftId || processingProfileDraftId.value) {
     return;
   }

@@ -18,7 +18,7 @@ import java.util.Map;
 @Component
 public class RecommendUsersTool implements AiTool {
 
-    public static final String TOOL_NAME = "recommendUsers";
+    public static final String TOOL_NAME = "recommend_users";
 
     private static final int DEFAULT_LIMIT = 5;
 

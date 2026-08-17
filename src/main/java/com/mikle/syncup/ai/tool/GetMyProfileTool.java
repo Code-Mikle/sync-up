@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class GetMyProfileTool implements AiTool {
 
-    public static final String TOOL_NAME = "getMyProfile";
+    public static final String TOOL_NAME = "get_my_profile";
 
     @Resource
     private AiUserProfileService aiUserProfileService;

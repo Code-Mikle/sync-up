@@ -108,6 +108,7 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
         response.setDraft(state.getDraft());
         response.setDeleteConfirmation(state.getDeleteConfirmation());
         response.getToolResults().addAll(state.getToolResults());
+        response.getUiBlocks().addAll(state.getUiBlocks());
         response.setIntent(buildResponseIntent(originalMessage, state));
         return response;
     }

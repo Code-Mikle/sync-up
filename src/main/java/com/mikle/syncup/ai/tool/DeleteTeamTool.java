@@ -14,7 +14,7 @@ import java.util.Map;
 @Component
 public class DeleteTeamTool implements AiTool {
 
-    public static final String TOOL_NAME = "deleteTeam";
+    public static final String TOOL_NAME = "delete_team";
 
     @Resource
     private TeamService teamService;

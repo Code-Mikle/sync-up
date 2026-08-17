@@ -19,6 +19,12 @@ public class AiChatResponseVO implements Serializable {
 
     private List<AiToolResult> toolResults = new ArrayList<>();
 
+    /**
+     * Stable presentation contract consumed by the frontend.
+     * Tool names remain execution/audit details and must not drive UI rendering.
+     */
+    private List<AiUiBlockVO> uiBlocks = new ArrayList<>();
+
     private TeamDraftVO draft;
 
     private AiTeamDeleteConfirmationVO deleteConfirmation;

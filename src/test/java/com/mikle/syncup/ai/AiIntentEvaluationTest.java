@@ -83,10 +83,10 @@ class AiIntentEvaluationTest {
             return Collections.emptySet();
         }
         Set<String> tools = new LinkedHashSet<>();
-        tools.add("searchTeams");
-        tools.add("recommendUsers");
+        tools.add("search_teams");
+        tools.add("recommend_users");
         if (evaluationCase.expectedCreateTeamRequested) {
-            tools.add("createTeamDraft");
+            tools.add("create_team_draft");
         }
         return tools;
     }
@@ -99,10 +99,10 @@ class AiIntentEvaluationTest {
             return Collections.emptySet();
         }
         Set<String> tools = new LinkedHashSet<>();
-        tools.add("searchTeams");
-        tools.add("recommendUsers");
+        tools.add("search_teams");
+        tools.add("recommend_users");
         if (intent.isCreateTeamRequested()) {
-            tools.add("createTeamDraft");
+            tools.add("create_team_draft");
         }
         return tools;
     }

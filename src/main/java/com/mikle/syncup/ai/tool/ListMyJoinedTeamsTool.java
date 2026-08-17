@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 @Component
 public class ListMyJoinedTeamsTool implements AiTool {
 
-    public static final String TOOL_NAME = "listMyJoinedTeams";
+    public static final String TOOL_NAME = "list_my_joined_teams";
 
     private static final int DEFAULT_LIMIT = 10;
 

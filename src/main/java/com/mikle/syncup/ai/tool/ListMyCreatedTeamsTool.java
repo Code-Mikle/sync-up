@@ -16,7 +16,7 @@ import java.util.List;
 @Component
 public class ListMyCreatedTeamsTool implements AiTool {
 
-    public static final String TOOL_NAME = "listMyCreatedTeams";
+    public static final String TOOL_NAME = "list_my_created_teams";
 
     private static final int DEFAULT_LIMIT = 10;
 

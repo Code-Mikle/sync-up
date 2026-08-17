@@ -16,7 +16,7 @@ import java.util.Map;
 @Component
 public class JoinTeamTool implements AiTool {
 
-    public static final String TOOL_NAME = "joinTeam";
+    public static final String TOOL_NAME = "join_team";
 
     @Resource
     private TeamService teamService;

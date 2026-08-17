@@ -16,7 +16,7 @@ import java.util.UUID;
 @Component
 public class CreateTeamDraftTool implements AiTool {
 
-    public static final String TOOL_NAME = "createTeamDraft";
+    public static final String TOOL_NAME = "create_team_draft";
 
     @Override
     public String name() {

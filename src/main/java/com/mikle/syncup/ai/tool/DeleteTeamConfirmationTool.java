@@ -17,9 +17,9 @@ import org.springframework.stereotype.Component;
 import java.util.Objects;
 
 @Component
-public class PrepareDeleteTeamTool implements AiTool {
+public class DeleteTeamConfirmationTool implements AiTool {
 
-    public static final String TOOL_NAME = "prepareDeleteTeam";
+    public static final String TOOL_NAME = "delete_team_confirmation";
 
     @Resource
     private TeamService teamService;
