@@ -1,209 +1,273 @@
 package com.mikle.syncup.ai.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mikle.syncup.ai.mapper.AiProfileDraftMapper;
+import com.mikle.syncup.ai.mapper.AiProfileGenerationTaskMapper;
+import com.mikle.syncup.ai.mapper.AiUserProfileEmbeddingMapper;
 import com.mikle.syncup.ai.mapper.AiUserProfileMapper;
-import com.mikle.syncup.mapper.UserMapper;
-import com.mikle.syncup.ai.model.dto.AiProfileConfirmRequest;
-import com.mikle.syncup.ai.model.entity.AiProfileDraft;
-import com.mikle.syncup.ai.model.vo.AiProfileResponse;
+import com.mikle.syncup.ai.model.entity.AiProfileGenerationTask;
 import com.mikle.syncup.ai.model.entity.AiUserProfileEntity;
-import com.mikle.syncup.ai.model.schema.ProfileExtraction;
+import com.mikle.syncup.ai.model.entity.AiUserProfileEmbedding;
+import com.mikle.syncup.ai.model.schema.GeneratedEmbedding;
+import com.mikle.syncup.ai.model.schema.GeneratedUserProfile;
 import com.mikle.syncup.ai.service.AiUserProfileService;
-import com.mikle.syncup.ai.service.ProfileExtractionParser;
+import com.mikle.syncup.ai.service.ProfileEmbeddingCodec;
+import com.mikle.syncup.ai.service.ProfileEmbeddingGenerator;
+import com.mikle.syncup.ai.service.UserProfileTextAssembler;
+import com.mikle.syncup.ai.service.UserProfileTextGenerator;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
-import com.mikle.syncup.model.domain.User;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Date;
-import java.util.UUID;
+import java.util.HexFormat;
+import java.util.List;
 
+@Slf4j
 @Service
 public class AiUserProfileServiceImpl extends ServiceImpl<AiUserProfileMapper, AiUserProfileEntity>
         implements AiUserProfileService {
 
-    private static final int DRAFT_STATUS_PENDING = 0;
+    private static final int PROFILE_STATUS_ACTIVE = 1;
 
-    private static final int DRAFT_STATUS_CONFIRMED = 1;
-
-    private static final int DRAFT_STATUS_REJECTED = 2;
-
-    private static final int PROFILE_STATUS_CONFIRMED = 1;
+    private static final int TASK_STATUS_PENDING = 0;
+    private static final int TASK_STATUS_PROCESSING = 1;
+    private static final int TASK_STATUS_SUCCESS = 2;
+    private static final int TASK_STATUS_FAILED = 3;
+    private static final int TASK_STATUS_SUPERSEDED = 4;
 
     private static final int MAX_SOURCE_TEXT_LENGTH = 1000;
-
-    private static final long DRAFT_TTL_MILLIS = 24 * 60 * 60 * 1000L;
-
-    @Resource
-    private AiProfileDraftMapper aiProfileDraftMapper;
-
-    @Resource
-    private ProfileExtractionParser profileExtractionParser;
+    private static final int MAX_ERROR_LENGTH = 1024;
+    private static final int MAX_RETRY_COUNT = 3;
+    private static final int BATCH_SIZE = 20;
+    private static final long PROCESSING_TIMEOUT_MILLIS = 10 * 60 * 1000L;
 
     @Resource
-    private ObjectMapper objectMapper;
+    private AiProfileGenerationTaskMapper taskMapper;
 
     @Resource
-    private UserMapper userMapper;
+    private UserProfileTextGenerator generator;
+
+    @Resource
+    private ProfileEmbeddingGenerator embeddingGenerator;
+
+    @Resource
+    private AiUserProfileEmbeddingMapper embeddingMapper;
+
+    @Resource
+    private ProfileEmbeddingCodec embeddingCodec;
+
+    @Resource
+    private UserProfileTextAssembler assembler;
+
+    @Resource
+    private TransactionTemplate transactionTemplate;
 
     @Override
-    public AiProfileResponse getCurrentProfile(User loginUser) {
-        validateLoginUser(loginUser);
-        AiUserProfileEntity entity = getOne(new QueryWrapper<AiUserProfileEntity>()
-                .eq("userId", loginUser.getId())
-                .eq("status", PROFILE_STATUS_CONFIRMED)
-                .orderByDesc("updateTime")
-                .last("limit 1"));
-        return toProfileResponse(entity);
-    }
-
-    @Override
-    public AiProfileResponse createProfileDraft(String sourceText, User loginUser) {
-        validateLoginUser(loginUser);
+    @Transactional(rollbackFor = Exception.class)
+    public void onSelfIntroductionChanged(long userId, String sourceText) {
+        if (userId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "userId is invalid");
+        }
         String sanitizedSourceText = sanitizeSourceText(sourceText);
-        ProfileExtraction extraction = profileExtractionParser.parse(sanitizedSourceText);
-        AiProfileDraft draft = new AiProfileDraft();
-        draft.setDraftId(UUID.randomUUID().toString());
-        draft.setUserId(loginUser.getId());
-        draft.setSourceText(sanitizedSourceText);
-        draft.setProfileJson(writeProfileJson(extraction));
-        draft.setStatus(DRAFT_STATUS_PENDING);
-        draft.setExpiresAt(new Date(System.currentTimeMillis() + DRAFT_TTL_MILLIS));
-        draft.setModelVersion(extraction.getModelVersion());
-        int inserted = aiProfileDraftMapper.insert(draft);
-        if (inserted <= 0) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "save profile draft failed");
+        supersedeUnfinishedTasks(userId);
+        if (StringUtils.isBlank(sanitizedSourceText)) {
+            baseMapper.deletePhysicallyByUserId(userId);
+            embeddingMapper.deletePhysicallyByUserId(userId);
+            return;
         }
-        return toDraftResponse(draft);
+
+        AiProfileGenerationTask task = new AiProfileGenerationTask();
+        task.setUserId(userId);
+        task.setSourceText(sanitizedSourceText);
+        task.setSourceHash(sha256(sanitizedSourceText));
+        task.setStatus(TASK_STATUS_PENDING);
+        task.setRetryCount(0);
+        // MySQL DATETIME may round milliseconds, so make a freshly inserted task immediately claimable.
+        task.setNextRetryAt(new Date(System.currentTimeMillis() - 1000L));
+        task.setModel(generator.modelName());
+        task.setPromptVersion(generator.promptVersion());
+        if (taskMapper.insert(task) <= 0) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "create AI profile generation task failed");
+        }
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public AiProfileResponse confirmDraft(String draftId, AiProfileConfirmRequest request, User loginUser) {
-        validateLoginUser(loginUser);
-        if (StringUtils.isBlank(draftId)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "draftId is required");
+    public int processPendingTasks() {
+        if (!generator.isAvailable() || !embeddingGenerator.isAvailable()) {
+            return 0;
         }
-        AiProfileDraft draft = aiProfileDraftMapper.lockByDraftId(draftId.trim());
-        if (draft == null) {
-            throw new BusinessException(ErrorCode.NULL_ERROR, "profile draft does not exist");
-        }
-        if (!draft.getUserId().equals(loginUser.getId())) {
-            throw new BusinessException(ErrorCode.NO_AUTH, "no permission to confirm this profile draft");
-        }
-        if (DRAFT_STATUS_CONFIRMED == safeStatus(draft)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "profile draft has already been confirmed");
-        }
-        if (DRAFT_STATUS_REJECTED == safeStatus(draft)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "profile draft has been rejected");
-        }
-        ensureDraftNotExpired(draft);
-
-        ProfileExtraction profile = request != null && request.getProfile() != null
-                ? normalizeConfirmedProfile(request.getProfile(), draft)
-                : readProfile(draft.getProfileJson());
+        recoverTimedOutTasks();
         Date now = new Date();
-
-        AiUserProfileEntity entity = getOne(new QueryWrapper<AiUserProfileEntity>()
-                .eq("userId", loginUser.getId())
-                .last("limit 1"));
-        if (entity == null) {
-            entity = new AiUserProfileEntity();
-            entity.setUserId(loginUser.getId());
+        List<AiProfileGenerationTask> tasks = taskMapper.selectList(
+                new QueryWrapper<AiProfileGenerationTask>()
+                        .eq("status", TASK_STATUS_PENDING)
+                        .le("nextRetryAt", now)
+                        .orderByAsc("id")
+                        .last("limit " + BATCH_SIZE));
+        int processed = 0;
+        for (AiProfileGenerationTask task : tasks) {
+            if (!claimTask(task.getId())) {
+                continue;
+            }
+            try {
+                GeneratedUserProfile generatedProfile = generator.generate(task.getSourceText());
+                String profileText = assembler.renderFull(generatedProfile);
+                String matchProfileText = assembler.renderMatch(generatedProfile);
+                String interactionProfileText = assembler.renderInteraction(generatedProfile);
+                GeneratedEmbedding generatedEmbedding = embeddingGenerator.generate(matchProfileText);
+                float[] normalizedEmbedding = embeddingCodec.normalize(generatedEmbedding.vector());
+                completeTask(task, profileText, matchProfileText, interactionProfileText,
+                        generatedEmbedding.model(), normalizedEmbedding);
+            } catch (Exception e) {
+                failTask(task, e);
+                log.warn("generate AI user profile failed, taskId={}, userId={}",
+                        task.getId(), task.getUserId(), e);
+            }
+            processed++;
         }
-        entity.setProfileJson(writeProfileJson(profile));
-        entity.setSourceText(draft.getSourceText());
-        entity.setModelVersion(profile.getModelVersion());
-        entity.setStatus(PROFILE_STATUS_CONFIRMED);
-        entity.setConfirmedAt(now);
-        boolean saved = entity.getId() == null ? this.save(entity) : this.updateById(entity);
-        if (!saved) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "save AI user profile failed");
-        }
-
-        User updateUser = new User();
-        updateUser.setId(loginUser.getId());
-        updateUser.setProfile(draft.getSourceText());
-        if (userMapper.updateById(updateUser) <= 0) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "update user self introduction failed");
-        }
-
-        AiProfileDraft updateDraft = new AiProfileDraft();
-        updateDraft.setId(draft.getId());
-        updateDraft.setStatus(DRAFT_STATUS_CONFIRMED);
-        updateDraft.setConfirmedAt(now);
-        int updated = aiProfileDraftMapper.updateById(updateDraft);
-        if (updated <= 0) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "confirm profile draft failed");
-        }
-        return toProfileResponse(entity);
+        return processed;
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public AiProfileResponse rejectDraft(String draftId, User loginUser) {
-        validateLoginUser(loginUser);
-        if (StringUtils.isBlank(draftId)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "draftId is required");
+    public AiUserProfileEntity getInternalProfile(long userId) {
+        if (userId <= 0) {
+            return null;
         }
-        AiProfileDraft draft = aiProfileDraftMapper.lockByDraftId(draftId.trim());
-        if (draft == null) {
-            throw new BusinessException(ErrorCode.NULL_ERROR, "profile draft does not exist");
-        }
-        if (!draft.getUserId().equals(loginUser.getId())) {
-            throw new BusinessException(ErrorCode.NO_AUTH, "no permission to reject this profile draft");
-        }
-        if (DRAFT_STATUS_CONFIRMED == safeStatus(draft)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "profile draft has already been confirmed");
-        }
-        ensureDraftNotExpired(draft);
-        AiProfileDraft updateDraft = new AiProfileDraft();
-        updateDraft.setId(draft.getId());
-        updateDraft.setStatus(DRAFT_STATUS_REJECTED);
-        int updated = aiProfileDraftMapper.updateById(updateDraft);
-        if (updated <= 0) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "reject profile draft failed");
-        }
-        draft.setStatus(DRAFT_STATUS_REJECTED);
-        return toDraftResponse(draft);
-    }
-
-    @Override
-    public void createDraftFromUserUpdate(User updateUser, User loginUser) {
-        if (updateUser == null || loginUser == null || updateUser.getId() != loginUser.getId()) {
-            return;
-        }
-        String sourceText = StringUtils.defaultIfBlank(updateUser.getProfile(), updateUser.getTags());
-        if (StringUtils.isBlank(sourceText)) {
-            return;
-        }
-        createProfileDraft(sourceText, loginUser);
-    }
-
-    @Override
-    public AiProfileDraft findLatestDraft(long userId) {
-        return aiProfileDraftMapper.selectOne(new QueryWrapper<AiProfileDraft>()
+        return getOne(new QueryWrapper<AiUserProfileEntity>()
                 .eq("userId", userId)
-                .orderByDesc("createTime")
+                .eq("status", PROFILE_STATUS_ACTIVE)
                 .last("limit 1"));
     }
 
     @Override
-    public int deleteExpiredDraftsPhysically() {
-        return aiProfileDraftMapper.deleteExpiredPhysically(new Date());
+    public String getInteractionProfileText(long userId) {
+        AiUserProfileEntity profile = getInternalProfile(userId);
+        return profile == null ? null : profile.getInteractionProfileText();
     }
 
-    private void validateLoginUser(User loginUser) {
-        if (loginUser == null || loginUser.getId() <= 0) {
-            throw new BusinessException(ErrorCode.NOT_LOGIN);
+    @Override
+    public AiUserProfileEmbedding getActiveEmbedding(long userId) {
+        if (userId <= 0) {
+            return null;
         }
+        return embeddingMapper.selectOne(new QueryWrapper<AiUserProfileEmbedding>()
+                .eq("userId", userId)
+                .eq("status", PROFILE_STATUS_ACTIVE)
+                .last("limit 1"));
+    }
+
+    private void completeTask(AiProfileGenerationTask task,
+                              String profileText,
+                              String matchProfileText,
+                              String interactionProfileText,
+                              String embeddingModel,
+                              float[] normalizedEmbedding) {
+        transactionTemplate.executeWithoutResult(status -> {
+            if (hasNewerTask(task)) {
+                updateTaskStatus(task.getId(), TASK_STATUS_SUPERSEDED, null, null);
+                return;
+            }
+            AiUserProfileEntity current = getInternalProfile(task.getUserId());
+            int profileVersion = current == null || current.getProfileVersion() == null
+                    ? 1 : current.getProfileVersion() + 1;
+            AiUserProfileEntity profile = current == null ? new AiUserProfileEntity() : current;
+            profile.setUserId(task.getUserId());
+            profile.setProfileText(profileText);
+            profile.setMatchProfileText(matchProfileText);
+            profile.setInteractionProfileText(interactionProfileText);
+            profile.setProfileVersion(profileVersion);
+            profile.setSourceHash(task.getSourceHash());
+            profile.setModel(generator.modelName());
+            profile.setPromptVersion(generator.promptVersion());
+            profile.setStatus(PROFILE_STATUS_ACTIVE);
+            profile.setGeneratedAt(new Date());
+            boolean saved = profile.getId() == null ? save(profile) : updateById(profile);
+            if (!saved) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "save AI user profile failed");
+            }
+            embeddingMapper.update(null, new UpdateWrapper<AiUserProfileEmbedding>()
+                    .set("status", 0)
+                    .eq("userId", task.getUserId())
+                    .eq("status", PROFILE_STATUS_ACTIVE));
+            AiUserProfileEmbedding embedding = new AiUserProfileEmbedding();
+            embedding.setUserId(task.getUserId());
+            embedding.setProfileVersion(profileVersion);
+            embedding.setMatchTextHash(sha256(matchProfileText));
+            embedding.setEmbeddingModel(StringUtils.defaultIfBlank(
+                    embeddingModel, embeddingGenerator.modelName()));
+            embedding.setDimensions(normalizedEmbedding.length);
+            embedding.setVectorJson(embeddingCodec.serialize(normalizedEmbedding));
+            embedding.setStatus(PROFILE_STATUS_ACTIVE);
+            embedding.setGeneratedAt(new Date());
+            if (embeddingMapper.insert(embedding) <= 0) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "save AI profile embedding failed");
+            }
+            updateTaskStatus(task.getId(), TASK_STATUS_SUCCESS, profileVersion, null);
+        });
+    }
+
+    private boolean hasNewerTask(AiProfileGenerationTask task) {
+        return taskMapper.selectCount(new QueryWrapper<AiProfileGenerationTask>()
+                .eq("userId", task.getUserId())
+                .gt("id", task.getId())) > 0;
+    }
+
+    private boolean claimTask(long taskId) {
+        return taskMapper.update(null, new UpdateWrapper<AiProfileGenerationTask>()
+                .set("status", TASK_STATUS_PROCESSING)
+                .set("updateTime", new Date())
+                .eq("id", taskId)
+                .eq("status", TASK_STATUS_PENDING)) > 0;
+    }
+
+    private void failTask(AiProfileGenerationTask task, Exception exception) {
+        int retryCount = task.getRetryCount() == null ? 1 : task.getRetryCount() + 1;
+        boolean retryable = retryCount < MAX_RETRY_COUNT;
+        long delayMinutes = retryCount == 1 ? 1 : 5;
+        taskMapper.update(null, new UpdateWrapper<AiProfileGenerationTask>()
+                .set("status", retryable ? TASK_STATUS_PENDING : TASK_STATUS_FAILED)
+                .set("retryCount", retryCount)
+                .set("nextRetryAt", retryable
+                        ? new Date(System.currentTimeMillis() + delayMinutes * 60 * 1000L) : null)
+                .set("lastError", truncateError(exception))
+                .eq("id", task.getId())
+                .eq("status", TASK_STATUS_PROCESSING));
+    }
+
+    private void updateTaskStatus(long taskId, int status, Integer profileVersion, String error) {
+        taskMapper.update(null, new UpdateWrapper<AiProfileGenerationTask>()
+                .set("status", status)
+                .set("profileVersion", profileVersion)
+                .set("lastError", error)
+                .set("nextRetryAt", null)
+                .eq("id", taskId));
+    }
+
+    private void recoverTimedOutTasks() {
+        Date timeout = new Date(System.currentTimeMillis() - PROCESSING_TIMEOUT_MILLIS);
+        taskMapper.update(null, new UpdateWrapper<AiProfileGenerationTask>()
+                .set("status", TASK_STATUS_PENDING)
+                .set("nextRetryAt", new Date())
+                .eq("status", TASK_STATUS_PROCESSING)
+                .lt("updateTime", timeout));
+    }
+
+    private void supersedeUnfinishedTasks(long userId) {
+        taskMapper.update(null, new UpdateWrapper<AiProfileGenerationTask>()
+                .set("status", TASK_STATUS_SUPERSEDED)
+                .set("nextRetryAt", null)
+                .eq("userId", userId)
+                .in("status", TASK_STATUS_PENDING, TASK_STATUS_PROCESSING, TASK_STATUS_FAILED));
     }
 
     private String sanitizeSourceText(String sourceText) {
@@ -211,79 +275,24 @@ public class AiUserProfileServiceImpl extends ServiceImpl<AiUserProfileMapper, A
                 .replaceAll("(?i)(token|api[_-]?key|password|密码)\\s*[:：=]\\s*\\S+", "$1=***")
                 .replaceAll("\\b[\\w.%+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b", "***@***")
                 .replaceAll("1[3-9]\\d{9}", "1**********");
-        if (StringUtils.isBlank(sanitized)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "sourceText is required");
-        }
         if (sanitized.length() > MAX_SOURCE_TEXT_LENGTH) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "sourceText is too long");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "self introduction is too long");
         }
         return sanitized;
     }
 
-    private ProfileExtraction normalizeConfirmedProfile(ProfileExtraction profile, AiProfileDraft draft) {
-        profile.setSourceText(draft.getSourceText());
-        if (StringUtils.isBlank(profile.getModelVersion())) {
-            profile.setModelVersion(draft.getModelVersion());
-        }
-        if (profile.getConfidence() == null) {
-            profile.setConfidence(readProfile(draft.getProfileJson()).getConfidence());
-        }
-        return profile;
-    }
-
-    private void ensureDraftNotExpired(AiProfileDraft draft) {
-        if (draft.getExpiresAt() == null || draft.getExpiresAt().after(new Date())) {
-            return;
-        }
-        throw new BusinessException(ErrorCode.PARAMS_ERROR, "profile draft has expired");
-    }
-
-    private int safeStatus(AiProfileDraft draft) {
-        return draft.getStatus() == null ? DRAFT_STATUS_PENDING : draft.getStatus();
-    }
-
-    private String writeProfileJson(ProfileExtraction profile) {
+    private String sha256(String value) {
         try {
-            return objectMapper.writeValueAsString(profile);
-        } catch (JsonProcessingException e) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "serialize profile extraction failed");
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
         }
     }
 
-    private ProfileExtraction readProfile(String profileJson) {
-        try {
-            return objectMapper.readValue(profileJson, ProfileExtraction.class);
-        } catch (JsonProcessingException e) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "parse profile extraction failed");
-        }
-    }
-
-    private AiProfileResponse toProfileResponse(AiUserProfileEntity entity) {
-        if (entity == null) {
-            return null;
-        }
-        AiProfileResponse response = new AiProfileResponse();
-        response.setUserId(entity.getUserId());
-        response.setStatus(entity.getStatus());
-        response.setProfile(readProfile(entity.getProfileJson()));
-        response.setSourceText(entity.getSourceText());
-        response.setModelVersion(entity.getModelVersion());
-        response.setConfirmedAt(entity.getConfirmedAt());
-        response.setUpdateTime(entity.getUpdateTime());
-        return response;
-    }
-
-    private AiProfileResponse toDraftResponse(AiProfileDraft draft) {
-        AiProfileResponse response = new AiProfileResponse();
-        response.setDraftId(draft.getDraftId());
-        response.setUserId(draft.getUserId());
-        response.setStatus(draft.getStatus());
-        response.setProfile(readProfile(draft.getProfileJson()));
-        response.setSourceText(draft.getSourceText());
-        response.setModelVersion(draft.getModelVersion());
-        response.setExpiresAt(draft.getExpiresAt());
-        response.setConfirmedAt(draft.getConfirmedAt());
-        response.setUpdateTime(draft.getUpdateTime());
-        return response;
+    private String truncateError(Exception exception) {
+        String message = StringUtils.defaultIfBlank(exception.getMessage(), exception.getClass().getSimpleName());
+        return message.length() <= MAX_ERROR_LENGTH ? message : message.substring(0, MAX_ERROR_LENGTH);
     }
 }

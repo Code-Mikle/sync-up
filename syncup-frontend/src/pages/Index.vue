@@ -47,7 +47,7 @@ const loading = ref(true);
 const modeTitle = computed(() => isMatchMode.value ? '开启心动匹配' : '发现新的搭子');
 const modeDescription = computed(() => (
     isMatchMode.value
-        ? '系统会优先推荐标签更接近的用户，适合快速找到同频的人。'
+        ? '系统会先筛选城市和活动条件，再结合画像偏好推荐更合适的搭子。'
         : '浏览最近活跃的用户，先从一个简单的招呼开始。'
 ));
 

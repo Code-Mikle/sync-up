@@ -126,43 +126,89 @@ create index idx_ai_tool_call_log_user_time on ai_tool_call_log (userId, createT
 create index idx_ai_tool_call_log_session on ai_tool_call_log (sessionId);
 create index idx_ai_tool_call_log_action_status on ai_tool_call_log (actionType, status);
 
--- AI 用户画像表
+-- AI 内部用户画像表
 create table ai_user_profile
 (
-    id            bigint auto_increment comment 'id' primary key,
-    userId        bigint not null comment '用户 id',
-    profileJson   text not null comment '结构化画像 JSON',
-    sourceText    varchar(1024) null comment '画像来源文本，已做最小化脱敏',
-    modelVersion  varchar(64) not null comment '提取模型或规则版本',
-    status        tinyint default 1 not null comment '1 - 已确认',
-    confirmedAt   datetime null comment '用户确认时间',
-    createTime    datetime default CURRENT_TIMESTAMP null comment '创建时间',
-    updateTime    datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete      tinyint default 0 not null comment '是否删除'
-) comment 'AI 用户结构化画像';
+    id                     bigint auto_increment comment 'id' primary key,
+    userId                 bigint not null comment '用户 id',
+    profileText            text not null comment '完整五段式内部画像',
+    matchProfileText       text not null comment '用于匹配的前四段画像',
+    interactionProfileText text not null comment '仅用于 AI 交流方式的第五段画像',
+    profileVersion         int not null comment '画像版本号',
+    sourceHash             char(64) not null comment '脱敏来源文本 SHA-256',
+    model                  varchar(128) not null comment '生成模型',
+    promptVersion          varchar(64) not null comment '画像 Prompt 版本',
+    status                 tinyint default 1 not null comment '1 - 有效',
+    generatedAt            datetime not null comment '生成时间',
+    createTime             datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime             datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete               tinyint default 0 not null comment '是否删除'
+) comment 'AI 内部用户文本画像';
 
 create unique index uk_ai_user_profile_userId on ai_user_profile (userId);
 create index idx_ai_user_profile_updateTime on ai_user_profile (updateTime);
 
--- AI 用户画像草稿表
-create table ai_profile_draft
+-- AI 用户画像向量表
+create table ai_user_profile_embedding
+(
+    id               bigint auto_increment comment 'id' primary key,
+    userId           bigint not null comment '用户 id',
+    profileVersion   int not null comment '对应画像版本号',
+    matchTextHash    char(64) not null comment '匹配画像文本 SHA-256',
+    embeddingModel   varchar(128) not null comment 'Embedding 模型',
+    dimensions       int not null comment '向量维度',
+    vectorJson       mediumtext not null comment '归一化后的 float 向量 JSON',
+    status           tinyint default 1 not null comment '0 - 历史版本，1 - 当前有效版本',
+    generatedAt      datetime not null comment '生成时间',
+    createTime       datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete         tinyint default 0 not null comment '是否删除'
+) comment 'AI 用户画像版本化向量';
+
+create unique index uk_ai_profile_embedding_user_version on ai_user_profile_embedding (userId, profileVersion);
+create index idx_ai_profile_embedding_user_status on ai_user_profile_embedding (userId, status);
+
+-- AI 队伍检索向量表
+create table ai_team_embedding
+(
+    id               bigint auto_increment comment 'id' primary key,
+    teamId           bigint not null comment '队伍 id',
+    contentVersion   int not null comment '检索文本版本号',
+    contentHash      char(64) not null comment '检索文本 SHA-256',
+    embeddingModel   varchar(128) not null comment 'Embedding 模型',
+    dimensions       int not null comment '向量维度',
+    vectorJson       mediumtext not null comment '归一化后的 float 向量 JSON',
+    status           tinyint default 1 not null comment '0 - 历史版本，1 - 当前有效版本',
+    generatedAt      datetime not null comment '生成时间',
+    createTime       datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete         tinyint default 0 not null comment '是否删除'
+) comment 'AI 队伍版本化检索向量';
+
+create unique index uk_ai_team_embedding_team_version on ai_team_embedding (teamId, contentVersion);
+create index idx_ai_team_embedding_team_status on ai_team_embedding (teamId, status);
+
+-- AI 用户画像生成任务表
+create table ai_profile_generation_task
 (
     id             bigint auto_increment comment 'id' primary key,
-    draftId        varchar(64) not null comment '画像草稿公开 id',
     userId         bigint not null comment '用户 id',
-    sourceText     varchar(1024) not null comment '来源文本，已做最小化脱敏',
-    profileJson    text not null comment '待确认的结构化画像 JSON',
-    status         tinyint default 0 not null comment '0 - 待确认，1 - 已确认，2 - 已拒绝，3 - 已过期',
-    expiresAt      datetime not null comment '草稿过期时间',
-    confirmedAt    datetime null comment '用户确认时间',
-    modelVersion   varchar(64) not null comment '提取模型或规则版本',
+    sourceText     varchar(1000) not null comment '脱敏后的自我介绍快照',
+    sourceHash     char(64) not null comment '脱敏来源文本 SHA-256',
+    status         tinyint default 0 not null comment '0 - 待处理，1 - 处理中，2 - 成功，3 - 失败，4 - 已被新任务替代',
+    retryCount     int default 0 not null comment '已重试次数',
+    nextRetryAt    datetime null comment '下次重试时间',
+    lastError      varchar(1024) null comment '最后一次错误摘要',
+    model          varchar(128) null comment '生成模型',
+    promptVersion  varchar(64) not null comment '画像 Prompt 版本',
+    profileVersion int null comment '成功生成的画像版本号',
     createTime     datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
     isDelete       tinyint default 0 not null comment '是否删除'
-) comment 'AI 用户画像草稿';
+) comment 'AI 用户画像生成任务';
 
-create unique index uk_ai_profile_draft_draftId on ai_profile_draft (draftId);
-create index idx_ai_profile_draft_user_status on ai_profile_draft (userId, status, expiresAt);
+create index idx_ai_profile_generation_status_retry on ai_profile_generation_task (status, nextRetryAt);
+create index idx_ai_profile_generation_user_time on ai_profile_generation_task (userId, createTime);
 
 -- AI 短期会话记忆表
 create table ai_chat_memory

@@ -17,7 +17,6 @@ import com.mikle.syncup.ai.tool.ListMyCreatedTeamsTool;
 import com.mikle.syncup.ai.tool.RecommendUsersTool;
 import com.mikle.syncup.ai.tool.DeleteTeamConfirmationTool;
 import com.mikle.syncup.ai.tool.SearchTeamsTool;
-import com.mikle.syncup.ai.tool.ProfileUpdateDraftTool;
 import com.mikle.syncup.model.domain.User;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -31,6 +30,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
+import java.util.Objects;
 
 @Component
 public class AiAssistantTools {
@@ -67,16 +67,26 @@ public class AiAssistantTools {
             @P(value = "每人最高预算", required = false) Double budgetMax,
             @P(value = "技能熟练度，分为入门, 中等, 熟练。", required = false) String skillLevel) {
         TeamIntent intent = buildIntent(activityCategory, activityType, city, district, startTime, null, budgetMax, skillLevel, null);
+        inheritActivityFilter(intent, aiAgentToolContext.getRequired().getIntent());
         return executeAndRemember(SearchTeamsTool.TOOL_NAME, intent, AiUiBlockVO.TEAM_LIST, "search");
     }
 
     @Tool(
             name = RecommendUsersTool.TOOL_NAME,
-            value = "根据当前登录用户已保存的标签，推荐适合成为搭子的其他用户。无需从本轮消息中提取活动类型或临时标签。" +
-                    "只返回允许公开展示的用户资料。")
-    public String recommendUsers() {
-        TeamIntent intent = new TeamIntent();
-        intent.setTeamRelated(true);
+            value = "结合当前需求、当前用户资料与内部用户画像，推荐适合成为搭子的其他用户。" +
+                    "应从本轮需求提取已明确给出的活动、城市、区域、时间、预算和技能条件；未提供的条件留空。" +
+                    "只返回允许公开展示的用户资料，不得展示或复述内部用户画像。")
+    public String recommendUsers(
+            @P(value = "活动大类编码：1=运动健身, 2=户外出行, 3=游戏电竞, 4=桌游剧本, 5=休闲娱乐, 6=美食探店, 7=学习成长, " +
+                    "8=旅行出游, 9=其他。使用最接近的宽泛类别。", required = false) Integer activityCategory,
+            @P(value = "具体活动名称，例如“足球”、“羽毛球”、“骑行”。", required = false) String activityType,
+            @P(value = "用户明确提供的城市；未提供时留空，由后端使用当前用户常驻城市。", required = false) String city,
+            @P(value = "区域、场馆、地标或商圈。", required = false) String district,
+            @P(value = "开始时间，格式为 yyyy-MM-dd HH:mm:ss。", required = false) String startTime,
+            @P(value = "每人最高预算。", required = false) Double budgetMax,
+            @P(value = "技能熟练度，分为入门、中等、熟练。", required = false) String skillLevel) {
+        TeamIntent intent = buildIntent(activityCategory, activityType, city, district, startTime, null, budgetMax, skillLevel, null);
+        inheritActivityFilter(intent, aiAgentToolContext.getRequired().getIntent());
         return executeAndRemember(RecommendUsersTool.TOOL_NAME, intent, AiUiBlockVO.USER_RECOMMENDATIONS, null);
     }
 
@@ -107,6 +117,7 @@ public class AiAssistantTools {
         intent.setTeamId(teamId);
         intent.setTeamRelated(true);
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
+        attachSourceText(intent, state);
         state.setIntent(mergeIntent(state.getIntent(), intent));
         AiToolResult result = aiToolExecutionService.execute(DeleteTeamConfirmationTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
         if (result.getData() instanceof AiTeamDeleteConfirmationVO confirmation) {
@@ -146,21 +157,6 @@ public class AiAssistantTools {
     }
 
     @Tool(
-            name = ProfileUpdateDraftTool.TOOL_NAME,
-            value = "根据用户明确提出的修改内容，生成当前用户公开资料的待确认修改草稿。" +
-                    "该工具不会执行正式写入。仅当用户明确要求修改自己的公开资料或个人简介时调用。")
-    public String myProfileUpdateDraft(@P(value = "用户明确要求保存的公开资料内容。不得包含手机号、邮箱、密码、Token、API Key 等敏感信息。", required = true) String profileText) {
-        TeamIntent intent = new TeamIntent();
-        intent.setProfileText(profileText);
-        return executeAndRemember(
-                ProfileUpdateDraftTool.TOOL_NAME,
-                intent,
-                AiUiBlockVO.PROFILE_UPDATE_CONFIRMATION,
-                null
-        );
-    }
-
-    @Tool(
             name = CreateTeamDraftTool.TOOL_NAME,
             value = "根据用户提供的信息生成创建队伍的待确认草稿。该工具不会创建正式队伍。" +
                     "当用户明确要求创建、发起或组建队伍时调用。未提供城市时，将由后端尝试使用当前用户的常驻城市。")
@@ -185,6 +181,7 @@ public class AiAssistantTools {
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
         String resolvedCity = resolveDraftCity(city, state.getLoginUser());
         TeamIntent intent = buildIntent(activityCategory, activityType, resolvedCity, district, startTime, durationMinutes, budgetMax, skillLevel, memberCount);
+        attachSourceText(intent, state);
         intent.setCreateTeamRequested(true);
         intent.setTeamName(teamName);
         intent.setDescription(description);
@@ -262,13 +259,47 @@ public class AiAssistantTools {
                                       String uiBlockType,
                                       String uiBlockVariant) {
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
+        attachSourceText(intent, state);
         state.setIntent(mergeIntent(state.getIntent(), intent));
         AiToolResult result = aiToolExecutionService.execute(toolName, intent, state.getLoginUser(), state.getSessionId());
         state.getToolResults().add(result);
         if (result.isSuccess() && uiBlockType != null) {
-            state.getUiBlocks().add(AiUiBlockVO.of(uiBlockType, uiBlockVariant, result.getData()));
+            replaceUiBlock(state, AiUiBlockVO.of(uiBlockType, uiBlockVariant, result.getData()));
         }
         return toJson(result);
+    }
+
+    /**
+     * Models occasionally retry a search without repeating filters that were already identified
+     * in this turn. Keep the explicit activity constraint to prevent a failed precise search
+     * from silently degrading into an unrelated browse result.
+     */
+    private void inheritActivityFilter(TeamIntent incoming, TeamIntent previous) {
+        if (previous == null) {
+            return;
+        }
+        if (incoming.getActivityCategory() == null && previous.getActivityCategory() != null) {
+            incoming.setActivityCategory(previous.getActivityCategory());
+        }
+        if (StringUtils.isBlank(incoming.getActivityType()) && StringUtils.isNotBlank(previous.getActivityType())) {
+            String activityType = previous.getActivityType().trim();
+            incoming.setActivityType(activityType);
+            if (!incoming.getTags().contains(activityType)) {
+                incoming.getTags().add(activityType);
+            }
+        }
+    }
+
+    private void replaceUiBlock(AiAgentToolContext.State state, AiUiBlockVO incoming) {
+        state.getUiBlocks().removeIf(existing -> Objects.equals(existing.getType(), incoming.getType())
+                && Objects.equals(existing.getVariant(), incoming.getVariant()));
+        state.getUiBlocks().add(incoming);
+    }
+
+    private void attachSourceText(TeamIntent intent, AiAgentToolContext.State state) {
+        if (StringUtils.isBlank(intent.getSourceText()) && StringUtils.isNotBlank(state.getSourceText())) {
+            intent.setSourceText(state.getSourceText().trim());
+        }
     }
 
     private TeamIntent mergeIntent(TeamIntent existing, TeamIntent incoming) {
@@ -319,9 +350,6 @@ public class AiAssistantTools {
         }
         if (StringUtils.isNotBlank(incoming.getDescription())) {
             existing.setDescription(incoming.getDescription());
-        }
-        if (StringUtils.isNotBlank(incoming.getProfileText())) {
-            existing.setProfileText(incoming.getProfileText());
         }
         existing.setCreateTeamRequested(existing.isCreateTeamRequested() || incoming.isCreateTeamRequested());
         existing.setTeamRelated(existing.isTeamRelated() || incoming.isTeamRelated());

@@ -7,6 +7,9 @@ import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.common.PageResult;
 import com.mikle.syncup.common.ResultUtils;
 import com.mikle.syncup.exception.BusinessException;
+import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
+import com.mikle.syncup.ai.service.AiHybridRecommendationService;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.request.UserLoginRequest;
 import com.mikle.syncup.model.request.UserRegisterRequest;
@@ -41,6 +44,9 @@ public class UserController {
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private AiHybridRecommendationService aiHybridRecommendationService;
 
     @Resource
     private RedisTemplate<String, Object> redisTemplate;
@@ -212,16 +218,12 @@ public class UserController {
      * 获取最匹配的用户
      */
     @GetMapping("/match")
-    public BaseResponse<List<UserSearchResultVO>> matchUsers(long num, HttpServletRequest request) {
+    public BaseResponse<List<AiUserRecommendation>> matchUsers(long num, HttpServletRequest request) {
         if (num <= 0 || num > 20) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User user = userService.getLoginUser(request);
         return ResultUtils.success(
-                userService.matchUsers(num, user)
-                .stream()
-                .map(userService::getPublicUser)
-                .toList()
-        );
+                aiHybridRecommendationService.recommendUsers(new TeamIntent(), user, Math.toIntExact(num)).items());
     }
 }

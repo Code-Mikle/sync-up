@@ -19,7 +19,11 @@
           </div>
           <div class="chat-message__content">
             <div class="chat-message__bubble">
-              {{ message.content }}
+              <AssistantMarkdownContent
+                  v-if="message.role === 'assistant'"
+                  :content="message.content"
+              />
+              <template v-else>{{ message.content }}</template>
               <span>{{ message.time }}</span>
             </div>
           </div>
@@ -82,8 +86,7 @@
                   <p>{{ getProfileData(uiBlock)?.profile || "还没有填写自我介绍" }}</p>
                   <div class="profile-result__meta">
                     <span v-if="getProfileData(uiBlock)?.planetCode">星球编号 {{ getProfileData(uiBlock)?.planetCode }}</span>
-                    <span v-if="getProfileData(uiBlock)?.structuredProfile?.city">{{ getProfileData(uiBlock)?.structuredProfile?.city }}</span>
-                    <span v-if="getProfileActivities(uiBlock).length">{{ getProfileActivities(uiBlock).join("、") }}</span>
+                    <span v-if="getProfileData(uiBlock)?.city">{{ getProfileData(uiBlock)?.city }}</span>
                   </div>
                   <div class="profile-result__tags" v-if="formatUserTags(getProfileData(uiBlock)?.tags).length">
                     <van-tag
@@ -93,30 +96,6 @@
                     >
                       {{ tag }}
                     </van-tag>
-                  </div>
-                </div>
-              </div>
-
-              <div class="operation-result" v-else-if="uiBlock.type === 'profile_update_confirmation'">
-                <van-icon name="edit" size="22" />
-                <div>
-                  <h3>{{ getProfileUpdateTitle(uiBlock) }}</h3>
-                  <p>{{ getProfileUpdateDescription(uiBlock) }}</p>
-                  <div class="profile-draft-actions" v-if="isPendingProfileDraft(uiBlock)">
-                    <van-button
-                        size="small"
-                        round
-                        type="primary"
-                        :loading="processingProfileDraftId === getProfileDraftId(uiBlock)"
-                        @click="confirmProfileDraft(uiBlock)"
-                    >确认更新</van-button>
-                    <van-button
-                        size="small"
-                        round
-                        plain
-                        :disabled="processingProfileDraftId === getProfileDraftId(uiBlock)"
-                        @click="rejectProfileDraft(uiBlock)"
-                    >拒绝</van-button>
                   </div>
                 </div>
               </div>
@@ -342,7 +321,6 @@ import {
   AiChatHistory,
   AiChatMessage,
   AiChatResponse,
-  AiProfileResponse,
   AiTeamDeleteConfirmation,
   AiTeamDraftConfirmResponse,
   AiToolResult,
@@ -355,6 +333,7 @@ import {TeamType} from "../models/team";
 import {UserType} from "../models/user";
 import {getCurrentUser} from "../services/user";
 import {getTeamActivityCategoryName} from "../constants/team";
+import AssistantMarkdownContent from "../components/AssistantMarkdownContent.vue";
 
 type ChatMessage = {
   id: number;
@@ -373,8 +352,6 @@ const confirmingDraftId = ref<string>();
 const confirmedDraftTeams = ref<Record<string, number>>({});
 const deletingTeamId = ref<number>();
 const deletedTeams = ref<Record<number, boolean>>({});
-const processingProfileDraftId = ref<string>();
-const profileDraftStatus = ref<Record<string, 'confirmed' | 'rejected'>>({});
 const loadingTeamDetailsId = ref<number>();
 const teamDetails = ref<Record<number, TeamType>>({});
 const currentUser = ref<UserType | null>(null);
@@ -638,64 +615,22 @@ const CONTENT_UI_BLOCK_TYPES = new Set<AiUiBlock['type']>([
   'team_list',
   'user_recommendations',
   'profile_card',
-  'profile_update_confirmation',
 ]);
 
-const LEGACY_TOOL_NAME_ALIASES: Record<string, string> = {
-  searchTeams: 'search_teams',
-  listMyJoinedTeams: 'list_my_joined_teams',
-  listMyCreatedTeams: 'list_my_created_teams',
-  recommendUsers: 'recommend_users',
-  updateMyProfile: 'profile_update_draft',
-  prepareProfileUpdate: 'profile_update_draft',
-  prepare_profile_update: 'profile_update_draft',
-  createTeamDraft: 'create_team_draft',
-  prepareDeleteTeam: 'delete_team_confirmation',
-};
-
-const normalizeLegacyToolName = (toolName: string) => {
-  return LEGACY_TOOL_NAME_ALIASES[toolName] || toolName;
-};
-
-const legacyToolResultToUiBlock = (toolResult: AiToolResult): AiUiBlock | undefined => {
-  if (!toolResult.success) {
-    return undefined;
-  }
-  switch (normalizeLegacyToolName(toolResult.toolName)) {
-    case 'search_teams':
-      return {type: 'team_list', variant: 'search', data: toolResult.data};
-    case 'list_my_joined_teams':
-      return {type: 'team_list', variant: 'joined', data: toolResult.data};
-    case 'list_my_created_teams':
-      return {type: 'team_list', variant: 'created', data: toolResult.data};
-    case 'recommend_users':
-      return {type: 'user_recommendations', data: toolResult.data};
-    case 'profile_update_draft':
-      return {type: 'profile_update_confirmation', data: toolResult.data};
-    default:
-      return undefined;
-  }
-};
-
 const getUiBlocks = (response: AiChatResponse): AiUiBlock[] => {
-  if (response.uiBlocks?.length) {
-    return response.uiBlocks;
-  }
-
-  const blocks = (response.toolResults ?? [])
-      .map(legacyToolResultToUiBlock)
-      .filter((block): block is AiUiBlock => Boolean(block));
-  if (response.draft) {
-    blocks.push({type: 'team_draft_confirmation', data: response.draft});
-  }
-  if (response.deleteConfirmation) {
-    blocks.push({type: 'team_delete_confirmation', data: response.deleteConfirmation});
-  }
-  return blocks;
+  return response.uiBlocks ?? [];
 };
 
 const getContentUiBlocks = (response: AiChatResponse) => {
-  return getUiBlocks(response).filter(block => CONTENT_UI_BLOCK_TYPES.has(block.type));
+  return getUiBlocks(response).filter(block => {
+    if (!CONTENT_UI_BLOCK_TYPES.has(block.type)) {
+      return false;
+    }
+    if (block.type === 'team_list' || block.type === 'user_recommendations') {
+      return Array.isArray(block.data) && block.data.length > 0;
+    }
+    return true;
+  });
 };
 
 const findUiBlock = (response: AiChatResponse, type: AiUiBlock['type']) => {
@@ -707,7 +642,7 @@ const getTeamDraft = (response: AiChatResponse): TeamDraft | undefined => {
   if (block?.data && typeof block.data === 'object' && !Array.isArray(block.data)) {
     return block.data as TeamDraft;
   }
-  return response.draft;
+  return undefined;
 };
 
 const getDeleteConfirmation = (response: AiChatResponse): AiTeamDeleteConfirmation | undefined => {
@@ -715,11 +650,11 @@ const getDeleteConfirmation = (response: AiChatResponse): AiTeamDeleteConfirmati
   if (block?.data && typeof block.data === 'object' && !Array.isArray(block.data)) {
     return block.data as AiTeamDeleteConfirmation;
   }
-  return response.deleteConfirmation;
+  return undefined;
 };
 
 const normalizeAssistantReply = (response: AiChatResponse) => {
-  const reply = cleanAssistantText(response.reply);
+  const reply = response.reply?.trim();
   if (reply) {
     return reply;
   }
@@ -729,25 +664,10 @@ const normalizeAssistantReply = (response: AiChatResponse) => {
   if (getTeamDraft(response)) {
     return '我整理了一份队伍草稿，确认后才会正式创建。';
   }
-  if (findUiBlock(response, 'profile_update_confirmation')) {
-    return '我整理了一份个人画像草稿，确认后才会更新资料。';
-  }
   if (response.needClarification) {
     return '我还需要你补充一点信息。';
   }
   return '我已经处理好了。';
-};
-
-const cleanAssistantText = (text?: string) => {
-  if (!text) {
-    return '';
-  }
-  return text
-      .replace(/\*\*([^*]+)\*\*/g, '$1')
-      .replace(/\*/g, '')
-      .replace(/[ \t]*(\d+)[.．、][ \t]*/g, '\n$1. ')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
 };
 
 const shouldShowIntentCard = (response: AiChatResponse) => {
@@ -775,7 +695,6 @@ const getUiBlockTitle = (uiBlock: AiUiBlock) => {
     team_list: '队伍列表',
     user_recommendations: '搭子推荐',
     profile_card: '我的资料',
-    profile_update_confirmation: '画像更新草稿',
     team_draft_confirmation: '队伍草稿',
     team_delete_confirmation: '删除队伍确认',
   };
@@ -790,7 +709,6 @@ const getUiBlockIcon = (uiBlock: AiUiBlock) => {
     team_list: 'friends-o',
     user_recommendations: 'contact-o',
     profile_card: 'manager-o',
-    profile_update_confirmation: 'edit',
     team_draft_confirmation: 'records-o',
     team_delete_confirmation: 'delete-o',
   };
@@ -810,100 +728,6 @@ const getProfileData = (uiBlock: AiUiBlock): AiUserProfileData | undefined => {
     return undefined;
   }
   return uiBlock.data as AiUserProfileData;
-};
-
-const getProfileActivities = (uiBlock: AiUiBlock) => {
-  const profile = getProfileData(uiBlock)?.structuredProfile;
-  return [
-    ...(profile?.activityTypes ?? []),
-    ...(profile?.interests ?? []),
-  ].filter((item, index, array) => item && array.indexOf(item) === index).slice(0, 4);
-};
-
-const getProfileResponse = (uiBlock: AiUiBlock): AiProfileResponse | undefined => {
-  if (!uiBlock.data || Array.isArray(uiBlock.data) || typeof uiBlock.data !== 'object') {
-    return undefined;
-  }
-  return uiBlock.data as AiProfileResponse;
-};
-
-const getProfileUpdateTitle = (uiBlock: AiUiBlock) => {
-  return getProfileDraftStatus(uiBlock) === 'confirmed'
-      ? '个人资料已更新'
-      : getProfileDraftStatus(uiBlock) === 'rejected'
-          ? '已拒绝画像草稿'
-          : '请确认画像草稿';
-};
-
-const getProfileUpdateDescription = (uiBlock: AiUiBlock) => {
-  const profile = getProfileResponse(uiBlock)?.profile;
-  const city = profile?.city ? `，城市偏好：${profile.city}` : '';
-  const activities = profile?.activityTypes?.length ? `，活动：${profile.activityTypes.join('、')}` : '';
-  if (getProfileDraftStatus(uiBlock) === 'confirmed') {
-    return `已更新你的自我介绍和结构化画像${city}${activities}。`;
-  }
-  if (getProfileDraftStatus(uiBlock) === 'rejected') {
-    return '这份画像草稿已拒绝，不会修改个人资料。';
-  }
-  return `请检查这份结构化画像${city}${activities}，确认后才会写入个人资料。`;
-};
-
-const getProfileDraftId = (uiBlock: AiUiBlock) => {
-  const profileResponse = getProfileResponse(uiBlock);
-  return profileResponse?.draftId;
-};
-
-const getProfileDraftStatus = (uiBlock: AiUiBlock) => {
-  const draftId = getProfileDraftId(uiBlock);
-  return draftId ? profileDraftStatus.value[draftId] : undefined;
-};
-
-const isPendingProfileDraft = (uiBlock: AiUiBlock) => {
-  return !!getProfileDraftId(uiBlock) && !getProfileDraftStatus(uiBlock);
-};
-
-const confirmProfileDraft = async (uiBlock: AiUiBlock) => {
-  const draftId = getProfileDraftId(uiBlock);
-  if (!draftId || processingProfileDraftId.value) {
-    return;
-  }
-  processingProfileDraftId.value = draftId;
-  try {
-    const response = await myAxios.post<AiProfileResponse>(`/ai/profile-draft/${draftId}/confirm`, {});
-    if (response?.code !== 0) {
-      showFailToast(response?.description || response?.message || '画像确认失败');
-      return;
-    }
-    profileDraftStatus.value = {...profileDraftStatus.value, [draftId]: 'confirmed'};
-    showSuccessToast('个人资料已更新');
-  } catch (error) {
-    console.error('/ai/profile-draft confirm error', error);
-    showFailToast('画像确认失败');
-  } finally {
-    processingProfileDraftId.value = undefined;
-  }
-};
-
-const rejectProfileDraft = async (uiBlock: AiUiBlock) => {
-  const draftId = getProfileDraftId(uiBlock);
-  if (!draftId || processingProfileDraftId.value) {
-    return;
-  }
-  processingProfileDraftId.value = draftId;
-  try {
-    const response = await myAxios.post<AiProfileResponse>(`/ai/profile-draft/${draftId}/reject`);
-    if (response?.code !== 0) {
-      showFailToast(response?.description || response?.message || '拒绝画像失败');
-      return;
-    }
-    profileDraftStatus.value = {...profileDraftStatus.value, [draftId]: 'rejected'};
-    showSuccessToast('已拒绝画像草稿');
-  } catch (error) {
-    console.error('/ai/profile-draft reject error', error);
-    showFailToast('拒绝画像失败');
-  } finally {
-    processingProfileDraftId.value = undefined;
-  }
 };
 
 const formatUserTags = (tags?: string) => {
@@ -1285,13 +1109,6 @@ const goTeamPage = () => {
   color: #4b4c69;
   font-size: 12px;
   line-height: 1.45;
-}
-
-.profile-draft-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-top: 10px;
 }
 
 .profile-result__meta,

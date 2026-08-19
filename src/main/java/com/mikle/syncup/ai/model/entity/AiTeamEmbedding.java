@@ -10,31 +10,29 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.Date;
 
-@TableName(value = "ai_profile_draft")
 @Data
-public class AiProfileDraft implements Serializable {
+@TableName("ai_team_embedding")
+public class AiTeamEmbedding implements Serializable {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String draftId;
+    private Long teamId;
 
-    private Long userId;
+    private Integer contentVersion;
 
-    private String sourceText;
+    private String contentHash;
 
-    private String profileJson;
+    private String embeddingModel;
 
-    /**
-     * 0 - pending, 1 - confirmed, 2 - rejected, 3 - expired.
-     */
+    private Integer dimensions;
+
+    private String vectorJson;
+
+    /** 0 - historical, 1 - active. */
     private Integer status;
 
-    private Date expiresAt;
-
-    private Date confirmedAt;
-
-    private String modelVersion;
+    private Date generatedAt;
 
     private Date createTime;
 

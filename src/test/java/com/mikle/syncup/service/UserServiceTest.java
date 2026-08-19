@@ -290,31 +290,6 @@ class UserServiceTest {
         Assertions.assertNotNull(exception);
     }
 
-    @Test
-    void matchUsers_shouldSupportPlainStringTags() {
-        User currentUser = null;
-        User matchedUser = null;
-        try {
-            currentUser = createTestUser();
-            matchedUser = createTestUser();
-
-            currentUser.setTags("Java");
-
-            User updateMatchedUser = new User();
-            updateMatchedUser.setId(matchedUser.getId());
-            updateMatchedUser.setTags("[\"Java\",\"Python\"]");
-            userService.updateById(updateMatchedUser);
-
-            List<User> matchedUsers = userService.matchUsers(10, currentUser);
-            List<Long> matchedUserIds = matchedUsers.stream().map(User::getId).collect(Collectors.toList());
-
-            Assertions.assertTrue(matchedUserIds.contains(matchedUser.getId()));
-        } finally {
-            deletePhysically(currentUser);
-            deletePhysically(matchedUser);
-        }
-    }
-
     private User createTestUser() {
         User user = new User();
         String suffix = randomSuffix();

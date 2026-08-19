@@ -19,18 +19,26 @@ public class AiUserProfileEntity implements Serializable {
 
     private Long userId;
 
-    private String profileJson;
+    private String profileText;
 
-    private String sourceText;
+    private String matchProfileText;
 
-    private String modelVersion;
+    private String interactionProfileText;
+
+    private Integer profileVersion;
+
+    private String sourceHash;
+
+    private String model;
+
+    private String promptVersion;
 
     /**
-     * 1 - confirmed.
+     * 1 - active.
      */
     private Integer status;
 
-    private Date confirmedAt;
+    private Date generatedAt;
 
     private Date createTime;
 
@@ -42,4 +50,3 @@ public class AiUserProfileEntity implements Serializable {
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }
-

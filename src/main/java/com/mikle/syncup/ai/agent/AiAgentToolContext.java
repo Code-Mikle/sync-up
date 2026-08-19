@@ -23,9 +23,14 @@ public class AiAgentToolContext {
     private final ThreadLocal<State> current = new ThreadLocal<>();
 
     public void start(String sessionId, User loginUser) {
+        start(sessionId, loginUser, null);
+    }
+
+    public void start(String sessionId, User loginUser, String sourceText) {
         State state = new State();
         state.setSessionId(sessionId);
         state.setLoginUser(loginUser);
+        state.setSourceText(sourceText);
         current.set(state);
     }
 
@@ -42,6 +47,7 @@ public class AiAgentToolContext {
         State snapshot = new State();
         snapshot.setSessionId(state.getSessionId());
         snapshot.setLoginUser(state.getLoginUser());
+        snapshot.setSourceText(state.getSourceText());
         snapshot.getToolResults().addAll(state.getToolResults());
         snapshot.getUiBlocks().addAll(state.getUiBlocks());
         snapshot.setDraft(state.getDraft());
@@ -60,6 +66,8 @@ public class AiAgentToolContext {
         private String sessionId;
 
         private User loginUser;
+
+        private String sourceText;
 
         private List<AiToolResult> toolResults = new ArrayList<>();
 

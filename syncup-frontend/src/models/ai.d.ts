@@ -1,42 +1,17 @@
 import {TeamType} from "./team";
 
-export type ProfileExtraction = {
-    interests?: string[];
-    activityTypes?: string[];
-    availableTimes?: string[];
-    city?: string;
-    districts?: string[];
-    socialPreference?: string;
-    skillLevels?: string[];
-    budgetPreference?: string;
-    candidateTags?: string[];
-    confidence?: number;
-    sourceText?: string;
-    modelVersion?: string;
-};
-
-export type AiProfileResponse = {
-    draftId?: string;
-    userId?: number;
-    status?: number;
-    profile?: ProfileExtraction;
-    sourceText?: string;
-    modelVersion?: string;
-    confirmedAt?: string | Date;
-    expiresAt?: string | Date;
-    updateTime?: string | Date;
-};
-
 export type AiUserProfileData = {
     id: number;
     username?: string;
     avatarUrl?: string;
     gender?: number;
+    city?: string;
     tags?: string;
     profile?: string;
-    structuredProfile?: ProfileExtraction;
     planetCode?: string;
     createTime?: string | Date;
+    lastActiveTime?: string | Date;
+    degraded?: boolean;
 };
 
 export type TeamIntent = {
@@ -121,7 +96,6 @@ export type AiUiBlockType =
     | "team_list"
     | "user_recommendations"
     | "profile_card"
-    | "profile_update_confirmation"
     | "team_draft_confirmation"
     | "team_delete_confirmation";
 
@@ -135,10 +109,7 @@ export type AiChatResponse = {
     sessionId: string;
     reply: string;
     intent?: TeamIntent;
-    toolResults?: AiToolResult[];
     uiBlocks?: AiUiBlock[];
-    draft?: TeamDraft;
-    deleteConfirmation?: AiTeamDeleteConfirmation;
     needClarification?: boolean;
     clarificationQuestions?: string[];
 };

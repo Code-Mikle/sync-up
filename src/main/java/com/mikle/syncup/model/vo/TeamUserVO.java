@@ -5,6 +5,8 @@ import lombok.Data;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.Date;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 队伍和用户信息封装类（脱敏）
@@ -118,4 +120,10 @@ public class TeamUserVO implements Serializable {
      * 是否已加入队伍
      */
     private boolean hasJoin = false;
+
+    /** Public, explainable recommendation reasons. */
+    private List<String> recommendationReasons = new ArrayList<>();
+
+    /** Whether semantic ranking was unavailable and structured ranking was used. */
+    private Boolean recommendationDegraded;
 }

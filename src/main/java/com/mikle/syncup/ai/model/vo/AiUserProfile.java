@@ -1,6 +1,5 @@
 package com.mikle.syncup.ai.model.vo;
 
-import com.mikle.syncup.ai.model.schema.ProfileExtraction;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -22,8 +21,6 @@ public class AiUserProfile implements Serializable {
     private String profile;
 
     private String city;
-
-    private ProfileExtraction structuredProfile;
 
     private String planetCode;
 

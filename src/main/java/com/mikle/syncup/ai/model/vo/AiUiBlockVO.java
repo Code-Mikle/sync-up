@@ -14,7 +14,6 @@ public class AiUiBlockVO implements Serializable {
     public static final String TEAM_LIST = "team_list";
     public static final String USER_RECOMMENDATIONS = "user_recommendations";
     public static final String PROFILE_CARD = "profile_card";
-    public static final String PROFILE_UPDATE_CONFIRMATION = "profile_update_confirmation";
     public static final String TEAM_DRAFT_CONFIRMATION = "team_draft_confirmation";
     public static final String TEAM_DELETE_CONFIRMATION = "team_delete_confirmation";
 

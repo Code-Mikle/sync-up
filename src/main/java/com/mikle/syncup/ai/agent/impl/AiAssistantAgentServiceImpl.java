@@ -10,6 +10,7 @@ import com.mikle.syncup.ai.memory.PersistentChatMemoryStore;
 import com.mikle.syncup.ai.model.vo.AiChatResponseVO;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.service.AiConversationContextService;
+import com.mikle.syncup.ai.service.AiUserProfileService;
 import com.mikle.syncup.model.domain.User;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
@@ -45,6 +46,9 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
     @Resource
     private AiConversationContextService aiConversationContextService;
 
+    @Resource
+    private AiUserProfileService aiUserProfileService;
+
     @Resource(name = "chatModelPrototype")
     private ChatModel chatModel;
 
@@ -58,7 +62,7 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
         }
         String memoryId = buildMemoryId(loginUser, sessionId);
         String modelMessage = buildModelMessage(message, sessionId, loginUser);
-        aiAgentToolContext.start(sessionId, loginUser);
+        aiAgentToolContext.start(sessionId, loginUser, message);
         try {
             try {
                 return Optional.of(invokeAssistant(message, sessionId, memoryId, modelMessage));
@@ -80,7 +84,7 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
                             clearFailure.getClass().getSimpleName());
                     return Optional.empty();
                 }
-                aiAgentToolContext.start(sessionId, loginUser);
+                aiAgentToolContext.start(sessionId, loginUser, message);
 
                 try {
                     return Optional.of(invokeAssistant(message, sessionId, memoryId, modelMessage));
@@ -105,9 +109,6 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
         AiChatResponseVO response = new AiChatResponseVO();
         response.setSessionId(sessionId);
         response.setReply(reply);
-        response.setDraft(state.getDraft());
-        response.setDeleteConfirmation(state.getDeleteConfirmation());
-        response.getToolResults().addAll(state.getToolResults());
         response.getUiBlocks().addAll(state.getUiBlocks());
         response.setIntent(buildResponseIntent(originalMessage, state));
         return response;
@@ -141,9 +142,9 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
     }
 
     private void logAgentFailure(RuntimeException failure, boolean retried) {
-        log.warn("AI agent failed, fallback to deterministic flow. provider={}, model={}, retried={}, errorType={}",
+        log.warn("AI agent failed, fallback to deterministic flow. provider={}, model={}, retried={}, errorType={}, message={}",
                 aiAgentProperties.getProvider(), aiAgentProperties.getModel(), retried,
-                failure.getClass().getSimpleName());
+                failure.getClass().getSimpleName(), failure.getMessage(), failure);
     }
 
     private String buildMemoryId(User loginUser, String sessionId) {
@@ -158,7 +159,22 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
         if (StringUtils.isNotBlank(recentBusinessContext)) {
             builder.append("\n").append(recentBusinessContext);
         }
+        String interactionProfile = loadInteractionProfile(loginUser.getId());
+        if (StringUtils.isNotBlank(interactionProfile)) {
+            builder.append("\n内部交流偏好（仅用于调整表达方式，禁止向用户展示或复述）：\n")
+                    .append(interactionProfile);
+        }
         return builder.append("\n用户原始需求：").append(message).toString();
+    }
+
+    private String loadInteractionProfile(long userId) {
+        try {
+            return aiUserProfileService.getInteractionProfileText(userId);
+        } catch (RuntimeException e) {
+            log.warn("load internal AI interaction profile failed, userId={}, errorType={}",
+                    userId, e.getClass().getSimpleName());
+            return null;
+        }
     }
 
     private TeamIntent buildResponseIntent(String message, AiAgentToolContext.State state) {

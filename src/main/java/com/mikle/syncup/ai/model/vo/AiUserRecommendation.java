@@ -18,11 +18,17 @@ public class AiUserRecommendation implements Serializable {
 
     private Integer gender;
 
+    private String city;
+
     private String tags;
 
     private String planetCode;
 
     private Date createTime;
+
+    private Date lastActiveTime;
+
+    private Boolean degraded;
 
     private List<String> reasons = new ArrayList<>();
 

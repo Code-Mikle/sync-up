@@ -17,16 +17,22 @@
 
 Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Spring Boot 3、Vue 3、MyBatis-Plus、Sa-Token、Redis 和 Redisson 构建。
 
-项目围绕“如何找到同频的人”这个业务场景展开：用户可以维护个人资料和标签，按标签搜索搭子，查看推荐用户，通过相似度算法匹配更接近的人，也可以创建队伍、加入队伍、退出队伍和管理自己的队伍。
+项目围绕“如何找到同频的人”这个业务场景展开：用户可以维护个人资料和标签，按标签搜索搭子，也可以通过“结构化硬过滤 + 画像语义排序”寻找更匹配的搭子或队伍，并完成创建、加入、退出和管理队伍。
 
-当前阶段已补齐 AI 组队助手的第一阶段闭环：用户可以用自然语言查找队伍、推荐搭子、查看队伍详情、生成队伍草稿，并在确认后复用原有队伍服务创建正式队伍。
+当前阶段已完成 AI 组队助手、内部用户画像和第一版混合推荐：用户可以用自然语言查找队伍、推荐搭子、查看队伍详情、生成队伍草稿；系统会根据自我介绍生成内部五段式画像，并结合本轮需求完成硬过滤、向量排序、业务重排和失败降级。
+
+项目文档：
+
+- [迭代路线图](sync-up%20修改建议.md)：里程碑、阶段状态和验收条件。
+- [当前实施状态](IMPLEMENTATION_STATUS.md)：已实现代码、最近验证结果和已知问题。
+- [架构约束](ARCHITECTURE.md)：模块边界、AI 工具安全、事务和数据设计原则。
 
 ## 项目概览
 
 ```text
 用户注册 / 登录
   -> 维护个人资料和标签
-  -> 首页推荐 / 标签搜索 / 相似度匹配
+  -> 首页推荐 / 标签搜索 / 混合匹配
   -> 创建队伍 / 加入队伍 / 退出队伍
   -> AI 助手解析自然语言 / 调用受控工具 / 生成待确认草稿
   -> Redis 推荐缓存 / 定时预热
@@ -48,7 +54,7 @@ Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Sprin
 - 用户可以维护个人标签，标签以 JSON 形式存储在用户表中。
 - 支持按标签搜索用户，适合快速找到具备某些共同特征的人。
 - 首页提供推荐用户列表，并使用 Redis 做短期缓存。
-- 匹配模式使用编辑距离算法计算两组标签的接近程度，返回更相似的用户。
+- 匹配模式先按城市、活动标签和可见状态筛选，再结合本轮需求、内部匹配画像、标签重合度和活跃度排序。
 
 **队伍与协作关系**
 
@@ -62,20 +68,33 @@ Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Sprin
 
 - 支持 `POST /api/ai/chat`，根据自然语言识别组队需求。
 - 支持受控工具：队伍查询、队伍详情、搭子推荐、队伍草稿、我创建的队伍、我的公开资料。
-- 阶段 2 后扩展“我加入的队伍”和画像草稿工具；加入、退出队伍仍需在普通队伍页面由用户确认执行。
+- 支持“我加入的队伍”和“我的公开资料”查询；加入、退出队伍以及修改自我介绍仍需在普通页面执行。
 - 支持 LangChain4j 工具调用编排，默认关闭；未配置模型时自动降级到 Mock 解析和固定工具链。
-- 模型默认配置为 `qwen3.6-flash-2026-04-16`，通过 DashScope / 百炼 OpenAI 兼容接口接入。
+- 模型默认配置为 `qwen3.7-max-2026-05-20`，通过 DashScope / 百炼 OpenAI 兼容接口接入。
 - 创建队伍只生成草稿，必须用户确认后才会写入 `team` 和 `user_team`。
 - 工具调用和草稿确认写入 `ai_tool_call_log`，审计信息做脱敏摘要。
 
 **AI 用户画像（阶段 2）**
 
-- 用户可维护 `profile` 自我介绍，AI 画像接口可从自由文本提取结构化画像。
-- 画像提取结果先进入 `ai_profile_extraction_task`，用户确认后才写入 `ai_user_profile`。
-- 第一版采用规则化受控词表解析，保留候选标签，后续可替换为模型提取但接口和数据结构不变。
-- 画像读取已接入 `getMyProfile` 工具，模型能看到用户确认过的结构化偏好。
-- `updateMyProfile` 只生成待确认画像任务，用户确认后才更新自我介绍和正式结构化画像。
-- 提取失败或画像表未初始化不会阻断注册、登录、资料编辑和原有 AI 助手能力。
+- 用户只维护 `user.profile` 自我介绍；AI 画像是系统内部派生数据，不提供查看、确认、拒绝或修改接口。
+- 自我介绍发生变化后创建 `ai_profile_generation_task`，定时批量调用模型生成五段式文本画像。
+- `profileText` 保存完整画像，`matchProfileText` 只保留前四段，`interactionProfileText` 只保留 AI 交流偏好。
+- 系统只为 `matchProfileText` 生成一个整体 Embedding，并保存模型、维度、画像版本和生成状态；向量写入前统一做归一化。
+- 城市、性别、账号等确定信息不重复写入 AI 画像，后续匹配继续从用户资料做硬条件过滤。
+- AI 助手只在内部加载 `interactionProfileText` 调整表达方式，不通过工具或前端返回画像正文。
+- 任务支持抢占、重试、超时恢复和新任务淘汰旧任务；只有新文本和新向量都成功后才原子切换版本，任一步失败都保留上一有效版本且不阻断资料编辑。
+- 固定画像质量参考集包含 10 类自我介绍，离线检查五段完整性、已表达事实保留、敏感或无依据推断排除，以及匹配文本与交互文本隔离。
+- `interactionProfileText` 不参与推荐；搭子和队伍只使用前四段派生的 `matchProfileText` 形成查询语义。
+
+**混合推荐（阶段 3）**
+
+- 搭子推荐使用城市、活动标签等硬条件生成最多 100 条候选，再按画像语义、标签重合度和活跃度重排。
+- 队伍推荐先过滤城市、活动、时间、预算、水平、状态、过期时间和余位，再比较查询向量与版本化队伍检索向量。
+- 队伍检索文本由公开稳定字段生成；内容变更后旧向量立即失效，后台任务生成新版本。
+- 推荐默认返回前三名和可公开的主要原因，不向用户暴露内部画像正文或敏感推断。
+- Embedding 服务失败、向量缺失或版本不一致时自动降级为标签或结构化业务排序。
+- 第一版在应用内计算有限候选集余弦相似度，不引入独立向量数据库。
+- 10 条合成向量固定样本用于代码回归；真实模型效果仍需单独使用人工相关性标注评测。
 
 **缓存、并发与工程实践**
 
@@ -146,23 +165,21 @@ sequenceDiagram
     participant U as 用户
     participant F as 前端
     participant C as UserController
-    participant S as UserService
-    participant A as AlgorithmUtils
+    participant R as HybridRecommendationService
     participant D as MySQL
 
     U->>F: 开启匹配模式
     F->>C: GET /api/user/match?num=10
-    C->>S: 获取当前登录用户
-    S->>D: 查询有标签的用户
-    S->>A: 计算标签编辑距离
-    A-->>S: 返回相似度距离
-    S->>D: 查询匹配用户完整信息
-    S-->>C: 返回脱敏用户列表
+    C->>R: 当前用户 + 当前需求
+    R->>D: 城市、活动标签、可见状态硬过滤
+    R->>D: 读取同版本候选画像向量
+    R->>R: 余弦相似度 + 标签 + 活跃度重排
+    R-->>C: 返回前三名、推荐原因和降级状态
     C-->>F: 统一响应体
     F-->>U: 展示心动搭子
 ```
 
-这条链路没有一开始引入复杂推荐系统。当前阶段用户标签量和业务规则都不复杂，编辑距离算法足够清晰、可解释，也方便后续替换为更复杂的推荐策略。
+这条链路保持有限候选集和应用内排序，避免过早引入向量数据库。Embedding 不可用时仍可使用标签与活跃度完成确定性降级。
 
 ### 加入队伍链路
 
@@ -224,7 +241,7 @@ sequenceDiagram
 | 用户模块 | 注册、登录、退出、当前用户、用户更新、管理员查询和删除 |
 | 标签模块 | 用户标签维护、按标签搜索、标签 JSON 解析 |
 | 推荐模块 | 首页推荐、Redis 缓存、定时缓存预热 |
-| 匹配模块 | 基于编辑距离的标签相似度匹配 |
+| 匹配模块 | 城市与活动硬过滤、画像向量排序、业务重排、推荐原因和失败降级 |
 | 队伍模块 | 创建、更新、查询、加入、退出、删除、我创建、我加入 |
 | AI 助手模块 | 自然语言组队、受控工具调用、队伍草稿、确认创建、工具审计 |
 | 导入模块 | EasyExcel 批量导入用户数据 |
@@ -242,9 +259,12 @@ sequenceDiagram
 | `tag` | 标签表，当前可以不启用，因为用户标签已存入 `user.tags` |
 | `ai_team_draft` | AI 生成的队伍草稿、确认状态、过期时间和确认后的队伍 ID |
 | `ai_tool_call_log` | AI 工具调用和草稿确认的脱敏审计记录 |
-| `ai_user_profile` | 用户确认后的结构化 AI 画像 |
-| `ai_profile_extraction_task` | 画像提取任务、状态、来源文本和提取结果 |
+| `ai_user_profile` | 系统内部五段式文本画像、匹配文本、交互文本及版本元数据 |
+| `ai_profile_generation_task` | 自我介绍变更产生的画像生成任务、重试状态和错误摘要 |
+| `ai_user_profile_embedding` | 匹配画像的归一化向量、画像版本、模型、维度和有效状态 |
+| `ai_team_embedding` | 队伍检索文本的归一化向量、内容版本、哈希、模型、维度和有效状态 |
 | `ai_chat_memory` | AI 短期会话记忆，保存 24 小时内的 LangChain4j 消息窗口 |
+| `ai_chat_message` | 用户消息、助手响应和隐藏业务事件，用于恢复最近聊天历史 |
 
 设计取舍：
 
@@ -253,7 +273,7 @@ sequenceDiagram
 - 使用 `isDelete` 配合 MyBatis-Plus 做逻辑删除。
 - 当前标签存在 `user.tags` 字段中，适合快速落地；如果后续标签查询、统计、推荐规则变复杂，再拆成标签关系表更稳妥。
 - 当前不依赖数据库外键，关系一致性主要由业务层和事务维护，部署和迁移成本更低。
-- AI 相关表只保存草稿、画像和审计摘要，不保存登录 Token、模型 API Key、队伍密码和完整敏感内容；画像来源文本会做手机号、邮箱和密钥类信息最小化处理。
+- AI 相关表不保存登录 Token、模型 API Key 和队伍密码；画像任务中的自我介绍快照会做手机号、邮箱和密钥类信息最小化处理。
 
 ## 接口概览
 
@@ -296,10 +316,8 @@ sequenceDiagram
 | `POST` | `/api/ai/chat` | AI 组队助手对话入口 |
 | `POST` | `/api/ai/team/{teamId}/details` | AI 工具路径下的队伍详情查询 |
 | `POST` | `/api/ai/team-draft/{draftId}/confirm` | 确认 AI 队伍草稿并创建正式队伍 |
-| `GET` | `/api/ai/profile/current` | 查询当前用户已确认的结构化画像 |
-| `POST` | `/api/ai/profile/extract` | 从自我介绍文本生成待确认画像任务 |
-| `POST` | `/api/ai/profile-task/{taskId}/confirm` | 确认画像任务并保存当前画像 |
-| `POST` | `/api/ai/profile-task/{taskId}/reject` | 拒绝画像任务 |
+
+AI 用户画像没有用户侧 REST 接口。用户通过 `/api/user/update` 维护自我介绍，画像生成由后端内部触发。
 
 统一响应格式：
 
@@ -403,6 +421,12 @@ mysql -u root -p sync_up_db < sql/stage1_3_ai_team_draft_migration.sql
 mysql -u root -p sync_up_db < sql/stage1_4_ai_audit_migration.sql
 mysql -u root -p sync_up_db < sql/stage2_ai_user_profile_migration.sql
 mysql -u root -p sync_up_db < sql/stage2_1_ai_chat_memory_migration.sql
+mysql -u root -p sync_up_db < sql/stage2_2_ai_chat_message_migration.sql
+mysql -u root -p sync_up_db < sql/stage2_3_internal_text_profile_migration.sql
+mysql -u root -p sync_up_db < sql/stage2_4_ai_profile_embedding_migration.sql
+mysql -u root -p sync_up_db < sql/stage3_team_activity_category_migration.sql
+mysql -u root -p sync_up_db < sql/stage4_user_city_active_migration.sql
+mysql -u root -p sync_up_db < sql/stage3_1_team_embedding_migration.sql
 ```
 
 AI Agent 默认关闭，不影响本地启动。需要接入真实模型时，在 `.env` 或运行环境中配置：
@@ -410,7 +434,12 @@ AI Agent 默认关闭，不影响本地启动。需要接入真实模型时，�
 ```properties
 SYNC_UP_AI_AGENT_ENABLED=true
 DASHSCOPE_API_KEY=你的百炼或 DashScope API Key
-SYNC_UP_AI_AGENT_MODEL=qwen3.6-flash-2026-04-16
+SYNC_UP_AI_AGENT_MODEL=qwen3.7-max-2026-05-20
+SYNC_UP_AI_EMBEDDING_ENABLED=true
+SYNC_UP_AI_EMBEDDING_MODEL=text-embedding-v4
+SYNC_UP_AI_EMBEDDING_DIMENSIONS=1024
+SYNC_UP_AI_PROFILE_GENERATION_FIXED_DELAY_MS=60000
+SYNC_UP_AI_TEAM_EMBEDDING_FIXED_DELAY_MS=60000
 SYNC_UP_AI_MEMORY_MAX_MESSAGES=20
 SYNC_UP_AI_MEMORY_REDIS_TTL_HOURS=12
 SYNC_UP_AI_MEMORY_MYSQL_TTL_HOURS=24
@@ -478,102 +507,25 @@ npm run build
 http://localhost:8080/api
 ```
 
-## AI 阶段 1 验收
+## 验证与验收
 
-阶段 1 的验收目标是证明 AI 助手可以形成最小闭环，而不是宣传完整智能推荐系统。
+README 只保留启动和验证入口：
 
-### 演示脚本
+- 当前真实进度、最近测试结果和已知问题见 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)。
+- 各阶段目标和验收条件见 [sync-up 修改建议.md](sync-up%20修改建议.md)。
+- AI 工具、画像、记忆、事务和权限边界见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-1. 登录用户。
-2. 在 AI 页面输入：`我想这个周末在西安找羽毛球搭子，预算每人50以内`。
-3. 后端识别组队需求，调用 `searchTeams` 返回可加入队伍。
-4. 同一轮调用 `recommendUsers` 返回搭子推荐和推荐原因。
-5. 点击队伍卡片“详情”，调用 `getTeamDetails` 查看人数、地点、时间和创建者。
-6. 输入：`帮我在西安创建一个4人的羽毛球队伍，预算每人50以内`。
-7. 后端只生成 `createTeamDraft` 草稿，不写正式队伍表。
-8. 用户点击确认后，调用 `POST /api/ai/team-draft/{draftId}/confirm` 创建正式队伍并自动加入。
-9. 查询 `ai_tool_call_log`，确认搜索、推荐、详情、草稿和确认动作都有审计记录。
+后端全量测试：
 
-### 固定评测集
-
-当前固定评测集为 `src/test/resources/ai/intent-evaluation-v1.json`，共 30 条样本。当前基线对象是 `MockTeamIntentParser`，不是大模型效果。
-
-最近一次阶段 1 验证指标：
-
-| 指标 | 结果 |
-| --- | --- |
-| 样本数 | 30 |
-| 关键槽位准确率 | 147/150，98.00% |
-| 确定性工具路由准确率 | 30/30，100.00% |
-| 缺失字段集合准确率 | 30/30，100.00% |
-
-### 验证命令
-
-后端阶段 1 测试：
-
-```bash
-mvn "-Dmaven.repo.local=.m2/repository" "-Dtest=AiChatServiceTest,AiIntentEvaluationTest" test
-```
+    mvn.cmd "-Dmaven.repo.local=.m2/repository" test
 
 前端验证：
 
-```bash
-cd syncup-frontend
-npm.cmd run type-check
-npm.cmd run build
-```
+    cd syncup-frontend
+    npm.cmd run type-check
+    npm.cmd run build
 
-### 已知限制
-
-- 未配置 `DASHSCOPE_API_KEY` 时，AI 助手默认使用 Mock 解析和固定工具链。
-- 真实模型工具调用默认关闭，需要显式开启 `SYNC_UP_AI_AGENT_ENABLED=true`。
-- 当前推荐仍是标签匹配和编辑距离基线，不是向量召回或复杂语义推荐。
-- 当前没有长期记忆、内容审核后台、复杂 Agent 工作流和向量数据库；只保留短期会话记忆。
-- 个人信息更新只暴露受控的 `updateMyProfile` 草稿工具；模型不能直接修改自我介绍、正式画像、账号、手机号、邮箱或角色。
-
-## AI 短期会话记忆
-
-真实模型开启后，AI 助手使用 LangChain4j `chatMemoryProvider` 读取短期上下文，解决“刚才那个队伍”“加入第一个”“继续修改我的资料”这类连续对话问题。
-
-设计取舍：
-
-- `memoryId = userId:sessionId`，避免不同用户之间串话。
-- Redis 缓存 `syncup:ai:chat-memory:{memoryId}`，默认保留 12 小时。
-- MySQL 表 `ai_chat_memory` 默认保留 24 小时，并由定时任务每小时物理清理过期数据。
-- 第一版使用 `MessageWindowChatMemory`，默认最多保留最近 20 条消息。
-- 只做短期会话记忆；长期偏好仍由 `ai_user_profile` 管理。
-
-## AI 阶段 2 验收
-
-阶段 2 的目标是让用户画像进入可解释、可确认、可回滚的结构化状态，而不是让模型直接覆盖用户标签。
-
-### 核心流程
-
-```text
-用户编辑自我介绍 / 调用画像提取接口
-  -> Agent 识别更新意图并调用 updateMyProfile 生成草稿，或用户调用画像提取接口
-  -> 规则化画像提取
-  -> 写入 ai_profile_extraction_task
-  -> 用户确认或拒绝
-  -> 确认后更新 user.profile 并写入 ai_user_profile
-  -> getMyProfile 工具读取已确认画像
-```
-
-### 验证命令
-
-```bash
-mvn "-Dmaven.repo.local=.m2/repository" "-Dtest=AiUserProfileServiceTest,AiChatServiceTest" test
-```
-
-当前覆盖：
-
-- 画像提取、确认、当前画像读取。
-- `updateMyProfile` 工具只生成画像草稿，确认接口负责更新 `user.profile` 和结构化画像。
-- `listMyJoinedTeams` 复用原队伍 Service；`joinTeam`、`quitTeam` 不向模型暴露，入退队由普通页面确认执行。
-- 拒绝画像任务后不写入当前画像。
-- 其他用户不能确认画像任务。
-- 阶段 1 AI 聊天、工具调用、草稿确认链路回归通过。
-
+真实模型工具调用默认关闭。未配置模型时，普通业务和确定性降级链路仍应能够运行。Mock 固定评测只用于回归解析和工具路由，不代表真实模型效果。
 ## License
 
 本项目基于 [Apache License 2.0](LICENSE) 开源。

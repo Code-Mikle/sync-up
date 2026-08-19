@@ -1,25 +1,18 @@
 package com.mikle.syncup.ai.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.mikle.syncup.ai.model.dto.AiProfileConfirmRequest;
-import com.mikle.syncup.ai.model.entity.AiProfileDraft;
-import com.mikle.syncup.ai.model.vo.AiProfileResponse;
 import com.mikle.syncup.ai.model.entity.AiUserProfileEntity;
-import com.mikle.syncup.model.domain.User;
+import com.mikle.syncup.ai.model.entity.AiUserProfileEmbedding;
 
 public interface AiUserProfileService extends IService<AiUserProfileEntity> {
 
-    AiProfileResponse getCurrentProfile(User loginUser);
+    void onSelfIntroductionChanged(long userId, String sourceText);
 
-    AiProfileResponse createProfileDraft(String sourceText, User loginUser);
+    int processPendingTasks();
 
-    AiProfileResponse confirmDraft(String draftId, AiProfileConfirmRequest request, User loginUser);
+    AiUserProfileEntity getInternalProfile(long userId);
 
-    AiProfileResponse rejectDraft(String draftId, User loginUser);
+    AiUserProfileEmbedding getActiveEmbedding(long userId);
 
-    void createDraftFromUserUpdate(User updateUser, User loginUser);
-
-    AiProfileDraft findLatestDraft(long userId);
-
-    int deleteExpiredDraftsPhysically();
+    String getInteractionProfileText(long userId);
 }

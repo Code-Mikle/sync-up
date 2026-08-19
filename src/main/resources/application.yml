@@ -46,6 +46,21 @@ knife4j:
 
 sync-up:
   ai:
+    profile-generation:
+      fixed-delay-ms: ${SYNC_UP_AI_PROFILE_GENERATION_FIXED_DELAY_MS:60000}
+    embedding:
+      enabled: ${SYNC_UP_AI_EMBEDDING_ENABLED:${SYNC_UP_AI_AGENT_ENABLED:false}}
+      base-url: ${SYNC_UP_AI_EMBEDDING_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      model: ${SYNC_UP_AI_EMBEDDING_MODEL:text-embedding-v4}
+      api-key: ${DASHSCOPE_API_KEY:}
+      dimensions: ${SYNC_UP_AI_EMBEDDING_DIMENSIONS:1024}
+      timeout-ms: ${SYNC_UP_AI_EMBEDDING_TIMEOUT_MS:10000}
+      max-retries: ${SYNC_UP_AI_EMBEDDING_MAX_RETRIES:1}
+      log-requests: ${SYNC_UP_AI_EMBEDDING_LOG_REQUESTS:false}
+      log-responses: ${SYNC_UP_AI_EMBEDDING_LOG_RESPONSES:false}
+    team-embedding:
+      initial-delay-ms: ${SYNC_UP_AI_TEAM_EMBEDDING_INITIAL_DELAY_MS:15000}
+      fixed-delay-ms: ${SYNC_UP_AI_TEAM_EMBEDDING_FIXED_DELAY_MS:60000}
     agent:
       enabled: ${SYNC_UP_AI_AGENT_ENABLED:false}
       provider: ${SYNC_UP_AI_AGENT_PROVIDER:dashscope}

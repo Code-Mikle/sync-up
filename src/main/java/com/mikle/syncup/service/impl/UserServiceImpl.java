@@ -16,10 +16,8 @@ import com.mikle.syncup.model.vo.UserLoginVO;
 import com.mikle.syncup.model.vo.UserSearchResultVO;
 import com.mikle.syncup.service.UserService;
 import com.mikle.syncup.mapper.UserMapper;
-import com.mikle.syncup.utils.AlgorithmUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.math3.util.Pair;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.dao.DuplicateKeyException;
@@ -367,22 +365,29 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, "城市名称过长");
             }
         }
+        if (user.getProfile() != null) {
+            user.setProfile(user.getProfile().trim());
+            if (user.getProfile().length() > 1000) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "自我介绍过长");
+            }
+        }
         User oldUser = userMapper.selectById(userId);
         if (oldUser == null) {
             throw new BusinessException(ErrorCode.NULL_ERROR);
         }
         int updated = userMapper.updateById(user);
-        if (updated > 0) {
-            tryCreateProfileDraft(user, loginUser);
+        if (updated > 0 && user.getProfile() != null
+                && !Objects.equals(user.getProfile(), StringUtils.defaultString(oldUser.getProfile()).trim())) {
+            tryEnqueueProfileGeneration(user.getId(), user.getProfile());
         }
         return updated;
     }
 
-    private void tryCreateProfileDraft(User user, User loginUser) {
+    private void tryEnqueueProfileGeneration(long userId, String sourceText) {
         try {
-            aiUserProfileService.createDraftFromUserUpdate(user, loginUser);
+            aiUserProfileService.onSelfIntroductionChanged(userId, sourceText);
         } catch (Exception e) {
-            log.warn("create AI profile draft failed, userId={}", user.getId(), e);
+            log.warn("enqueue AI profile generation failed, userId={}", userId, e);
         }
     }
 
@@ -418,64 +423,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     @Override
     public boolean isAdmin(User loginUser) {
         return loginUser != null && loginUser.getUserRole() == UserConstant.ADMIN_ROLE;
-    }
-
-    @Override
-    public List<User> matchUsers(long num, User loginUser) {
-        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("id", "tags");
-        queryWrapper.isNotNull("tags");
-        List<User> userList = this.list(queryWrapper);
-        List<String> tagList = parseTagNameList(loginUser.getTags());
-        if (CollectionUtils.isEmpty(tagList)) {
-            return new ArrayList<>();
-        }
-        // 用户列表的下标 => 相似度
-        List<Pair<User, Long>> list = new ArrayList<>();
-        // 依次计算所有用户和当前用户的相似度
-        for (int i = 0; i < userList.size(); i++) {
-            User user = userList.get(i);
-            String userTags = user.getTags();
-            // 无标签或者为当前用户自己
-            if (StringUtils.isBlank(userTags) || user.getId() == loginUser.getId()) {
-                continue;
-            }
-            List<String> userTagList = parseTagNameList(userTags);
-            if (CollectionUtils.isEmpty(userTagList)) {
-                continue;
-            }
-            // 计算分数
-            long distance = AlgorithmUtils.minDistance(tagList, userTagList);
-            list.add(new Pair<>(user, distance));
-        }
-        // 按编辑距离由小到大排序
-        List<Pair<User, Long>> topUserPairList = list.stream()
-                .sorted((a, b) -> (int) (a.getValue() - b.getValue()))
-                .limit(num)
-                .collect(Collectors.toList());
-        // 原本顺序的 userId 列表
-        List<Long> userIdList = topUserPairList.stream().map(pair -> pair.getKey().getId()).collect(Collectors.toList());
-        if (CollectionUtils.isEmpty(userIdList)) {
-            return new ArrayList<>();
-        }
-        QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
-        userQueryWrapper.in("id", userIdList);
-        // 1, 3, 2
-        // User1、User2、User3
-        // 1 => User1, 2 => User2, 3 => User3
-        Map<Long, List<User>> userIdUserListMap = this.list(userQueryWrapper)
-                .stream()
-                .map(user -> getSafetyUser(user))
-                .collect(Collectors.groupingBy(User::getId));
-        List<User> finalUserList = new ArrayList<>();
-        for (Long userId : userIdList) {
-            finalUserList.add(userIdUserListMap.get(userId).get(0));
-        }
-        return finalUserList;
-    }
-
-    private List<String> parseTagNameList(String tagsStr) {
-        return new ArrayList<>(parseTagNameSet(tagsStr));
     }
 
     /**

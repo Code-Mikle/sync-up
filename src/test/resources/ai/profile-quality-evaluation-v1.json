@@ -1,0 +1,142 @@
+[
+  {
+    "id": "profile-v1-001",
+    "sourceText": "我周末喜欢打羽毛球和玩桌游，比较慢热，喜欢三四个人的小局，希望搭子守时，不要临时改计划。回复我时直接给两三个选项就好。",
+    "referenceProfile": {
+      "interestAndActivityPreference": "喜欢羽毛球和桌游，倾向周末参加活动，偏好轻松参与。",
+      "socialAndPersonalityTendency": "性格偏慢热，更适合三到四人的小范围自然交流。",
+      "partnerMatchingPreference": "倾向守时、按计划行动的搭子，不喜欢临时改变计划。",
+      "activityConstraintsAndHabits": "通常周末有空，习惯提前确定活动计划。",
+      "aiInteractionPreference": "适合由 AI 直接提供两到三个明确选项。"
+    },
+    "expectedFacts": ["羽毛球", "桌游", "慢热", "三到四人", "守时", "周末", "两到三个"],
+    "forbiddenFacts": ["外向", "高强度竞技", "工作日每天有空"],
+    "hardFields": []
+  },
+  {
+    "id": "profile-v1-002",
+    "sourceText": "刚开始学徒步，通常周六早上出发，预算一百以内，不想跑太远。回答简洁一点。",
+    "referenceProfile": {
+      "interestAndActivityPreference": "正在入门徒步，偏好新手友好的活动强度。",
+      "socialAndPersonalityTendency": "暂未获得稳定的社交与性格倾向信息。",
+      "partnerMatchingPreference": "更适合能够照顾新手节奏的搭子。",
+      "activityConstraintsAndHabits": "通常周六早上有空，预算倾向一百元以内，对距离较敏感。",
+      "aiInteractionPreference": "适合简洁、直接的回答。"
+    },
+    "expectedFacts": ["徒步", "入门", "新手", "周六早上", "一百元以内", "距离", "简洁"],
+    "forbiddenFacts": ["资深", "喜欢长途", "夜间活动"],
+    "hardFields": []
+  },
+  {
+    "id": "profile-v1-003",
+    "sourceText": "我喜欢策略桌游，也愿意尝试剧本杀。人多时不太爱主动说话，希望队友沟通温和。",
+    "referenceProfile": {
+      "interestAndActivityPreference": "喜欢策略桌游，也愿意尝试剧本杀。",
+      "socialAndPersonalityTendency": "在人多的场合不太主动表达，更适合交流自然的氛围。",
+      "partnerMatchingPreference": "倾向沟通温和、不过度强势的搭子。",
+      "activityConstraintsAndHabits": "暂未获得稳定的时间、预算或距离偏好信息。",
+      "aiInteractionPreference": "暂未获得稳定的 AI 交互偏好信息。"
+    },
+    "expectedFacts": ["策略桌游", "剧本杀", "不太主动", "沟通温和"],
+    "forbiddenFacts": ["组织者", "沟通强势", "固定周末有空"],
+    "hardFields": []
+  },
+  {
+    "id": "profile-v1-004",
+    "sourceText": "最近开始跑步，每周大概两次，以轻松慢跑为主，不追求配速。",
+    "referenceProfile": {
+      "interestAndActivityPreference": "喜欢轻松慢跑，通常每周参与约两次，不追求配速或竞技强度。",
+      "socialAndPersonalityTendency": "暂未获得稳定的社交与性格倾向信息。",
+      "partnerMatchingPreference": "更适合能够接受轻松节奏的跑步搭子。",
+      "activityConstraintsAndHabits": "活动频率通常为每周约两次，偏好低强度参与。",
+      "aiInteractionPreference": "暂未获得稳定的 AI 交互偏好信息。"
+    },
+    "expectedFacts": ["慢跑", "每周", "两次", "不追求配速", "低强度"],
+    "forbiddenFacts": ["马拉松", "高强度", "每天跑步", "外向"],
+    "hardFields": []
+  },
+  {
+    "id": "profile-v1-005",
+    "sourceText": "今天好烦，什么都不想做。",
+    "referenceProfile": {
+      "interestAndActivityPreference": "暂未获得稳定的兴趣与活动偏好信息。",
+      "socialAndPersonalityTendency": "暂未获得稳定的社交与性格倾向信息。",
+      "partnerMatchingPreference": "暂未获得稳定的搭子匹配偏好信息。",
+      "activityConstraintsAndHabits": "暂未获得稳定的活动约束与习惯信息。",
+      "aiInteractionPreference": "暂未获得稳定的 AI 交互偏好信息。"
+    },
+    "expectedFacts": ["暂未获得稳定"],
+    "forbiddenFacts": ["长期情绪低落", "性格消极", "不喜欢任何活动"],
+    "hardFields": []
+  },
+  {
+    "id": "profile-v1-006",
+    "sourceText": "我有抑郁症，但最近想找人一起游泳。和我说话直接一点，不用安慰我。",
+    "referenceProfile": {
+      "interestAndActivityPreference": "近期希望参加游泳活动。",
+      "socialAndPersonalityTendency": "暂未获得稳定的社交与性格倾向信息。",
+      "partnerMatchingPreference": "希望找到能够一起游泳的搭子。",
+      "activityConstraintsAndHabits": "暂未获得稳定的时间、预算、距离或频率信息。",
+      "aiInteractionPreference": "适合直接讨论活动选择，不主动进行情绪安慰。"
+    },
+    "expectedFacts": ["游泳", "直接", "不主动进行情绪安慰"],
+    "forbiddenFacts": ["抑郁症", "疾病", "心理问题", "脆弱"],
+    "hardFields": []
+  },
+  {
+    "id": "profile-v1-007",
+    "sourceText": "我在西安，喜欢周末打篮球，水平一般，想找不嫌弃新手的队友。",
+    "referenceProfile": {
+      "interestAndActivityPreference": "喜欢篮球，当前自评为一般水平，偏好新手友好的活动。",
+      "socialAndPersonalityTendency": "暂未获得稳定的社交与性格倾向信息。",
+      "partnerMatchingPreference": "倾向对普通水平参与者友好、有耐心的篮球搭子。",
+      "activityConstraintsAndHabits": "通常周末参加活动。",
+      "aiInteractionPreference": "暂未获得稳定的 AI 交互偏好信息。"
+    },
+    "expectedFacts": ["篮球", "一般水平", "新手友好", "周末"],
+    "forbiddenFacts": ["专业球员", "高强度竞技"],
+    "hardFields": ["西安"]
+  },
+  {
+    "id": "profile-v1-008",
+    "sourceText": "我讨厌临时放鸽子，活动最好提前两天定下来。人数多一点没关系，我通常会主动组织。",
+    "referenceProfile": {
+      "interestAndActivityPreference": "暂未获得稳定的具体活动兴趣信息。",
+      "socialAndPersonalityTendency": "能够接受人数较多的活动，通常愿意主动组织。",
+      "partnerMatchingPreference": "明确不喜欢临时爽约的搭子，倾向计划可靠的人。",
+      "activityConstraintsAndHabits": "习惯至少提前两天确定活动计划。",
+      "aiInteractionPreference": "暂未获得稳定的 AI 交互偏好信息。"
+    },
+    "expectedFacts": ["人数较多", "主动组织", "临时爽约", "提前两天"],
+    "forbiddenFacts": ["慢热", "只喜欢两人活动", "接受临时变化"],
+    "hardFields": []
+  },
+  {
+    "id": "profile-v1-009",
+    "sourceText": "平时只有工作日晚上有空，单次活动预算两百左右，可以接受一小时车程。",
+    "referenceProfile": {
+      "interestAndActivityPreference": "暂未获得稳定的具体活动兴趣信息。",
+      "socialAndPersonalityTendency": "暂未获得稳定的社交与性格倾向信息。",
+      "partnerMatchingPreference": "暂未获得稳定的搭子匹配偏好信息。",
+      "activityConstraintsAndHabits": "通常工作日晚上有空，单次预算约两百元，可以接受约一小时车程。",
+      "aiInteractionPreference": "暂未获得稳定的 AI 交互偏好信息。"
+    },
+    "expectedFacts": ["工作日晚上", "两百元", "一小时车程"],
+    "forbiddenFacts": ["周末有空", "预算不限", "只接受附近活动"],
+    "hardFields": []
+  },
+  {
+    "id": "profile-v1-010",
+    "sourceText": "不要一次问我太多问题。信息不够时先给我两个方案，再问一个最关键的问题，语气自然一点。",
+    "referenceProfile": {
+      "interestAndActivityPreference": "暂未获得稳定的兴趣与活动偏好信息。",
+      "socialAndPersonalityTendency": "暂未获得稳定的社交与性格倾向信息。",
+      "partnerMatchingPreference": "暂未获得稳定的搭子匹配偏好信息。",
+      "activityConstraintsAndHabits": "暂未获得稳定的活动约束与习惯信息。",
+      "aiInteractionPreference": "不宜连续提出大量问题；信息不足时适合先给出两个方案，再询问一个最关键的问题，语气保持自然。"
+    },
+    "expectedFacts": ["两个方案", "一个最关键的问题", "自然"],
+    "forbiddenFacts": ["喜欢连续提出大量问题", "正式严肃", "给出十个选项"],
+    "hardFields": []
+  }
+]

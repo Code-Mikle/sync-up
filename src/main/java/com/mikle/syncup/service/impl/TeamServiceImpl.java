@@ -3,6 +3,7 @@ package com.mikle.syncup.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mikle.syncup.common.ErrorCode;
+import com.mikle.syncup.ai.service.AiTeamEmbeddingService;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.mapper.TeamMapper;
 import com.mikle.syncup.mapper.UserMapper;
@@ -57,6 +58,9 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
 
     @Resource
     private UserTeamMapper userTeamMapper;
+
+    @Resource
+    private AiTeamEmbeddingService aiTeamEmbeddingService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -289,7 +293,11 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         Team updateTeam = new Team();
         BeanUtils.copyProperties(teamUpdateRequest, updateTeam);
         validateStructuredTeamFields(updateTeam);
-        return this.updateById(updateTeam);
+        boolean updated = this.updateById(updateTeam);
+        if (updated) {
+            aiTeamEmbeddingService.invalidate(id);
+        }
+        return updated;
     }
 
     @Override
@@ -392,6 +400,7 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         long teamHasJoinNum = this.countTeamUserByTeamId(teamId);
         if (teamHasJoinNum == 1) {
             this.removeById(teamId);
+            aiTeamEmbeddingService.deletePhysically(teamId);
         } else if (team.getUserId() == userId) {
             QueryWrapper<UserTeam> userTeamQueryWrapper = new QueryWrapper<>();
             userTeamQueryWrapper.eq("teamId", teamId);
@@ -427,6 +436,7 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
             throw new BusinessException(ErrorCode.NO_AUTH, "no permission");
         }
         userTeamMapper.deleteByTeamIdPhysically(teamId);
+        aiTeamEmbeddingService.deletePhysically(teamId);
         return teamMapper.deleteByTeamIdPhysically(teamId) > 0;
     }
 

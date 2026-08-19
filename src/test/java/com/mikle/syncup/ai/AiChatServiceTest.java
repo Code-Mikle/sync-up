@@ -3,7 +3,6 @@ package com.mikle.syncup.ai;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.MissingNode;
 import com.mikle.syncup.ai.agent.AiAgentToolContext;
 import com.mikle.syncup.ai.agent.AiAssistantTools;
 import com.mikle.syncup.ai.model.entity.AiTeamDraft;
@@ -309,7 +308,8 @@ class AiChatServiceTest {
             Assertions.assertEquals("AI 助手暂时不可用，请稍后再试。", response.at("/data/reply").asText());
             Assertions.assertFalse(response.at("/data/needClarification").asBoolean());
             Assertions.assertTrue(response.at("/data/intent").isMissingNode() || response.at("/data/intent").isNull());
-            Assertions.assertEquals(0, response.at("/data/toolResults").size());
+            Assertions.assertTrue(response.at("/data/toolResults").isMissingNode());
+            Assertions.assertEquals(0, response.at("/data/uiBlocks").size());
         } finally {
             cleanupUserAndTeams(user);
         }
@@ -379,8 +379,17 @@ class AiChatServiceTest {
     }
 
     @Test
-    void agentRecommendUsersTool_shouldNotAcceptTemporaryTags() throws Exception {
-        Assertions.assertEquals(0, AiAssistantTools.class.getDeclaredMethod("recommendUsers").getParameterCount());
+    void agentRecommendUsersTool_shouldAcceptCurrentRequestFilters() throws Exception {
+        Assertions.assertEquals(7, AiAssistantTools.class.getDeclaredMethod(
+                "recommendUsers",
+                Integer.class,
+                String.class,
+                String.class,
+                String.class,
+                String.class,
+                Double.class,
+                String.class
+        ).getParameterCount());
     }
 
     @Test
@@ -392,8 +401,10 @@ class AiChatServiceTest {
 
             JsonNode response = chat(loginToken(user), "create a badminton team in xian");
 
-            Assertions.assertTrue(response.at("/data/draft").isMissingNode() || response.at("/data/draft").isNull());
-            Assertions.assertEquals(0, response.at("/data/toolResults").size());
+            Assertions.assertTrue(response.at("/data/draft").isMissingNode());
+            Assertions.assertTrue(response.at("/data/deleteConfirmation").isMissingNode());
+            Assertions.assertTrue(response.at("/data/toolResults").isMissingNode());
+            Assertions.assertEquals(0, response.at("/data/uiBlocks").size());
             Assertions.assertEquals(beforeCount, countTeamsCreatedBy(user.getId()));
         } finally {
             cleanupUserAndTeams(user);
@@ -552,7 +563,6 @@ class AiChatServiceTest {
         Assertions.assertTrue(aiToolRegistry.contains("delete_team"));
         Assertions.assertTrue(aiToolRegistry.contains("list_my_created_teams"));
         Assertions.assertTrue(aiToolRegistry.contains("get_my_profile"));
-        Assertions.assertTrue(aiToolRegistry.contains("profile_update_draft"));
         Assertions.assertTrue(aiToolRegistry.contains("list_my_joined_teams"));
         Assertions.assertTrue(aiToolRegistry.contains("join_team"));
         Assertions.assertTrue(aiToolRegistry.contains("quit_team"));
@@ -682,14 +692,17 @@ class AiChatServiceTest {
         try {
             user = createTestUser();
             String sessionId = UUID.randomUUID().toString();
-            aiAgentToolContext.start(sessionId, user);
+            String sourceText = "明天下午想找人轻松踢一场足球";
+            aiAgentToolContext.start(sessionId, user, sourceText);
+            String futureStartTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                    .format(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000L));
 
             aiAssistantTools.createTeamDraft(
                     1,
                     "足球",
                     "西安",
                     "西安市运动公园",
-                    "2026-07-20 17:00:00",
+                    futureStartTime,
                     180,
                     11,
                     "明天下午足球活动",
@@ -703,6 +716,7 @@ class AiChatServiceTest {
             TeamDraftVO draft = state.getDraft();
 
             Assertions.assertNotNull(intent);
+            Assertions.assertEquals(sourceText, intent.getSourceText());
             Assertions.assertEquals(1, intent.getActivityCategory());
             Assertions.assertEquals("足球", intent.getActivityType());
             Assertions.assertEquals("西安", intent.getCity());
@@ -710,7 +724,7 @@ class AiChatServiceTest {
             Assertions.assertEquals(11, intent.getMemberCount());
             Assertions.assertEquals(new BigDecimal("0.0"), intent.getBudgetMax());
             Assertions.assertEquals(180, intent.getDurationMinutes());
-            Assertions.assertEquals("2026-07-20 17:00:00", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(intent.getStartTime()));
+            Assertions.assertEquals(futureStartTime, new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(intent.getStartTime()));
             Assertions.assertTrue(intent.isCreateTeamRequested());
 
             Assertions.assertNotNull(draft);
@@ -739,13 +753,15 @@ class AiChatServiceTest {
             user.setCity("西安");
             String sessionId = UUID.randomUUID().toString();
             aiAgentToolContext.start(sessionId, user);
+            String futureStartTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                    .format(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000L));
 
             aiAssistantTools.createTeamDraft(
                     4,
                     "桌游",
                     null,
                     "钟楼附近",
-                    "2026-07-21 14:00:00",
+                    futureStartTime,
                     null,
                     6,
                     "钟楼桌游局",
@@ -776,13 +792,15 @@ class AiChatServiceTest {
             user = createTestUser();
             String sessionId = UUID.randomUUID().toString();
             aiAgentToolContext.start(sessionId, user);
+            String futureStartTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                    .format(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000L));
 
             String resultJson = aiAssistantTools.createTeamDraft(
                     4,
                     "桌游",
                     null,
                     "钟楼附近",
-                    "2026-07-21 14:00:00",
+                    futureStartTime,
                     null,
                     6,
                     "钟楼桌游局",
@@ -989,19 +1007,6 @@ class AiChatServiceTest {
                 .getResponse()
                 .getContentAsString();
         return objectMapper.readTree(content);
-    }
-
-    private JsonNode findToolResult(JsonNode chatResponse, String toolName) {
-        JsonNode toolResults = chatResponse.at("/data/toolResults");
-        if (!toolResults.isArray()) {
-            return MissingNode.getInstance();
-        }
-        for (JsonNode toolResult : toolResults) {
-            if (toolName.equals(toolResult.path("toolName").asText())) {
-                return toolResult;
-            }
-        }
-        return MissingNode.getInstance();
     }
 
     private JsonNode getTeamDetails(String token, long teamId, String sessionId, int expectedCode) throws Exception {

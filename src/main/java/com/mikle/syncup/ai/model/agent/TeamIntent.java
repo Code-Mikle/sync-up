@@ -10,7 +10,7 @@ import java.util.Date;
 import java.util.List;
 
 @Data
-@Schema(description = "AI 识别出的队伍、搭子和个人资料相关意图")
+@Schema(description = "AI 识别出的队伍和搭子相关意图")
 public class TeamIntent implements Serializable {
 
     @Schema(description = "用户原始输入文本")
@@ -61,13 +61,10 @@ public class TeamIntent implements Serializable {
     @Schema(description = "创建队伍草稿时建议的队伍描述")
     private String description;
 
-    @Schema(description = "用户希望更新到个人资料中的自我介绍或画像文本")
-    private String profileText;
-
     @Schema(description = "是否请求创建队伍；为 true 时只能生成草稿，不能直接创建正式队伍")
     private boolean createTeamRequested;
 
-    @Schema(description = "是否属于队伍、搭子或个人资料相关需求")
+    @Schema(description = "是否属于队伍或搭子相关需求")
     private boolean teamRelated;
 
     @Schema(description = "当前意图缺失的必要字段，例如 activityCategory、city、memberCount")

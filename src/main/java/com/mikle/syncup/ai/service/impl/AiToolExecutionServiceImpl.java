@@ -59,8 +59,7 @@ public class AiToolExecutionServiceImpl implements AiToolExecutionService {
                 + ", city=" + intent.getCity()
                 + ", memberCount=" + intent.getMemberCount()
                 + ", createTeamRequested=" + intent.isCreateTeamRequested()
-                + ", hasTeamPassword=" + (intent.getTeamPassword() != null)
-                + ", profileTextLength=" + (intent.getProfileText() == null ? 0 : intent.getProfileText().length());
+                + ", hasTeamPassword=" + (intent.getTeamPassword() != null);
     }
 
     private String buildResultSummary(AiToolResult result) {

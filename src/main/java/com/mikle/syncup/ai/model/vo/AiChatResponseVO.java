@@ -1,6 +1,5 @@
 package com.mikle.syncup.ai.model.vo;
 
-import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import lombok.Data;
 
@@ -17,17 +16,11 @@ public class AiChatResponseVO implements Serializable {
 
     private TeamIntent intent;
 
-    private List<AiToolResult> toolResults = new ArrayList<>();
-
     /**
      * Stable presentation contract consumed by the frontend.
      * Tool names remain execution/audit details and must not drive UI rendering.
      */
     private List<AiUiBlockVO> uiBlocks = new ArrayList<>();
-
-    private TeamDraftVO draft;
-
-    private AiTeamDeleteConfirmationVO deleteConfirmation;
 
     private boolean needClarification;
 
