@@ -61,6 +61,8 @@ sync-up:
     team-embedding:
       initial-delay-ms: ${SYNC_UP_AI_TEAM_EMBEDDING_INITIAL_DELAY_MS:15000}
       fixed-delay-ms: ${SYNC_UP_AI_TEAM_EMBEDDING_FIXED_DELAY_MS:60000}
+    user-search:
+      min-semantic-score: ${SYNC_UP_AI_USER_SEARCH_MIN_SEMANTIC_SCORE:0.62}
     agent:
       enabled: ${SYNC_UP_AI_AGENT_ENABLED:false}
       provider: ${SYNC_UP_AI_AGENT_PROVIDER:dashscope}

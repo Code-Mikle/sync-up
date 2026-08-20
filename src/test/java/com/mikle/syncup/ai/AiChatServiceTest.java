@@ -9,6 +9,7 @@ import com.mikle.syncup.ai.model.entity.AiTeamDraft;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.vo.TeamDraftVO;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.service.AiTeamDraftService;
 import com.mikle.syncup.ai.service.AiChatMessageService;
 import com.mikle.syncup.ai.service.AiConversationContextService;
@@ -39,6 +40,7 @@ import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -316,30 +318,32 @@ class AiChatServiceTest {
     }
 
     @Test
-    void recommendUsers_withoutCurrentUserTags_shouldReturnEmptyList() {
+    void searchUsers_withoutFilters_shouldNotReturnCurrentUser() {
         User loginUser = null;
         try {
             loginUser = createTestUser();
 
-            AiToolResult result = aiToolRegistry.execute("recommend_users", new TeamIntent(), loginUser);
+            AiToolResult result = aiToolRegistry.execute("search_users", new UserIntent(), loginUser);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode users = objectMapper.valueToTree(result.getData());
             Assertions.assertTrue(users.isArray());
-            Assertions.assertEquals(0, users.size());
+            for (JsonNode user : users) {
+                Assertions.assertNotEquals(loginUser.getId(), user.path("id").asLong());
+            }
         } finally {
             cleanupUserAndTeams(loginUser);
         }
     }
 
     @Test
-    void recommendUsers_shouldExcludeCurrentUser() {
+    void searchUsers_shouldExcludeCurrentUser() {
         User loginUser = null;
         try {
             String uniqueTag = "stage16_self_" + UUID.randomUUID().toString().replace("-", "");
             loginUser = createTestUser("[\"" + uniqueTag + "\"]");
 
-            AiToolResult result = aiToolRegistry.execute("recommend_users", new TeamIntent(), loginUser);
+            AiToolResult result = aiToolRegistry.execute("search_users", new UserIntent(), loginUser);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode users = objectMapper.valueToTree(result.getData());
@@ -351,7 +355,7 @@ class AiChatServiceTest {
     }
 
     @Test
-    void recommendUsers_shouldUseCurrentUserTags() {
+    void searchUsers_shouldFilterByRequestedTags() {
         User loginUser = null;
         User matchedUser = null;
         try {
@@ -359,7 +363,9 @@ class AiChatServiceTest {
             loginUser = createTestUser("[\"" + uniqueTag + "\"]");
             matchedUser = createTestUser("[\"" + uniqueTag + "\"]");
 
-            AiToolResult result = aiToolRegistry.execute("recommend_users", new TeamIntent(), loginUser);
+            UserIntent intent = new UserIntent();
+            intent.setTags(List.of(uniqueTag));
+            AiToolResult result = aiToolRegistry.execute("search_users", intent, loginUser);
 
             Assertions.assertTrue(result.isSuccess());
             JsonNode users = objectMapper.valueToTree(result.getData());
@@ -379,16 +385,13 @@ class AiChatServiceTest {
     }
 
     @Test
-    void agentRecommendUsersTool_shouldAcceptCurrentRequestFilters() throws Exception {
-        Assertions.assertEquals(7, AiAssistantTools.class.getDeclaredMethod(
-                "recommendUsers",
-                Integer.class,
+    void agentSearchUsersTool_shouldAcceptUserSearchFilters() throws Exception {
+        Assertions.assertEquals(4, AiAssistantTools.class.getDeclaredMethod(
+                "searchUsers",
+                List.class,
                 String.class,
                 String.class,
-                String.class,
-                String.class,
-                Double.class,
-                String.class
+                Integer.class
         ).getParameterCount());
     }
 
@@ -557,7 +560,7 @@ class AiChatServiceTest {
     @Test
     void stage17Tools_shouldBeRegisteredInWhitelist() {
         Assertions.assertTrue(aiToolRegistry.contains("search_teams"));
-        Assertions.assertTrue(aiToolRegistry.contains("recommend_users"));
+        Assertions.assertTrue(aiToolRegistry.contains("search_users"));
         Assertions.assertTrue(aiToolRegistry.contains("create_team_draft"));
         Assertions.assertTrue(aiToolRegistry.contains("delete_team_confirmation"));
         Assertions.assertTrue(aiToolRegistry.contains("delete_team"));
@@ -712,7 +715,7 @@ class AiChatServiceTest {
             );
 
             AiAgentToolContext.State state = aiAgentToolContext.snapshot();
-            TeamIntent intent = state.getIntent();
+            TeamIntent intent = state.getTeamIntent();
             TeamDraftVO draft = state.getDraft();
 
             Assertions.assertNotNull(intent);
@@ -772,9 +775,9 @@ class AiChatServiceTest {
 
             AiAgentToolContext.State state = aiAgentToolContext.snapshot();
 
-            Assertions.assertNotNull(state.getIntent());
-            Assertions.assertEquals("西安", state.getIntent().getCity());
-            Assertions.assertEquals("钟楼附近", state.getIntent().getDistrict());
+            Assertions.assertNotNull(state.getTeamIntent());
+            Assertions.assertEquals("西安", state.getTeamIntent().getCity());
+            Assertions.assertEquals("钟楼附近", state.getTeamIntent().getDistrict());
             Assertions.assertNotNull(state.getDraft());
             Assertions.assertEquals("西安", state.getDraft().getCity());
             Assertions.assertEquals("钟楼附近", state.getDraft().getDistrict());

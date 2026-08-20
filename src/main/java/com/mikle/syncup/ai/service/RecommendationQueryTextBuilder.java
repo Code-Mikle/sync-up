@@ -1,6 +1,7 @@
 package com.mikle.syncup.ai.service;
 
 import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.model.entity.AiUserProfileEntity;
 import com.mikle.syncup.model.enums.TeamActivityCategoryEnum;
 import org.apache.commons.lang3.StringUtils;
@@ -35,6 +36,16 @@ public class RecommendationQueryTextBuilder {
             add(parts, "长期匹配画像", profile.getMatchProfileText());
         }
         return String.join("\n", parts);
+    }
+
+    public String build(UserIntent intent, AiUserProfileEntity profile) {
+        if (intent != null && StringUtils.isNotBlank(intent.getProfile())) {
+            return "本次搭子需求：" + intent.getProfile().trim();
+        }
+        if (profile != null && StringUtils.isNotBlank(profile.getMatchProfileText())) {
+            return "长期匹配画像：" + profile.getMatchProfileText().trim();
+        }
+        return "";
     }
 
     private void add(List<String> parts, String label, String value) {

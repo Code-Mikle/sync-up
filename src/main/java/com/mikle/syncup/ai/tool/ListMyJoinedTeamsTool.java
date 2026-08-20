@@ -21,7 +21,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
-public class ListMyJoinedTeamsTool implements AiTool {
+public class ListMyJoinedTeamsTool implements AiTool<TeamIntent> {
 
     public static final String TOOL_NAME = "list_my_joined_teams";
 
@@ -41,6 +41,11 @@ public class ListMyJoinedTeamsTool implements AiTool {
     @Override
     public String type() {
         return "read";
+    }
+
+    @Override
+    public Class<TeamIntent> intentType() {
+        return TeamIntent.class;
     }
 
     @Override
@@ -89,4 +94,3 @@ public class ListMyJoinedTeamsTool implements AiTool {
         });
     }
 }
-

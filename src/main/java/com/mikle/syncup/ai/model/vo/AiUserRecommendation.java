@@ -22,6 +22,11 @@ public class AiUserRecommendation implements Serializable {
 
     private String tags;
 
+    /**
+     * 用户个人简介 / 自我介绍
+     */
+    private String profile;
+
     private Date createTime;
 
     private Date lastActiveTime;

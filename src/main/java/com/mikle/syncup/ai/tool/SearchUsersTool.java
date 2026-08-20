@@ -1,9 +1,9 @@
 package com.mikle.syncup.ai.tool;
 
+import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
-import com.mikle.syncup.ai.model.agent.TeamIntent;
-import com.mikle.syncup.ai.model.vo.HybridRecommendationResult;
 import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
+import com.mikle.syncup.ai.model.vo.HybridRecommendationResult;
 import com.mikle.syncup.ai.service.HybridRecommendationService;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
@@ -14,9 +14,9 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
-public class RecommendUsersTool implements AiTool {
+public class SearchUsersTool implements AiTool<UserIntent> {
 
-    public static final String TOOL_NAME = "recommend_users";
+    public static final String TOOL_NAME = "search_users";
 
     private static final int DEFAULT_LIMIT = 3;
 
@@ -34,20 +34,24 @@ public class RecommendUsersTool implements AiTool {
     }
 
     @Override
-    public AiToolResult execute(TeamIntent intent, User loginUser) {
+    public Class<UserIntent> intentType() {
+        return UserIntent.class;
+    }
+
+    @Override
+    public AiToolResult execute(UserIntent intent, User loginUser) {
         if (loginUser == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN);
         }
         HybridRecommendationResult<AiUserRecommendation> result =
                 recommendationService.recommendUsers(intent, loginUser, DEFAULT_LIMIT);
-        List<AiUserRecommendation> recommendations = result.items();
+        List<AiUserRecommendation> users = result.items();
         return AiToolResult.success(
                 name(),
                 type(),
-                "recommended " + recommendations.size()
-                        + " users from " + result.candidateCount()
+                "searched " + users.size() + " users from " + result.candidateCount()
                         + " candidates, degraded=" + result.degraded(),
-                recommendations
+                users
         );
     }
 }

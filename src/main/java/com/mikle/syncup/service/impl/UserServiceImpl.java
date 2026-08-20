@@ -290,6 +290,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         userSearchResultVO.setGender(originUser.getGender());
         userSearchResultVO.setCity(originUser.getCity());
         userSearchResultVO.setTags(originUser.getTags());
+        userSearchResultVO.setProfile(originUser.getProfile());
         userSearchResultVO.setCreateTime(originUser.getCreateTime());
         userSearchResultVO.setLastActiveTime(originUser.getLastActiveTime());
         return userSearchResultVO;

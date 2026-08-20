@@ -2,6 +2,7 @@ package com.mikle.syncup.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.model.schema.GeneratedEmbedding;
 import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
 import com.mikle.syncup.ai.model.vo.HybridRecommendationResult;
@@ -110,9 +111,9 @@ class HybridRecommendationServiceTest {
         insertProfileAndEmbedding(second.getId(), "喜欢竞技羽毛球", 1, new float[]{0F, 1F});
         insertProfileAndEmbedding(wrongCity.getId(), "喜欢轻松羽毛球", 1, new float[]{1F, 0F});
 
-        TeamIntent intent = new TeamIntent();
-        intent.setSourceText("这个周末想打羽毛球，想找轻松一点的搭子");
-        intent.setActivityType("羽毛球");
+        UserIntent intent = new UserIntent();
+        intent.setProfile("这个周末想打羽毛球，想找轻松一点的搭子");
+        intent.setTags(List.of("羽毛球"));
         intent.setCity("西安");
 
         HybridRecommendationResult<AiUserRecommendation> result =
@@ -120,6 +121,7 @@ class HybridRecommendationServiceTest {
 
         Assertions.assertFalse(result.degraded());
         Assertions.assertEquals(2, result.candidateCount());
+        Assertions.assertEquals(1, result.items().size());
         Assertions.assertEquals(best.getId(), result.items().getFirst().getId());
         Assertions.assertTrue(result.items().getFirst().getReasons().contains("活动与社交偏好较接近"));
         Assertions.assertTrue(result.items().stream().noneMatch(item -> item.getId().equals(wrongCity.getId())));
@@ -131,9 +133,9 @@ class HybridRecommendationServiceTest {
         User candidate = createUser("西安", "[\"桌游\"]");
         when(embeddingGenerator.generate(anyString())).thenThrow(new IllegalStateException("embedding timeout"));
 
-        TeamIntent intent = new TeamIntent();
-        intent.setSourceText("想找桌游搭子");
-        intent.setActivityType("桌游");
+        UserIntent intent = new UserIntent();
+        intent.setProfile("想找桌游搭子");
+        intent.setTags(List.of("桌游"));
         intent.setCity("西安");
 
         HybridRecommendationResult<AiUserRecommendation> result =

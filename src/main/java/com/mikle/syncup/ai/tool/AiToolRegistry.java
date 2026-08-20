@@ -1,7 +1,7 @@
 package com.mikle.syncup.ai.tool;
 
 import com.mikle.syncup.ai.model.tool.AiToolResult;
-import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.agent.AiIntent;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
@@ -15,20 +15,27 @@ import java.util.Set;
 @Component
 public class AiToolRegistry {
 
-    private final Map<String, AiTool> toolMap = new HashMap<>();
+    private final Map<String, AiTool<?>> toolMap = new HashMap<>();
 
-    public AiToolRegistry(List<AiTool> tools) {
-        for (AiTool tool : tools) {
+    public AiToolRegistry(List<AiTool<?>> tools) {
+        for (AiTool<?> tool : tools) {
             toolMap.put(tool.name(), tool);
         }
     }
 
-    public AiToolResult execute(String toolName, TeamIntent intent, User loginUser) {
-        AiTool tool = toolMap.get(toolName);
+    public AiToolResult execute(String toolName, AiIntent intent, User loginUser) {
+        AiTool<?> tool = toolMap.get(toolName);
         if (tool == null) {
             throw new BusinessException(ErrorCode.NO_AUTH, "AI tool is not allowed");
         }
-        return tool.execute(intent, loginUser);
+        if (intent == null || !tool.intentType().isInstance(intent)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "AI tool intent type is invalid");
+        }
+        return executeTyped(tool, intent, loginUser);
+    }
+
+    private <T extends AiIntent> AiToolResult executeTyped(AiTool<T> tool, AiIntent intent, User loginUser) {
+        return tool.execute(tool.intentType().cast(intent), loginUser);
     }
 
     public boolean contains(String toolName) {

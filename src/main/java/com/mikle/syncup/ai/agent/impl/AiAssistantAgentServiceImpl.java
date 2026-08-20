@@ -178,7 +178,7 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
     }
 
     private TeamIntent buildResponseIntent(String message, AiAgentToolContext.State state) {
-        TeamIntent intent = state.getIntent();
+        TeamIntent intent = state.getTeamIntent();
         if (intent == null) {
             intent = new TeamIntent();
         }

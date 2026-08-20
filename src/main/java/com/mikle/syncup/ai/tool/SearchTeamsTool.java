@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
-public class SearchTeamsTool implements AiTool {
+public class SearchTeamsTool implements AiTool<TeamIntent> {
 
     public static final String TOOL_NAME = "search_teams";
 
@@ -29,6 +29,11 @@ public class SearchTeamsTool implements AiTool {
     @Override
     public String type() {
         return "read";
+    }
+
+    @Override
+    public Class<TeamIntent> intentType() {
+        return TeamIntent.class;
     }
 
     @Override

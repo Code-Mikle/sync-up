@@ -5,6 +5,7 @@ import com.mikle.syncup.ai.model.vo.AiTeamDeleteConfirmationVO;
 import com.mikle.syncup.ai.model.vo.AiUiBlockVO;
 import com.mikle.syncup.ai.model.vo.TeamDraftVO;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.model.domain.User;
 import lombok.Data;
 import org.springframework.stereotype.Component;
@@ -52,7 +53,8 @@ public class AiAgentToolContext {
         snapshot.getUiBlocks().addAll(state.getUiBlocks());
         snapshot.setDraft(state.getDraft());
         snapshot.setDeleteConfirmation(state.getDeleteConfirmation());
-        snapshot.setIntent(state.getIntent());
+        snapshot.setTeamIntent(state.getTeamIntent());
+        snapshot.setUserIntent(state.getUserIntent());
         return snapshot;
     }
 
@@ -77,6 +79,8 @@ public class AiAgentToolContext {
 
         private AiTeamDeleteConfirmationVO deleteConfirmation;
 
-        private TeamIntent intent;
+        private TeamIntent teamIntent;
+
+        private UserIntent userIntent;
     }
 }

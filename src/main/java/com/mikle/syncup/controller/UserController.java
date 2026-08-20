@@ -7,7 +7,7 @@ import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.common.PageResult;
 import com.mikle.syncup.common.ResultUtils;
 import com.mikle.syncup.exception.BusinessException;
-import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
 import com.mikle.syncup.ai.service.HybridRecommendationService;
 import com.mikle.syncup.model.domain.User;
@@ -95,6 +95,22 @@ public class UserController {
         return ResultUtils.success(loginUser);
     }
 
+    /**
+     * 获取其他用户的公开资料，不返回账号、联系方式等私密字段。
+     */
+    @GetMapping("/{id}")
+    public BaseResponse<UserSearchResultVO> getPublicUserById(@PathVariable long id, HttpServletRequest request) {
+        if (id <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        userService.getLoginUser(request);
+        User user = userService.getById(id);
+        if (user == null || (user.getUserStatus() != null && user.getUserStatus() != 0)) {
+            throw new BusinessException(ErrorCode.NULL_ERROR, "用户不存在或已不可见");
+        }
+        return ResultUtils.success(userService.getPublicUser(user));
+    }
+
     @GetMapping("/search")
     public BaseResponse<List<User>> searchUsers(String username, HttpServletRequest request) {
         if (!userService.isAdmin(request)) {
@@ -140,7 +156,7 @@ public class UserController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "分页参数错误");
         }
         User loginUser = userService.getLoginUser(request);
-        String redisKey = String.format("syncup:user:recommend:public:v3:%s:%s:%s", loginUser.getId(), pageNum, pageSize);
+        String redisKey = String.format("syncup:user:recommend:public:v4:%s:%s:%s", loginUser.getId(), pageNum, pageSize);
         ValueOperations<String, Object> valueOperations = redisTemplate.opsForValue();
         Object cachedValue = valueOperations.get(redisKey);
         if (cachedValue instanceof PageResult<?> cachedPage) {
@@ -151,7 +167,7 @@ public class UserController {
         }
         // 无缓存，查数据库
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tags", "createTime", "lastActiveTime")
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tags", "profile", "createTime", "lastActiveTime")
                 .ne("id", loginUser.getId())
                 .and(qw -> qw.eq("userStatus", 0).or().isNull("userStatus"));
         Page<User> entityPage = userService.page(new Page<>(pageNum, pageSize), queryWrapper);
@@ -223,6 +239,6 @@ public class UserController {
         }
         User user = userService.getLoginUser(request);
         return ResultUtils.success(
-                hybridRecommendationService.recommendUsers(new TeamIntent(), user, Math.toIntExact(num)).items());
+                hybridRecommendationService.recommendUsers(new UserIntent(), user, Math.toIntExact(num)).items());
     }
 }

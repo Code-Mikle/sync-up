@@ -9,7 +9,7 @@ import com.mikle.syncup.model.domain.User;
 import org.springframework.stereotype.Component;
 
 @Component
-public class GetMyProfileTool implements AiTool {
+public class GetMyProfileTool implements AiTool<TeamIntent> {
 
     public static final String TOOL_NAME = "get_my_profile";
 
@@ -21,6 +21,11 @@ public class GetMyProfileTool implements AiTool {
     @Override
     public String type() {
         return "read";
+    }
+
+    @Override
+    public Class<TeamIntent> intentType() {
+        return TeamIntent.class;
     }
 
     @Override

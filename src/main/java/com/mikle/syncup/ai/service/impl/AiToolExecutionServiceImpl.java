@@ -1,7 +1,9 @@
 package com.mikle.syncup.ai.service.impl;
 
 import com.mikle.syncup.ai.model.tool.AiToolResult;
+import com.mikle.syncup.ai.model.agent.AiIntent;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.service.AiToolCallLogService;
 import com.mikle.syncup.ai.service.AiToolExecutionService;
 import com.mikle.syncup.ai.tool.AiToolRegistry;
@@ -19,7 +21,7 @@ public class AiToolExecutionServiceImpl implements AiToolExecutionService {
     private AiToolCallLogService aiToolCallLogService;
 
     @Override
-    public AiToolResult execute(String toolName, TeamIntent intent, User loginUser, String sessionId) {
+    public AiToolResult execute(String toolName, AiIntent intent, User loginUser, String sessionId) {
         long start = System.currentTimeMillis();
         try {
             AiToolResult result = aiToolRegistry.execute(toolName, intent, loginUser);
@@ -49,17 +51,26 @@ public class AiToolExecutionServiceImpl implements AiToolExecutionService {
         }
     }
 
-    private String buildIntentSummary(TeamIntent intent) {
+    private String buildIntentSummary(AiIntent intent) {
         if (intent == null) {
             return null;
         }
-        return "activityCategory=" + intent.getActivityCategory()
-                + ", activityType=" + intent.getActivityType()
-                + ", teamId=" + intent.getTeamId()
-                + ", city=" + intent.getCity()
-                + ", memberCount=" + intent.getMemberCount()
-                + ", createTeamRequested=" + intent.isCreateTeamRequested()
-                + ", hasTeamPassword=" + (intent.getTeamPassword() != null);
+        if (intent instanceof UserIntent userIntent) {
+            return "tags=" + userIntent.getTags()
+                    + ", hasProfile=" + (userIntent.getProfile() != null)
+                    + ", city=" + userIntent.getCity()
+                    + ", gender=" + userIntent.getGender();
+        }
+        if (!(intent instanceof TeamIntent teamIntent)) {
+            return "intentType=" + intent.getClass().getSimpleName();
+        }
+        return "activityCategory=" + teamIntent.getActivityCategory()
+                + ", activityType=" + teamIntent.getActivityType()
+                + ", teamId=" + teamIntent.getTeamId()
+                + ", city=" + teamIntent.getCity()
+                + ", memberCount=" + teamIntent.getMemberCount()
+                + ", createTeamRequested=" + teamIntent.isCreateTeamRequested()
+                + ", hasTeamPassword=" + (teamIntent.getTeamPassword() != null);
     }
 
     private String buildResultSummary(AiToolResult result) {

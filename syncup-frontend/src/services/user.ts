@@ -1,6 +1,7 @@
 import myAxios from "../plugins/myAxios";
 import {clearLoginToken} from "../plugins/myAxios";
 import { clearCurrentUserState, setCurrentUserState } from "../states/user";
+import type {UserType} from "../models/user";
 
 export const getCurrentUser = async () => {
     // const currentUser = getCurrentUserState();
@@ -23,4 +24,9 @@ export const logout = async () => {
         clearLoginToken();
         clearCurrentUserState();
     }
+}
+
+export const getPublicUserById = async (id: number) => {
+    const res = await myAxios.get<UserType>(`/user/${id}`);
+    return res.code === 0 ? res.data : null;
 }

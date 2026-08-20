@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 import java.util.Objects;
 
 @Component
-public class DeleteTeamConfirmationTool implements AiTool {
+public class DeleteTeamConfirmationTool implements AiTool<TeamIntent> {
 
     public static final String TOOL_NAME = "delete_team_confirmation";
 
@@ -35,6 +35,11 @@ public class DeleteTeamConfirmationTool implements AiTool {
     @Override
     public String type() {
         return "draft";
+    }
+
+    @Override
+    public Class<TeamIntent> intentType() {
+        return TeamIntent.class;
     }
 
     @Override

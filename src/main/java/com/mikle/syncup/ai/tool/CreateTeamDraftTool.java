@@ -14,7 +14,7 @@ import java.util.Date;
 import java.util.UUID;
 
 @Component
-public class CreateTeamDraftTool implements AiTool {
+public class CreateTeamDraftTool implements AiTool<TeamIntent> {
 
     public static final String TOOL_NAME = "create_team_draft";
 
@@ -26,6 +26,11 @@ public class CreateTeamDraftTool implements AiTool {
     @Override
     public String type() {
         return "draft";
+    }
+
+    @Override
+    public Class<TeamIntent> intentType() {
+        return TeamIntent.class;
     }
 
     @Override

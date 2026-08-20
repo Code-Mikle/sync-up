@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 
 @Component
-public class JoinTeamTool implements AiTool {
+public class JoinTeamTool implements AiTool<TeamIntent> {
 
     public static final String TOOL_NAME = "join_team";
 
@@ -29,6 +29,11 @@ public class JoinTeamTool implements AiTool {
     @Override
     public String type() {
         return "write";
+    }
+
+    @Override
+    public Class<TeamIntent> intentType() {
+        return TeamIntent.class;
     }
 
     @Override
@@ -51,4 +56,3 @@ public class JoinTeamTool implements AiTool {
         ));
     }
 }
-

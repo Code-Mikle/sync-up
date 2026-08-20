@@ -2,19 +2,17 @@ package com.mikle.syncup.ai.model.agent;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
-import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+@EqualsAndHashCode(callSuper = true) // 比较时会包含父类的 sourceText
 @Data
 @Schema(description = "AI 识别出的队伍和搭子相关意图")
-public class TeamIntent implements Serializable {
-
-    @Schema(description = "用户原始输入文本")
-    private String sourceText;
+public class TeamIntent extends AiIntent {
 
     @Schema(description = "用户提到的队伍 id，用于查询队伍详情、加入或退出队伍等场景")
     private Long teamId;
@@ -70,5 +68,4 @@ public class TeamIntent implements Serializable {
     @Schema(description = "当前意图缺失的必要字段，例如 activityCategory、city、memberCount")
     private List<String> missingFields = new ArrayList<>();
 
-    private static final long serialVersionUID = 1L;
 }

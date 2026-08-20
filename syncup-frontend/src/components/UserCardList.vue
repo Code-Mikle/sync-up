@@ -4,7 +4,17 @@
       <van-skeleton avatar title :row="3" />
     </article>
 
-    <article class="user-card" v-else v-for="user in props.userList" :key="user.id">
+    <article
+        class="user-card"
+        v-else
+        v-for="user in props.userList"
+        :key="user.id"
+        role="button"
+        tabindex="0"
+        @click="goToUserDetail(user.id)"
+        @keydown.enter="goToUserDetail(user.id)"
+        @keydown.space.prevent="goToUserDetail(user.id)"
+    >
       <div class="user-card__avatar">
         <img v-if="user.avatarUrl" :src="user.avatarUrl" :alt="user.username"/>
         <span v-else>{{ getAvatarText(user) }}</span>
@@ -15,12 +25,14 @@
           <div class="user-card__name-block">
             <h3>{{ user.username || '未命名用户' }}</h3>
           </div>
-          <van-button class="user-card__action" size="small" type="primary" plain>
+          <van-button class="user-card__action" size="small" type="primary" plain @click.stop>
             联系我
           </van-button>
         </div>
 
-        <p class="user-card__profile">{{ user.profile || '这个人还没有写简介，先从标签了解一下。' }}</p>
+        <p class="user-card__profile" :title="user.profile || undefined">
+          {{ user.profile || '这个人还没有写简介，先从标签了解一下。' }}
+        </p>
 
         <div class="user-card__tags" v-if="getUserTags(user).length > 0">
           <van-tag
@@ -43,6 +55,7 @@
 <script setup lang="ts">
 import {UserType} from "../models/user";
 import {parseUserTags} from "../utils/user";
+import {useRouter} from "vue-router";
 
 interface UserCardListProps {
   loading: boolean;
@@ -54,11 +67,17 @@ const props = withDefaults(defineProps<UserCardListProps>(), {
   userList: () => [],
 });
 
+const router = useRouter();
+
 const getUserTags = (user: UserType) => parseUserTags(user.tags);
 
 const getAvatarText = (user: UserType) => {
   const name = user.username || user.userAccount || '?';
   return name.trim().slice(0, 1).toUpperCase();
+};
+
+const goToUserDetail = (userId: number) => {
+  router.push(`/user/${userId}`);
 };
 
 </script>
@@ -80,6 +99,7 @@ const getAvatarText = (user: UserType) => {
   border: 1px solid var(--app-border);
   border-radius: 18px;
   box-shadow: var(--app-shadow);
+  cursor: pointer;
 }
 
 .user-card--loading {
@@ -147,14 +167,13 @@ const getAvatarText = (user: UserType) => {
 }
 
 .user-card__profile {
-  display: -webkit-box;
   margin: 9px 0 0;
   overflow: hidden;
   font-size: 13px;
   line-height: 1.55;
   color: #4b4c69;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-card__tags {

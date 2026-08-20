@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
-public class ListMyCreatedTeamsTool implements AiTool {
+public class ListMyCreatedTeamsTool implements AiTool<TeamIntent> {
 
     public static final String TOOL_NAME = "list_my_created_teams";
 
@@ -31,6 +31,11 @@ public class ListMyCreatedTeamsTool implements AiTool {
     @Override
     public String type() {
         return "read";
+    }
+
+    @Override
+    public Class<TeamIntent> intentType() {
+        return TeamIntent.class;
     }
 
     @Override

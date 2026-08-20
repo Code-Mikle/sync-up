@@ -7,6 +7,8 @@ import com.mikle.syncup.ai.model.vo.AiTeamDeleteConfirmationVO;
 import com.mikle.syncup.ai.model.vo.AiUiBlockVO;
 import com.mikle.syncup.ai.model.vo.TeamDraftVO;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.agent.AiIntent;
+import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.service.AiTeamDraftService;
 import com.mikle.syncup.ai.service.AiToolExecutionService;
 import com.mikle.syncup.ai.tool.CreateTeamDraftTool;
@@ -14,7 +16,7 @@ import com.mikle.syncup.ai.tool.GetMyProfileTool;
 import com.mikle.syncup.ai.tool.GetTeamDetailsTool;
 import com.mikle.syncup.ai.tool.ListMyJoinedTeamsTool;
 import com.mikle.syncup.ai.tool.ListMyCreatedTeamsTool;
-import com.mikle.syncup.ai.tool.RecommendUsersTool;
+import com.mikle.syncup.ai.tool.SearchUsersTool;
 import com.mikle.syncup.ai.tool.DeleteTeamConfirmationTool;
 import com.mikle.syncup.ai.tool.SearchTeamsTool;
 import com.mikle.syncup.model.domain.User;
@@ -30,6 +32,9 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 
 @Component
@@ -67,27 +72,27 @@ public class AiAssistantTools {
             @P(value = "每人最高预算", required = false) Double budgetMax,
             @P(value = "技能熟练度，分为入门, 中等, 熟练。", required = false) String skillLevel) {
         TeamIntent intent = buildIntent(activityCategory, activityType, city, district, startTime, null, budgetMax, skillLevel, null);
-        inheritActivityFilter(intent, aiAgentToolContext.getRequired().getIntent());
+        inheritActivityFilter(intent, aiAgentToolContext.getRequired().getTeamIntent());
         return executeAndRemember(SearchTeamsTool.TOOL_NAME, intent, AiUiBlockVO.TEAM_LIST, "search");
     }
 
     @Tool(
-            name = RecommendUsersTool.TOOL_NAME,
-            value = "结合当前需求、当前用户资料与内部用户画像，推荐适合成为搭子的其他用户。" +
-                    "应从本轮需求提取已明确给出的活动、城市、区域、时间、预算和技能条件；未提供的条件留空。" +
+            name = SearchUsersTool.TOOL_NAME,
+            value = "根据当前用户本轮明确表达的条件搜索适合成为搭子的其他用户。" +
+                    "tags、profile、city、gender 均为可选条件；未提供 city 时后端使用当前用户常驻城市，未提供 gender 时不限制。" +
+                    "profile 表示本次希望匹配的搭子描述；未提供时后端使用当前用户的 AI 匹配画像。" +
                     "只返回允许公开展示的用户资料，不得展示或复述内部用户画像。")
-    public String recommendUsers(
-            @P(value = "活动大类编码：1=运动健身, 2=户外出行, 3=游戏电竞, 4=桌游剧本, 5=休闲娱乐, 6=美食探店, 7=学习成长, " +
-                    "8=旅行出游, 9=其他。使用最接近的宽泛类别。", required = false) Integer activityCategory,
-            @P(value = "具体活动名称，例如“足球”、“羽毛球”、“骑行”。", required = false) String activityType,
-            @P(value = "用户明确提供的城市；未提供时留空，由后端使用当前用户常驻城市。", required = false) String city,
-            @P(value = "区域、场馆、地标或商圈。", required = false) String district,
-            @P(value = "开始时间，格式为 yyyy-MM-dd HH:mm:ss。", required = false) String startTime,
-            @P(value = "每人最高预算。", required = false) Double budgetMax,
-            @P(value = "技能熟练度，分为入门、中等、熟练。", required = false) String skillLevel) {
-        TeamIntent intent = buildIntent(activityCategory, activityType, city, district, startTime, null, budgetMax, skillLevel, null);
-        inheritActivityFilter(intent, aiAgentToolContext.getRequired().getIntent());
-        return executeAndRemember(RecommendUsersTool.TOOL_NAME, intent, AiUiBlockVO.USER_RECOMMENDATIONS, null);
+    public String searchUsers(
+            @P(value = "希望匹配的兴趣标签。只提取用户本轮明确提出的标签；未提及时留空。", required = false)
+            List<String> tags,
+            @P(value = "本次希望匹配的搭子描述。例如“性格随和、周末能一起徒步”。未提及时留空。", required = false)
+            String profile,
+            @P(value = "用户明确要求的目标城市；未提及时留空，由后端使用当前用户常驻城市。", required = false)
+            String city,
+            @P(value = "目标性别：0=男，1=女。未明确要求时必须留空，不得传 2。", required = false)
+            Integer gender) {
+        UserIntent intent = buildUserIntent(tags, profile, city, gender);
+        return executeAndRememberUserSearch(intent);
     }
 
     @Tool(name = GetTeamDetailsTool.TOOL_NAME, value = "根据队伍 id 获取队伍的公开详情")
@@ -118,7 +123,7 @@ public class AiAssistantTools {
         intent.setTeamRelated(true);
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
         attachSourceText(intent, state);
-        state.setIntent(mergeIntent(state.getIntent(), intent));
+        state.setTeamIntent(mergeIntent(state.getTeamIntent(), intent));
         AiToolResult result = aiToolExecutionService.execute(DeleteTeamConfirmationTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
         if (result.getData() instanceof AiTeamDeleteConfirmationVO confirmation) {
             state.setDeleteConfirmation(confirmation);
@@ -185,7 +190,7 @@ public class AiAssistantTools {
         intent.setCreateTeamRequested(true);
         intent.setTeamName(teamName);
         intent.setDescription(description);
-        state.setIntent(mergeIntent(state.getIntent(), intent));
+        state.setTeamIntent(mergeIntent(state.getTeamIntent(), intent));
         AiToolResult result = aiToolExecutionService.execute(CreateTeamDraftTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
         if (result.getData() instanceof TeamDraftVO draft) {
             TeamDraftVO savedDraft = aiTeamDraftService.saveDraft(draft, state.getLoginUser(), state.getSessionId());
@@ -260,7 +265,7 @@ public class AiAssistantTools {
                                       String uiBlockVariant) {
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
         attachSourceText(intent, state);
-        state.setIntent(mergeIntent(state.getIntent(), intent));
+        state.setTeamIntent(mergeIntent(state.getTeamIntent(), intent));
         AiToolResult result = aiToolExecutionService.execute(toolName, intent, state.getLoginUser(), state.getSessionId());
         state.getToolResults().add(result);
         if (result.isSuccess() && uiBlockType != null) {
@@ -296,10 +301,44 @@ public class AiAssistantTools {
         state.getUiBlocks().add(incoming);
     }
 
-    private void attachSourceText(TeamIntent intent, AiAgentToolContext.State state) {
+    private void attachSourceText(AiIntent intent, AiAgentToolContext.State state) {
         if (StringUtils.isBlank(intent.getSourceText()) && StringUtils.isNotBlank(state.getSourceText())) {
             intent.setSourceText(state.getSourceText().trim());
         }
+    }
+
+    private UserIntent buildUserIntent(List<String> tags, String profile, String city, Integer gender) {
+        if (gender != null && gender != 0 && gender != 1) {
+            throw new IllegalArgumentException("gender must be 0 or 1 when provided");
+        }
+        UserIntent intent = new UserIntent();
+        if (tags != null) {
+            intent.setTags(new ArrayList<>(tags.stream()
+                    .filter(StringUtils::isNotBlank)
+                    .map(String::trim)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new))));
+        }
+        if (StringUtils.isNotBlank(profile)) {
+            intent.setProfile(profile.trim());
+        }
+        if (StringUtils.isNotBlank(city)) {
+            intent.setCity(city.trim());
+        }
+        intent.setGender(gender);
+        return intent;
+    }
+
+    private String executeAndRememberUserSearch(UserIntent intent) {
+        AiAgentToolContext.State state = aiAgentToolContext.getRequired();
+        attachSourceText(intent, state);
+        state.setUserIntent(intent);
+        AiToolResult result = aiToolExecutionService.execute(
+                SearchUsersTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
+        state.getToolResults().add(result);
+        if (result.isSuccess()) {
+            replaceUiBlock(state, AiUiBlockVO.of(AiUiBlockVO.USER_RECOMMENDATIONS, result.getData()));
+        }
+        return toJson(result);
     }
 
     private TeamIntent mergeIntent(TeamIntent existing, TeamIntent incoming) {

@@ -84,7 +84,6 @@ class AiIntentEvaluationTest {
         }
         Set<String> tools = new LinkedHashSet<>();
         tools.add("search_teams");
-        tools.add("recommend_users");
         if (evaluationCase.expectedCreateTeamRequested) {
             tools.add("create_team_draft");
         }
@@ -100,7 +99,6 @@ class AiIntentEvaluationTest {
         }
         Set<String> tools = new LinkedHashSet<>();
         tools.add("search_teams");
-        tools.add("recommend_users");
         if (intent.isCreateTeamRequested()) {
             tools.add("create_team_draft");
         }

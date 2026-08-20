@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.ai.mapper.AiUserProfileEmbeddingMapper;
 import com.mikle.syncup.ai.mapper.AiUserProfileMapper;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
+import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.model.entity.AiTeamEmbedding;
 import com.mikle.syncup.ai.model.entity.AiUserProfileEmbedding;
 import com.mikle.syncup.ai.model.entity.AiUserProfileEntity;
@@ -31,6 +32,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -55,6 +57,9 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
 
     private static final int ACTIVE = 1;
     private static final int CANDIDATE_LIMIT = 100;
+
+    @Value("${sync-up.ai.user-search.min-semantic-score:0.62}")
+    private double minUserSemanticScore;
 
     @Resource
     private UserMapper userMapper;
@@ -97,7 +102,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
 
     @Override
     public HybridRecommendationResult<AiUserRecommendation> recommendUsers(
-            TeamIntent intent, User loginUser, int limit) {
+            UserIntent intent, User loginUser, int limit) {
         validate(loginUser, limit);
         long start = System.currentTimeMillis();
         User currentUser = userMapper.selectById(loginUser.getId());
@@ -105,14 +110,12 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
             return emptyResult(start);
         }
         AiUserProfileEntity currentProfile = getActiveProfile(currentUser.getId());
-        Set<String> requestedTags = requestedTags(intent, currentUser);
+        Set<String> requestedTags = requestedUserTags(intent);
         String effectiveCity = firstNonBlank(intent == null ? null : intent.getCity(), currentUser.getCity());
+        Integer requestedGender = intent == null ? null : intent.getGender();
         String queryText = queryTextBuilder.build(intent, currentProfile);
-        if (StringUtils.isBlank(queryText) && requestedTags.isEmpty() && StringUtils.isBlank(effectiveCity)) {
-            return emptyResult(start);
-        }
 
-        List<User> candidates = loadUserCandidates(currentUser.getId(), effectiveCity, requestedTags).stream()
+        List<User> candidates = loadUserCandidates(currentUser.getId(), effectiveCity, requestedGender, requestedTags).stream()
                 .filter(candidate -> requestedTags.isEmpty()
                         || !Collections.disjoint(requestedTags, parseTags(candidate.getTags())))
                 .limit(CANDIDATE_LIMIT)
@@ -128,27 +131,32 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
                 candidates.stream().map(User::getId).toList());
 
         List<ScoredUser> scored = new ArrayList<>();
-        boolean usedSemantic = false;
         for (User candidate : candidates) {
             Set<String> candidateTags = parseTags(candidate.getTags());
             double tagScore = overlapScore(requestedTags, candidateTags);
             double recencyScore = recencyScore(candidate.getLastActiveTime());
             Double semanticScore = semanticUserScore(queryVector, candidate.getId(), candidateProfiles, embeddings);
-            if (semanticScore != null) {
-                usedSemantic = true;
-            }
-            double totalScore = semanticScore == null
-                    ? 0.75D * tagScore + 0.25D * recencyScore
-                    : 0.75D * semanticScore + 0.15D * tagScore + 0.10D * recencyScore;
-            scored.add(new ScoredUser(candidate, totalScore, semanticScore, tagScore, recencyScore));
+            scored.add(new ScoredUser(candidate, semanticScore, tagScore, recencyScore));
         }
-        boolean degraded = !usedSemantic || scored.stream().anyMatch(item -> item.semanticScore() == null);
-        List<AiUserRecommendation> items = scored.stream()
-                .sorted(Comparator.comparingDouble(ScoredUser::totalScore).reversed()
+        List<ScoredUser> semanticMatches = scored.stream()
+                .filter(item -> item.semanticScore() != null && item.semanticScore() >= minUserSemanticScore)
+                .sorted(Comparator.comparing(ScoredUser::semanticScore).reversed()
+                        .thenComparing(Comparator.comparingDouble(ScoredUser::tagScore).reversed())
+                        .thenComparing(Comparator.comparingDouble(ScoredUser::recencyScore).reversed())
                         .thenComparing(scoredUser -> scoredUser.user().getId()))
+                .toList();
+        boolean degraded = semanticMatches.isEmpty();
+        List<ScoredUser> selectedUsers = degraded
+                ? scored.stream()
+                .sorted(Comparator.comparingDouble(ScoredUser::tagScore).reversed()
+                        .thenComparing(Comparator.comparingDouble(ScoredUser::recencyScore).reversed())
+                        .thenComparing(scoredUser -> scoredUser.user().getId()))
+                .toList()
+                : semanticMatches;
+        List<AiUserRecommendation> items = selectedUsers.stream()
                 .limit(limit)
                 .map(scoredUser -> toRecommendation(
-                        scoredUser, effectiveCity, requestedTags, degraded))
+                        scoredUser, effectiveCity, requestedTags, degraded, !degraded))
                 .toList();
         long duration = System.currentTimeMillis() - start;
         log.info("hybrid user recommendation completed, userId={}, candidates={}, results={}, degraded={}, durationMs={}",
@@ -208,12 +216,15 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
                 queryVector == null ? null : queryVector.model(), duration);
     }
 
-    private List<User> loadUserCandidates(long currentUserId, String city, Set<String> requestedTags) {
+    private List<User> loadUserCandidates(long currentUserId, String city, Integer gender, Set<String> requestedTags) {
         QueryWrapper<User> query = new QueryWrapper<User>()
                 .eq("userStatus", 0)
                 .ne("id", currentUserId);
         if (StringUtils.isNotBlank(city)) {
             query.eq("city", city.trim());
+        }
+        if (gender != null) {
+            query.eq("gender", gender);
         }
         if (!requestedTags.isEmpty()) {
             query.and(tagsQuery -> {
@@ -374,7 +385,8 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
     private AiUserRecommendation toRecommendation(ScoredUser scored,
                                                   String effectiveCity,
                                                   Set<String> requestedTags,
-                                                  boolean degraded) {
+                                                  boolean degraded,
+                                                  boolean semanticMatched) {
         User user = scored.user();
         AiUserRecommendation result = new AiUserRecommendation();
         result.setId(user.getId());
@@ -383,6 +395,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         result.setGender(user.getGender());
         result.setCity(user.getCity());
         result.setTags(user.getTags());
+        result.setProfile(user.getProfile());
         result.setCreateTime(user.getCreateTime());
         result.setLastActiveTime(user.getLastActiveTime());
         result.setDegraded(degraded);
@@ -394,7 +407,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         if (!commonTags.isEmpty()) {
             result.getReasons().add("共同偏好：" + String.join("、", commonTags.stream().limit(2).toList()));
         }
-        if (scored.semanticScore() != null) {
+        if (semanticMatched) {
             result.getReasons().add("活动与社交偏好较接近");
         }
         if (scored.recencyScore() >= 1D) {
@@ -428,16 +441,12 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         return team;
     }
 
-    private Set<String> requestedTags(TeamIntent intent, User currentUser) {
+    private Set<String> requestedUserTags(UserIntent intent) {
         Set<String> tags = new LinkedHashSet<>();
         if (intent != null) {
-            addTag(tags, intent.getActivityType());
             if (intent.getTags() != null) {
                 intent.getTags().forEach(tag -> addTag(tags, tag));
             }
-        }
-        if (tags.isEmpty()) {
-            tags.addAll(parseTags(currentUser.getTags()));
         }
         return tags;
     }
@@ -524,7 +533,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
     private record QueryVector(String model, float[] vector) {
     }
 
-    private record ScoredUser(User user, double totalScore, Double semanticScore,
+    private record ScoredUser(User user, Double semanticScore,
                               double tagScore, double recencyScore) {
     }
 

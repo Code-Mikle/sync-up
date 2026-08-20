@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 
 @Component
-public class QuitTeamTool implements AiTool {
+public class QuitTeamTool implements AiTool<TeamIntent> {
 
     public static final String TOOL_NAME = "quit_team";
 
@@ -28,6 +28,11 @@ public class QuitTeamTool implements AiTool {
     @Override
     public String type() {
         return "write";
+    }
+
+    @Override
+    public Class<TeamIntent> intentType() {
+        return TeamIntent.class;
     }
 
     @Override
@@ -47,4 +52,3 @@ public class QuitTeamTool implements AiTool {
         ));
     }
 }
-
