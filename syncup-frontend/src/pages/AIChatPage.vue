@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-chat-page">
+  <div class="ai-chat-page" :style="{'--composer-height': `${composerHeight}px`}">
     <section class="chat-stream" ref="streamRef">
       <article
           v-for="message in messages"
@@ -293,27 +293,30 @@
       </article>
     </section>
 
-    <form class="chat-composer" @submit.prevent="sendMessage">
+    <form ref="composerRef" class="chat-composer" @submit.prevent="sendMessage">
       <button type="button" aria-label="语音输入" disabled>
         <van-icon name="volume-o" size="21" />
       </button>
-      <input
+      <textarea
+          ref="inputRef"
           v-model="inputText"
           :disabled="loading"
+          maxlength="500"
+          rows="1"
+          aria-label="输入消息"
           placeholder="例如：我想周末在西安找羽毛球搭子..."
+          @input="resizeComposerInput"
+          @keydown="handleComposerKeydown"
       />
-      <button type="button" aria-label="清空" @click="inputText = ''">
-        <van-icon name="cross" size="19" />
-      </button>
-      <button class="chat-composer__send" type="submit" aria-label="发送" :disabled="loading">
-        <van-icon name="guide-o" size="23" />
+      <button class="chat-composer__send" type="submit" aria-label="发送" :disabled="loading || !inputText.trim()">
+        <van-icon name="arrow-up" size="20" />
       </button>
     </form>
   </div>
 </template>
 
 <script setup lang="ts">
-import {computed, nextTick, onMounted, ref} from 'vue';
+import {computed, nextTick, onBeforeUnmount, onMounted, ref} from 'vue';
 import {useRouter} from "vue-router";
 import {showFailToast, showSuccessToast} from "vant";
 import myAxios from "../plugins/myAxios";
@@ -345,9 +348,12 @@ type ChatMessage = {
 
 const router = useRouter();
 const streamRef = ref<HTMLElement | null>(null);
+const composerRef = ref<HTMLElement | null>(null);
+const inputRef = ref<HTMLTextAreaElement | null>(null);
 const inputText = ref('');
 const sessionId = ref<string>();
 const loading = ref(false);
+const composerHeight = ref(76);
 const confirmingDraftId = ref<string>();
 const confirmedDraftTeams = ref<Record<string, number>>({});
 const deletingTeamId = ref<number>();
@@ -368,6 +374,8 @@ const userAvatarText = computed(() => {
   return name.trim().slice(0, 1).toUpperCase();
 });
 
+let composerResizeObserver: ResizeObserver | undefined;
+
 onMounted(async () => {
   try {
     currentUser.value = await getCurrentUser();
@@ -375,6 +383,16 @@ onMounted(async () => {
     console.warn('load current user failed', error);
   }
   await loadChatHistory();
+  await nextTick();
+  resizeComposerInput();
+  if (composerRef.value) {
+    composerResizeObserver = new ResizeObserver(syncComposerHeight);
+    composerResizeObserver.observe(composerRef.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  composerResizeObserver?.disconnect();
 });
 
 const currentTime = () => {
@@ -457,6 +475,32 @@ const scrollToBottom = async () => {
   });
 };
 
+const syncComposerHeight = () => {
+  composerHeight.value = composerRef.value?.offsetHeight ?? 76;
+};
+
+const resizeComposerInput = () => {
+  const input = inputRef.value;
+  if (!input) {
+    syncComposerHeight();
+    return;
+  }
+  input.style.height = 'auto';
+  const contentHeight = input.scrollHeight;
+  const nextHeight = Math.min(Math.max(contentHeight, 42), 136);
+  input.style.height = `${nextHeight}px`;
+  input.style.overflowY = contentHeight > 136 ? 'auto' : 'hidden';
+  syncComposerHeight();
+};
+
+const handleComposerKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+    return;
+  }
+  event.preventDefault();
+  void sendMessage();
+};
+
 const sendMessage = async () => {
   const content = inputText.value.trim();
   if (!content || loading.value) {
@@ -469,6 +513,8 @@ const sendMessage = async () => {
     time: currentTime(),
   });
   inputText.value = '';
+  await nextTick();
+  resizeComposerInput();
   loading.value = true;
   await scrollToBottom();
   try {
@@ -497,8 +543,11 @@ const sendMessage = async () => {
   }
 };
 
-const fillQuestion = (question: string) => {
+const fillQuestion = async (question: string) => {
   inputText.value = question;
+  await nextTick();
+  resizeComposerInput();
+  inputRef.value?.focus();
 };
 
 const isConfirmingDraft = (draftId?: string) => {
@@ -807,7 +856,7 @@ const goTeamPage = () => {
 <style scoped>
 .ai-chat-page {
   min-height: 100%;
-  padding: 16px var(--app-page-x) 92px;
+  padding: 16px var(--app-page-x) calc(var(--composer-height, 76px) + var(--van-tabbar-height) + 18px);
 }
 
 .chat-stream {
@@ -1356,52 +1405,80 @@ const goTeamPage = () => {
 
 .chat-composer {
   position: fixed;
-  right: 0;
+  right: var(--app-page-x);
   bottom: calc(var(--van-tabbar-height) + env(safe-area-inset-bottom));
-  left: 0;
+  left: var(--app-page-x);
   z-index: 20;
   display: grid;
-  grid-template-columns: 42px 1fr 38px 46px;
-  gap: 8px;
-  align-items: center;
-  padding: 10px var(--app-page-x);
-  background: rgba(255, 255, 255, 0.9);
-  border-top: 1px solid rgba(40, 38, 101, 0.08);
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 4px;
+  align-items: end;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(40, 38, 101, 0.12);
+  border-radius: 24px;
+  box-shadow: 0 10px 26px rgba(52, 48, 139, 0.13);
   backdrop-filter: blur(18px);
+  transition: box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.chat-composer:focus-within {
+  border-color: rgba(var(--app-primary-rgb), 0.32);
+  box-shadow: 0 12px 30px rgba(52, 48, 139, 0.16), 0 0 0 3px rgba(var(--app-primary-rgb), 0.07);
 }
 
 .chat-composer button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  color: var(--app-text);
-  background: #f3f4fb;
-  border: 1px solid var(--app-border);
-  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  color: #777894;
+  background: transparent;
+  border: 0;
+  border-radius: 16px;
 }
 
 .chat-composer button:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
-.chat-composer input {
+.chat-composer textarea {
   min-width: 0;
-  height: 40px;
-  padding: 0 14px;
+  min-height: 42px;
+  max-height: 136px;
+  padding: 10px 4px;
   color: var(--app-text);
   font-size: 14px;
-  background: #ffffff;
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
+  line-height: 1.5;
+  background: transparent;
+  border: 0;
+  border-radius: 14px;
   outline: 0;
+  resize: none;
+  transition: height 0.16s ease;
+}
+
+.chat-composer textarea::placeholder {
+  color: #9899ae;
 }
 
 .chat-composer__send {
+  color: #898aa2 !important;
+  background: rgba(66, 65, 113, 0.07) !important;
+  border-radius: 50% !important;
+  opacity: 1 !important;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.chat-composer__send:not(:disabled) {
   color: #ffffff !important;
   background: var(--app-brand-gradient) !important;
-  border: 0 !important;
+  box-shadow: 0 6px 14px rgba(var(--app-primary-rgb), 0.27);
+}
+
+.chat-composer__send:not(:disabled):active {
+  transform: scale(0.94);
 }
 
 @keyframes typing-pulse {

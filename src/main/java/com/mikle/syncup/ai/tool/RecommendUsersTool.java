@@ -4,7 +4,7 @@ import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.vo.HybridRecommendationResult;
 import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
-import com.mikle.syncup.ai.service.AiHybridRecommendationService;
+import com.mikle.syncup.ai.service.HybridRecommendationService;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
@@ -21,7 +21,7 @@ public class RecommendUsersTool implements AiTool {
     private static final int DEFAULT_LIMIT = 3;
 
     @Resource
-    private AiHybridRecommendationService recommendationService;
+    private HybridRecommendationService recommendationService;
 
     @Override
     public String name() {

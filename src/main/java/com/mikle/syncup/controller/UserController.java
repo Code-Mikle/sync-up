@@ -9,7 +9,7 @@ import com.mikle.syncup.common.ResultUtils;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
-import com.mikle.syncup.ai.service.AiHybridRecommendationService;
+import com.mikle.syncup.ai.service.HybridRecommendationService;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.request.UserLoginRequest;
 import com.mikle.syncup.model.request.UserRegisterRequest;
@@ -46,7 +46,7 @@ public class UserController {
     private UserService userService;
 
     @Resource
-    private AiHybridRecommendationService aiHybridRecommendationService;
+    private HybridRecommendationService hybridRecommendationService;
 
     @Resource
     private RedisTemplate<String, Object> redisTemplate;
@@ -224,6 +224,6 @@ public class UserController {
         }
         User user = userService.getLoginUser(request);
         return ResultUtils.success(
-                aiHybridRecommendationService.recommendUsers(new TeamIntent(), user, Math.toIntExact(num)).items());
+                hybridRecommendationService.recommendUsers(new TeamIntent(), user, Math.toIntExact(num)).items());
     }
 }

@@ -5,7 +5,7 @@ import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.schema.GeneratedEmbedding;
 import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
 import com.mikle.syncup.ai.model.vo.HybridRecommendationResult;
-import com.mikle.syncup.ai.service.AiHybridRecommendationService;
+import com.mikle.syncup.ai.service.HybridRecommendationService;
 import com.mikle.syncup.ai.service.ProfileEmbeddingGenerator;
 import com.mikle.syncup.ai.service.ProfileEmbeddingCodec;
 import com.mikle.syncup.ai.service.TeamRetrievalTextBuilder;
@@ -40,10 +40,10 @@ import static org.mockito.Mockito.when;
         "sync-up.ai.profile-generation.fixed-delay-ms=3600000",
         "sync-up.ai.team-embedding.initial-delay-ms=3600000"
 })
-class AiHybridRecommendationServiceTest {
+class HybridRecommendationServiceTest {
 
     @Resource
-    private AiHybridRecommendationService recommendationService;
+    private HybridRecommendationService recommendationService;
 
     @Resource
     private UserService userService;

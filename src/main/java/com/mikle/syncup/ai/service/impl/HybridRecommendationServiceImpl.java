@@ -12,7 +12,7 @@ import com.mikle.syncup.ai.model.entity.AiUserProfileEntity;
 import com.mikle.syncup.ai.model.schema.GeneratedEmbedding;
 import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
 import com.mikle.syncup.ai.model.vo.HybridRecommendationResult;
-import com.mikle.syncup.ai.service.AiHybridRecommendationService;
+import com.mikle.syncup.ai.service.HybridRecommendationService;
 import com.mikle.syncup.ai.service.AiTeamEmbeddingService;
 import com.mikle.syncup.ai.service.ProfileEmbeddingCodec;
 import com.mikle.syncup.ai.service.ProfileEmbeddingGenerator;
@@ -51,7 +51,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class AiHybridRecommendationServiceImpl implements AiHybridRecommendationService {
+public class HybridRecommendationServiceImpl implements HybridRecommendationService {
 
     private static final int ACTIVE = 1;
     private static final int CANDIDATE_LIMIT = 100;
