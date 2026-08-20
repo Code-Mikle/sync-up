@@ -80,10 +80,5 @@ public class UserVO implements Serializable {
      */
     private Integer userRole;
 
-    /**
-     * 星球编号
-     */
-    private String planetCode;
-
     private static final long serialVersionUID = 1L;
 }

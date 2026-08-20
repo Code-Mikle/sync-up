@@ -202,7 +202,6 @@ class HybridRecommendationServiceTest {
         user.setUsername("hybrid_" + suffix);
         user.setUserAccount("hybrid_" + suffix);
         user.setUserPassword(new BCryptPasswordEncoder().encode("Password123"));
-        user.setPlanetCode(suffix.substring(0, 5));
         user.setUserRole(0);
         user.setUserStatus(0);
         user.setCity(city);

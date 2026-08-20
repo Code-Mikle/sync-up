@@ -13,7 +13,6 @@ export type UserType = {
     city?: string;
     userStatus: number;
     userRole: number;
-    planetCode: string;
     tags: string | string[];
     createTime: Date;
     lastActiveTime?: Date | string;

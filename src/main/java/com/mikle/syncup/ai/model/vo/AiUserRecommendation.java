@@ -22,8 +22,6 @@ public class AiUserRecommendation implements Serializable {
 
     private String tags;
 
-    private String planetCode;
-
     private Date createTime;
 
     private Date lastActiveTime;

@@ -27,7 +27,5 @@ public class UserSearchResultVO implements Serializable {
 
     private Date lastActiveTime;
 
-    private String planetCode;
-
     private static final long serialVersionUID = 1L;
 }

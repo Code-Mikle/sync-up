@@ -383,7 +383,6 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         result.setGender(user.getGender());
         result.setCity(user.getCity());
         result.setTags(user.getTags());
-        result.setPlanetCode(user.getPlanetCode());
         result.setCreateTime(user.getCreateTime());
         result.setLastActiveTime(user.getLastActiveTime());
         result.setDegraded(degraded);

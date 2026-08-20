@@ -959,7 +959,6 @@ class AiChatServiceTest {
         user.setUsername("ai_test_" + suffix);
         user.setUserAccount("ai_" + suffix);
         user.setUserPassword(PASSWORD_ENCODER.encode(RAW_PASSWORD));
-        user.setPlanetCode(UUID.randomUUID().toString().replace("-", "").substring(0, 5));
         user.setUserRole(0);
         user.setUserStatus(0);
         user.setTags(tags);

@@ -36,7 +36,6 @@ public class GetMyProfileTool implements AiTool {
         profile.setTags(loginUser.getTags());
         profile.setProfile(loginUser.getProfile());
         profile.setCity(loginUser.getCity());
-        profile.setPlanetCode(loginUser.getPlanetCode());
         profile.setCreateTime(loginUser.getCreateTime());
         return AiToolResult.success(name(), type(), "loaded current user public profile", profile);
     }

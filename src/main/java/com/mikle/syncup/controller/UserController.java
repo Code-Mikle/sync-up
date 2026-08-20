@@ -59,11 +59,10 @@ public class UserController {
         String userAccount = userRegisterRequest.getUserAccount();
         String userPassword = userRegisterRequest.getUserPassword();
         String checkPassword = userRegisterRequest.getCheckPassword();
-        String planetCode = userRegisterRequest.getPlanetCode();
-        if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword, planetCode)) {
+        if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
         }
-        long result = userService.userRegister(userAccount, userPassword, checkPassword, planetCode);
+        long result = userService.userRegister(userAccount, userPassword, checkPassword);
         return ResultUtils.success(result);
     }
 
@@ -152,7 +151,7 @@ public class UserController {
         }
         // 无缓存，查数据库
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tags", "createTime", "lastActiveTime", "planetCode")
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tags", "createTime", "lastActiveTime")
                 .ne("id", loginUser.getId())
                 .and(qw -> qw.eq("userStatus", 0).or().isNull("userStatus"));
         Page<User> entityPage = userService.page(new Page<>(pageNum, pageSize), queryWrapper);

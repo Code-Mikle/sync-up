@@ -8,7 +8,6 @@ export type AiUserProfileData = {
     city?: string;
     tags?: string;
     profile?: string;
-    planetCode?: string;
     createTime?: string | Date;
     lastActiveTime?: string | Date;
     degraded?: boolean;
@@ -79,7 +78,6 @@ export type AiUserRecommendation = {
     avatarUrl?: string;
     gender?: number;
     tags?: string;
-    planetCode?: string;
     createTime?: string | Date;
     reasons?: string[];
 };

@@ -399,7 +399,6 @@ class AiUserProfileServiceTest {
         user.setUsername("profile_test_" + suffix);
         user.setUserAccount("pf_" + suffix);
         user.setUserPassword(PASSWORD_ENCODER.encode(RAW_PASSWORD));
-        user.setPlanetCode(UUID.randomUUID().toString().replace("-", "").substring(0, 5));
         user.setUserRole(0);
         user.setUserStatus(0);
         Assertions.assertTrue(userService.save(user), "test user should be created");

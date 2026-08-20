@@ -138,9 +138,8 @@ class UserServiceTest {
         Long userId = null;
         String userAccount = "reg_" + randomSuffix();
         String rawPassword = "Password123";
-        String planetCode = planetCode();
         try {
-            userId = userService.userRegister(userAccount, rawPassword, rawPassword, planetCode);
+            userId = userService.userRegister(userAccount, rawPassword, rawPassword);
             User savedUser = userService.getById(userId);
 
             Assertions.assertNotNull(savedUser);
@@ -296,7 +295,6 @@ class UserServiceTest {
         user.setUsername("test_" + suffix);
         user.setUserAccount("account_" + suffix);
         user.setUserPassword(PASSWORD_ENCODER.encode("Password123"));
-        user.setPlanetCode(planetCode());
         user.setUserRole(0);
         user.setUserStatus(0);
         boolean saved = userService.save(user);
@@ -306,10 +304,6 @@ class UserServiceTest {
 
     private String randomSuffix() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 10);
-    }
-
-    private String planetCode() {
-        return UUID.randomUUID().toString().replace("-", "").substring(0, 5);
     }
 
     private void deletePhysically(User user) {

@@ -9,7 +9,6 @@
         <div>
           <p>个人资料</p>
           <h1>{{ user.username || '未命名用户' }}</h1>
-          <span>星球编号 {{ user.planetCode || '-' }}</span>
         </div>
       </section>
 

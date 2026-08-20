@@ -21,14 +21,6 @@
             :rules="[{ required: true, message: '请填写账号' }]"
         />
         <van-field
-            v-model="registerForm.planetCode"
-            name="planetCode"
-            label="星球编号"
-            placeholder="最多 5 位"
-            clearable
-            :rules="[{ required: true, message: '请填写星球编号' }]"
-        />
-        <van-field
             v-model="registerForm.userPassword"
             type="password"
             name="userPassword"
@@ -77,17 +69,12 @@ const registerForm = ref({
   userAccount: '',
   userPassword: '',
   checkPassword: '',
-  planetCode: '',
 });
 
 const validateForm = () => {
-  const {userAccount, userPassword, checkPassword, planetCode} = registerForm.value;
+  const {userAccount, userPassword, checkPassword} = registerForm.value;
   if (userAccount.trim().length < 4) {
     showFailToast('账号至少 4 位');
-    return false;
-  }
-  if (planetCode.trim().length > 5) {
-    showFailToast('星球编号最多 5 位');
     return false;
   }
   if (userPassword.length < 8) {
@@ -111,7 +98,6 @@ const onSubmit = async () => {
       userAccount: registerForm.value.userAccount.trim(),
       userPassword: registerForm.value.userPassword,
       checkPassword: registerForm.value.checkPassword,
-      planetCode: registerForm.value.planetCode.trim(),
     });
     if (res?.code === 0 && res.data) {
       showSuccessToast('注册成功，请登录');

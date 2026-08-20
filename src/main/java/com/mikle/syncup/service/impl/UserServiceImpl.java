@@ -57,21 +57,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     private static final String SALT = "mikle";
 
     @Override
-    public long userRegister(String userAccount, String userPassword, String checkPassword, String planetCode) {
+    public long userRegister(String userAccount, String userPassword, String checkPassword) {
         // 1. 校验
-        if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword, planetCode)) {
+        if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
         }
         userAccount = userAccount.trim();
-        planetCode = planetCode.trim();
         if (userAccount.length() < 4) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户账号过短");
         }
         if (userPassword.length() < 8 || checkPassword.length() < 8) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户密码过短");
-        }
-        if (planetCode.length() > 5) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "星球编号过长");
         }
         // 账户不能包含特殊字符
         String validPattern = "[`~!@#$%^&*()+=|{}':;',\\\\[\\\\].<>/?~！@#￥%……&*（）——+|{}【】‘；：”“’。，、？]";
@@ -90,25 +86,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (count > 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号重复");
         }
-        // 星球编号不能重复
-        queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("planetCode", planetCode);
-        count = userMapper.selectCount(queryWrapper);
-        if (count > 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "编号重复");
-        }
         // 2. 加密
         String encryptPassword = PASSWORD_ENCODER.encode(userPassword);
         // 3. 插入数据
         User user = new User();
         user.setUserAccount(userAccount);
         user.setUserPassword(encryptPassword);
-        user.setPlanetCode(planetCode);
         boolean saveResult;
         try {
             saveResult = this.save(user);
         } catch (DuplicateKeyException e) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号或星球编号已存在");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号已存在");
         }
         if (!saveResult) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "注册失败");
@@ -197,7 +185,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         safetyUser.setPhone(originUser.getPhone());
         safetyUser.setEmail(originUser.getEmail());
         safetyUser.setCity(originUser.getCity());
-        safetyUser.setPlanetCode(originUser.getPlanetCode());
         safetyUser.setUserRole(originUser.getUserRole());
         safetyUser.setUserStatus(originUser.getUserStatus());
         safetyUser.setCreateTime(originUser.getCreateTime());
@@ -270,14 +257,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
 
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tags", "profile", "createTime", "lastActiveTime", "planetCode");
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tags", "profile", "createTime", "lastActiveTime");
         if (excludeUserId != null && excludeUserId > 0) {
             queryWrapper.ne("id", excludeUserId);
         }
         queryWrapper.and(qw -> qw.eq("userStatus", 0).or().isNull("userStatus"));
         for (String keyword : normalizedKeywords) {
             queryWrapper.and(qw -> qw.like("username", keyword)
-                    .or().like("planetCode", keyword)
                     .or().like("tags", keyword)
                     .or().like("profile", keyword));
         }
@@ -306,7 +292,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         userSearchResultVO.setTags(originUser.getTags());
         userSearchResultVO.setCreateTime(originUser.getCreateTime());
         userSearchResultVO.setLastActiveTime(originUser.getLastActiveTime());
-        userSearchResultVO.setPlanetCode(originUser.getPlanetCode());
         return userSearchResultVO;
     }
 

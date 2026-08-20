@@ -22,8 +22,6 @@ public class AiUserProfile implements Serializable {
 
     private String city;
 
-    private String planetCode;
-
     private Date createTime;
 
     private static final long serialVersionUID = 1L;

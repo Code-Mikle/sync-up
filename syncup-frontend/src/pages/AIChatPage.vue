@@ -85,7 +85,6 @@
                   <h3>{{ getProfileData(uiBlock)?.username || "未命名用户" }}</h3>
                   <p>{{ getProfileData(uiBlock)?.profile || "还没有填写自我介绍" }}</p>
                   <div class="profile-result__meta">
-                    <span v-if="getProfileData(uiBlock)?.planetCode">星球编号 {{ getProfileData(uiBlock)?.planetCode }}</span>
                     <span v-if="getProfileData(uiBlock)?.city">{{ getProfileData(uiBlock)?.city }}</span>
                   </div>
                   <div class="profile-result__tags" v-if="formatUserTags(getProfileData(uiBlock)?.tags).length">
@@ -169,7 +168,6 @@
                   </div>
                   <div class="user-recommend-card__main">
                     <h3>{{ user.username || "未命名用户" }}</h3>
-                    <p>{{ user.planetCode ? `星球编号 ${user.planetCode}` : "公开资料较少" }}</p>
                     <div class="user-recommend-card__tags">
                       <van-tag
                           v-for="tag in formatUserTags(user.tags)"

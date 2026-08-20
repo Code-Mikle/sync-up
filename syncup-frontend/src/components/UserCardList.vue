@@ -14,7 +14,6 @@
         <div class="user-card__header">
           <div class="user-card__name-block">
             <h3>{{ user.username || '未命名用户' }}</h3>
-            <span>星球编号 {{ user.planetCode || '-' }}</span>
           </div>
           <van-button class="user-card__action" size="small" type="primary" plain>
             联系我
@@ -138,15 +137,6 @@ const getAvatarText = (user: UserType) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   letter-spacing: 0;
-}
-
-.user-card__name-block span {
-  display: block;
-  overflow: hidden;
-  font-size: 12px;
-  color: var(--app-text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .user-card__action {

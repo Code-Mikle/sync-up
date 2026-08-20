@@ -13,15 +13,11 @@
         </div>
       </section>
 
-      <section class="profile-stats">
-        <div>
-          <strong>{{ user.planetCode || '-' }}</strong>
-          <span>星球编号</span>
-        </div>
-        <div>
-          <strong>{{ getGenderText(user.gender) }}</strong>
-          <span>性别</span>
-        </div>
+      <section class="profile-introduction">
+        <h2>自我介绍</h2>
+        <p :class="{ 'profile-introduction__content--empty': !user.profile }">
+          {{ user.profile || '这个人还没有写自我介绍。' }}
+        </p>
       </section>
 
       <section class="profile-menu">
@@ -65,7 +61,6 @@ import {useRouter} from "vue-router";
 import {showConfirmDialog, showFailToast, showSuccessToast} from "vant";
 import {getCurrentUser, logout} from "../services/user";
 import {UserType} from "../models/user";
-import {getGenderText} from "../constants/user";
 
 const user = ref<UserType | null>(null);
 const loading = ref(true);
@@ -187,40 +182,32 @@ const confirmLogout = async () => {
   color: rgba(255, 255, 255, 0.82);
 }
 
-.profile-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.profile-introduction {
   margin-top: 12px;
-}
-
-.profile-stats div {
-  min-width: 0;
-  padding: 13px;
-  text-align: center;
+  padding: 15px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid var(--app-border);
-  border-radius: 16px;
+  border-radius: 18px;
   box-shadow: var(--app-shadow);
 }
 
-.profile-stats strong,
-.profile-stats span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profile-stats strong {
-  font-size: 17px;
-  font-weight: 900;
+.profile-introduction h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 800;
   color: var(--app-text);
 }
 
-.profile-stats span {
-  margin-top: 4px;
-  font-size: 12px;
+.profile-introduction p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--app-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.profile-introduction__content--empty {
   color: var(--app-text-muted);
 }
 
