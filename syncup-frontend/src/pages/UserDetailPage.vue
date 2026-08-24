@@ -20,10 +20,10 @@
         </p>
       </section>
 
-      <section class="user-detail-section" v-if="tags.length > 0">
+      <section class="user-detail-section" v-if="tagNames.length > 0">
         <h2>兴趣标签</h2>
         <div class="user-detail-tags">
-          <van-tag v-for="tag in tags" :key="tag" round>{{ tag }}</van-tag>
+          <van-tag v-for="tag in tagNames" :key="tag" round>{{ tag }}</van-tag>
         </div>
       </section>
     </template>
@@ -42,7 +42,6 @@ import {useRoute} from 'vue-router';
 import {showFailToast} from 'vant';
 import {getPublicUserById} from '../services/user';
 import type {UserType} from '../models/user';
-import {parseUserTags} from '../utils/user';
 
 const route = useRoute();
 const user = ref<UserType | null>(null);
@@ -53,7 +52,7 @@ const avatarText = computed(() => {
   return name.trim().slice(0, 1).toUpperCase();
 });
 
-const tags = computed(() => user.value ? parseUserTags(user.value.tags) : []);
+const tagNames = computed(() => user.value?.tagNames ?? []);
 
 onMounted(async () => {
   const userId = Number(route.params.id);

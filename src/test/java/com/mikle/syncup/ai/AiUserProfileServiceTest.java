@@ -389,7 +389,7 @@ class AiUserProfileServiceTest {
                         """,
                 Integer.class);
         if (count == null || count == 0) {
-            jdbcTemplate.execute("alter table user add column profile varchar(1024) null comment '个人简介 / 自我介绍' after tags");
+            jdbcTemplate.execute("alter table user add column profile varchar(1024) null comment '个人简介 / 自我介绍' after tagIds");
         }
     }
 

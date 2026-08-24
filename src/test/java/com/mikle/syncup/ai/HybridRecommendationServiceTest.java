@@ -102,10 +102,10 @@ class HybridRecommendationServiceTest {
 
     @Test
     void recommendUsers_shouldHardFilterAndRankByProfileEmbedding() {
-        User current = createUser("西安", "[\"羽毛球\"]");
-        User best = createUser("西安", "[\"羽毛球\"]");
-        User second = createUser("西安", "[\"羽毛球\"]");
-        User wrongCity = createUser("北京", "[\"羽毛球\"]");
+        User current = createUser("西安", "[107]");
+        User best = createUser("西安", "[107]");
+        User second = createUser("西安", "[107]");
+        User wrongCity = createUser("北京", "[107]");
         insertProfile(current.getId(), "喜欢轻松羽毛球和小范围交流", 1);
         insertProfileAndEmbedding(best.getId(), "喜欢轻松羽毛球和小范围交流", 1, new float[]{1F, 0F});
         insertProfileAndEmbedding(second.getId(), "喜欢竞技羽毛球", 1, new float[]{0F, 1F});
@@ -113,7 +113,7 @@ class HybridRecommendationServiceTest {
 
         UserIntent intent = new UserIntent();
         intent.setProfile("这个周末想打羽毛球，想找轻松一点的搭子");
-        intent.setTags(List.of("羽毛球"));
+        intent.setTagIds(List.of(107L));
         intent.setCity("西安");
 
         HybridRecommendationResult<AiUserRecommendation> result =
@@ -129,13 +129,13 @@ class HybridRecommendationServiceTest {
 
     @Test
     void recommendUsers_embeddingFailure_shouldFallbackToStructuredTags() {
-        User current = createUser("西安", "[\"桌游\"]");
-        User candidate = createUser("西安", "[\"桌游\"]");
+        User current = createUser("西安", "[403]");
+        User candidate = createUser("西安", "[403]");
         when(embeddingGenerator.generate(anyString())).thenThrow(new IllegalStateException("embedding timeout"));
 
         UserIntent intent = new UserIntent();
         intent.setProfile("想找桌游搭子");
-        intent.setTags(List.of("桌游"));
+        intent.setTagIds(List.of(403L));
         intent.setCity("西安");
 
         HybridRecommendationResult<AiUserRecommendation> result =
@@ -150,7 +150,7 @@ class HybridRecommendationServiceTest {
 
     @Test
     void recommendTeams_shouldRankValidCurrentTeamEmbedding() {
-        User current = createUser("西安", "[\"羽毛球\"]");
+        User current = createUser("西安", "[107]");
         insertProfile(current.getId(), "喜欢轻松羽毛球，不追求高强度竞技", 1);
         Team best = createTeam(current, "轻松羽毛球局", "新手友好，轻松交流");
         Team second = createTeam(current, "羽毛球训练局", "偏竞技训练");
@@ -176,7 +176,7 @@ class HybridRecommendationServiceTest {
 
     @Test
     void recommendTeams_staleEmbedding_shouldFallbackWithoutUsingOldVector() {
-        User current = createUser("西安", "[\"桌游\"]");
+        User current = createUser("西安", "[403]");
         Team team = createTeam(current, "桌游局", "轻松桌游");
         insertTeamEmbedding(team, 1, new float[]{1F, 0F});
         jdbcTemplate.update("update team set description = ? where id = ?", "描述已经变化", team.getId());
@@ -198,7 +198,7 @@ class HybridRecommendationServiceTest {
                 .contains("活动描述与个人偏好较接近"));
     }
 
-    private User createUser(String city, String tags) {
+    private User createUser(String city, String tagIds) {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
         User user = new User();
         user.setUsername("hybrid_" + suffix);
@@ -207,7 +207,7 @@ class HybridRecommendationServiceTest {
         user.setUserRole(0);
         user.setUserStatus(0);
         user.setCity(city);
-        user.setTags(tags);
+        user.setTagIds(tagIds);
         user.setLastActiveTime(new Date());
         Assertions.assertTrue(userService.save(user));
         userIds.add(user.getId());

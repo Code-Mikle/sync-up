@@ -1,6 +1,5 @@
 package com.mikle.syncup.model.vo;
 
-import com.mikle.syncup.model.domain.User;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -16,7 +15,7 @@ public class UserLoginVO implements Serializable {
     /**
      * Safety user info.
      */
-    private User user;
+    private UserVO user;
 
     /**
      * Raw token value. The frontend should send it with the configured token prefix.

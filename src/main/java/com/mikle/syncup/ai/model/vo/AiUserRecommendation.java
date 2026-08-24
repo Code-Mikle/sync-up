@@ -20,7 +20,7 @@ public class AiUserRecommendation implements Serializable {
 
     private String city;
 
-    private String tags;
+    private List<String> tagNames;
 
     /**
      * 用户个人简介 / 自我介绍

@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.util.Date;
+import java.util.List;
 
 /**
  * 用户包装类（脱敏）
@@ -51,9 +52,19 @@ public class UserVO implements Serializable {
     private String city;
 
     /**
-     * 标签列表 json
+     * 已选择的标准标签 ID，用于资料编辑回显。
      */
-    private String tags;
+    private List<Long> tagIds;
+
+    /**
+     * 标准标签名称，用于展示。
+     */
+    private List<String> tagNames;
+
+    /**
+     * 个人简介 / 自我介绍。
+     */
+    private String profile;
 
     /**
      * 状态 0 - 正常

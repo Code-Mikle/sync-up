@@ -1,6 +1,7 @@
 package com.mikle.syncup.model.domain;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -65,9 +66,11 @@ public class User implements Serializable {
     private String city;
 
     /**
-     * 标签列表 json
+     * 标准标签 id 列表 JSON，持久化到 user.tagIds。
+     * 不直接作为接口响应字段，标签展示由 VO 中的 tagNames 承载。
      */
-    private String tags;
+    @JsonIgnore
+    private String tagIds;
 
     /**
      * 个人简介 / 自我介绍

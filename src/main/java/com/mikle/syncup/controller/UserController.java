@@ -16,7 +16,9 @@ import com.mikle.syncup.model.request.UserRegisterRequest;
 import com.mikle.syncup.model.request.UserUpdateRequest;
 import com.mikle.syncup.model.vo.UserLoginVO;
 import com.mikle.syncup.model.vo.UserSearchResultVO;
+import com.mikle.syncup.model.vo.UserVO;
 import com.mikle.syncup.service.UserService;
+import com.mikle.syncup.service.TagService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -44,6 +46,9 @@ public class UserController {
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private TagService tagService;
 
     @Resource
     private HybridRecommendationService hybridRecommendationService;
@@ -90,9 +95,9 @@ public class UserController {
     }
 
     @GetMapping("/current")
-    public BaseResponse<User> getCurrentUser(HttpServletRequest request) {
+    public BaseResponse<UserVO> getCurrentUser(HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
-        return ResultUtils.success(loginUser);
+        return ResultUtils.success(userService.getUserVO(loginUser));
     }
 
     /**
@@ -112,7 +117,7 @@ public class UserController {
     }
 
     @GetMapping("/search")
-    public BaseResponse<List<User>> searchUsers(String username, HttpServletRequest request) {
+    public BaseResponse<List<UserVO>> searchUsers(String username, HttpServletRequest request) {
         if (!userService.isAdmin(request)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
@@ -121,18 +126,18 @@ public class UserController {
             queryWrapper.like("username", username);
         }
         List<User> userList = userService.list(queryWrapper);
-        List<User> list = userList.stream()
-                .map(user -> userService.getSafetyUser(user))
+        List<UserVO> list = userList.stream()
+                .map(userService::getUserVO)
                 .collect(Collectors.toList());
         return ResultUtils.success(list);
     }
 
     @GetMapping("/search/tags")
-    public BaseResponse<List<UserSearchResultVO>> searchUsersByTags(@RequestParam(required = false) List<String> tagNameList) {
-        if (CollectionUtils.isEmpty(tagNameList)) {
+    public BaseResponse<List<UserSearchResultVO>> searchUsersByTags(@RequestParam(required = false) List<Long> tagIds) {
+        if (CollectionUtils.isEmpty(tagIds)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        List<User> userList = userService.searchUsersByTags(tagNameList);
+        List<User> userList = userService.searchUsersByTags(tagIds);
         return ResultUtils.success(
                 userList.stream()
                         .map(userService::getPublicUser)
@@ -167,7 +172,7 @@ public class UserController {
         }
         // 无缓存，查数据库
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tags", "profile", "createTime", "lastActiveTime")
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tagIds", "profile", "createTime", "lastActiveTime")
                 .ne("id", loginUser.getId())
                 .and(qw -> qw.eq("userStatus", 0).or().isNull("userStatus"));
         Page<User> entityPage = userService.page(new Page<>(pageNum, pageSize), queryWrapper);
@@ -213,6 +218,9 @@ public class UserController {
         User user = new User();
         BeanUtils.copyProperties(updateRequest, user);
         user.setId(updateRequest.getId());
+        if (updateRequest.getTagIds() != null) {
+            user.setTagIds(tagService.serializeAndValidateTagIds(updateRequest.getTagIds()));
+        }
         int result = userService.updateUser(user, loginUser);
         return ResultUtils.success(result);
     }

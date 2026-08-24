@@ -6,12 +6,17 @@ import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
+import com.mikle.syncup.service.TagService;
+import jakarta.annotation.Resource;
 import org.springframework.stereotype.Component;
 
 @Component
 public class GetMyProfileTool implements AiTool<TeamIntent> {
 
     public static final String TOOL_NAME = "get_my_profile";
+
+    @Resource
+    private TagService tagService;
 
     @Override
     public String name() {
@@ -38,7 +43,7 @@ public class GetMyProfileTool implements AiTool<TeamIntent> {
         profile.setUsername(loginUser.getUsername());
         profile.setAvatarUrl(loginUser.getAvatarUrl());
         profile.setGender(loginUser.getGender());
-        profile.setTags(loginUser.getTags());
+        profile.setTagNames(tagService.toDisplayTagNames(loginUser.getTagIds()));
         profile.setProfile(loginUser.getProfile());
         profile.setCity(loginUser.getCity());
         profile.setCreateTime(loginUser.getCreateTime());

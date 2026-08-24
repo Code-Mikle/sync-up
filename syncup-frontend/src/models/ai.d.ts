@@ -6,7 +6,7 @@ export type AiUserProfileData = {
     avatarUrl?: string;
     gender?: number;
     city?: string;
-    tags?: string;
+    tagNames?: string[];
     profile?: string;
     createTime?: string | Date;
     lastActiveTime?: string | Date;
@@ -77,7 +77,7 @@ export type AiUserRecommendation = {
     username?: string;
     avatarUrl?: string;
     gender?: number;
-    tags?: string;
+    tagNames?: string[];
     createTime?: string | Date;
     reasons?: string[];
 };

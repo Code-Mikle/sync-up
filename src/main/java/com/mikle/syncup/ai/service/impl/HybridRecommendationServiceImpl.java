@@ -1,8 +1,6 @@
 package com.mikle.syncup.ai.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.ai.mapper.AiUserProfileEmbeddingMapper;
 import com.mikle.syncup.ai.mapper.AiUserProfileMapper;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
@@ -27,6 +25,7 @@ import com.mikle.syncup.model.domain.UserTeam;
 import com.mikle.syncup.model.dto.TeamQuery;
 import com.mikle.syncup.model.vo.TeamUserVO;
 import com.mikle.syncup.service.TeamService;
+import com.mikle.syncup.service.TagService;
 import com.mikle.syncup.service.UserTeamService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -40,11 +39,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -98,7 +95,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
     private TextHashService textHashService;
 
     @Resource
-    private ObjectMapper objectMapper;
+    private TagService tagService;
 
     @Override
     public HybridRecommendationResult<AiUserRecommendation> recommendUsers(
@@ -110,14 +107,17 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
             return emptyResult(start);
         }
         AiUserProfileEntity currentProfile = getActiveProfile(currentUser.getId());
-        Set<String> requestedTags = requestedUserTags(intent);
+        Set<Long> requestedTagIds = requestedUserTagIds(intent);
+        if (!requestedTagIds.isEmpty()) {
+            tagService.validateEnabledTagIds(requestedTagIds);
+        }
         String effectiveCity = firstNonBlank(intent == null ? null : intent.getCity(), currentUser.getCity());
         Integer requestedGender = intent == null ? null : intent.getGender();
         String queryText = queryTextBuilder.build(intent, currentProfile);
 
-        List<User> candidates = loadUserCandidates(currentUser.getId(), effectiveCity, requestedGender, requestedTags).stream()
-                .filter(candidate -> requestedTags.isEmpty()
-                        || !Collections.disjoint(requestedTags, parseTags(candidate.getTags())))
+        List<User> candidates = loadUserCandidates(currentUser.getId(), effectiveCity, requestedGender, requestedTagIds).stream()
+                .filter(candidate -> requestedTagIds.isEmpty()
+                || !Collections.disjoint(requestedTagIds, parseTagIds(candidate.getTagIds())))
                 .limit(CANDIDATE_LIMIT)
                 .toList();
         if (candidates.isEmpty()) {
@@ -132,8 +132,8 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
 
         List<ScoredUser> scored = new ArrayList<>();
         for (User candidate : candidates) {
-            Set<String> candidateTags = parseTags(candidate.getTags());
-            double tagScore = overlapScore(requestedTags, candidateTags);
+            Set<Long> candidateTagIds = parseTagIds(candidate.getTagIds());
+            double tagScore = overlapScore(requestedTagIds, candidateTagIds);
             double recencyScore = recencyScore(candidate.getLastActiveTime());
             Double semanticScore = semanticUserScore(queryVector, candidate.getId(), candidateProfiles, embeddings);
             scored.add(new ScoredUser(candidate, semanticScore, tagScore, recencyScore));
@@ -156,7 +156,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         List<AiUserRecommendation> items = selectedUsers.stream()
                 .limit(limit)
                 .map(scoredUser -> toRecommendation(
-                        scoredUser, effectiveCity, requestedTags, degraded, !degraded))
+                        scoredUser, effectiveCity, requestedTagIds, degraded, !degraded))
                 .toList();
         long duration = System.currentTimeMillis() - start;
         log.info("hybrid user recommendation completed, userId={}, candidates={}, results={}, degraded={}, durationMs={}",
@@ -216,7 +216,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
                 queryVector == null ? null : queryVector.model(), duration);
     }
 
-    private List<User> loadUserCandidates(long currentUserId, String city, Integer gender, Set<String> requestedTags) {
+    private List<User> loadUserCandidates(long currentUserId, String city, Integer gender, Set<Long> requestedTagIds) {
         QueryWrapper<User> query = new QueryWrapper<User>()
                 .eq("userStatus", 0)
                 .ne("id", currentUserId);
@@ -226,9 +226,9 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         if (gender != null) {
             query.eq("gender", gender);
         }
-        if (!requestedTags.isEmpty()) {
+        if (!requestedTagIds.isEmpty()) {
             query.and(tagsQuery -> {
-                Iterator<String> iterator = requestedTags.iterator();
+                java.util.Iterator<Long> iterator = requestedTagIds.iterator();
                 tagsQuery.apply(tagMatchSql(), iterator.next());
                 while (iterator.hasNext()) {
                     tagsQuery.or().apply(tagMatchSql(), iterator.next());
@@ -242,9 +242,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
     }
 
     private String tagMatchSql() {
-        return "CASE WHEN JSON_VALID(tags) "
-                + "THEN JSON_CONTAINS(tags, JSON_QUOTE({0})) "
-                + "ELSE FIND_IN_SET({0}, REPLACE(tags, '，', ',')) > 0 END";
+        return "JSON_CONTAINS(tagIds, CAST({0} AS JSON))";
     }
 
     private Map<Long, AiUserProfileEntity> loadProfiles(Collection<Long> userIds) {
@@ -384,7 +382,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
 
     private AiUserRecommendation toRecommendation(ScoredUser scored,
                                                   String effectiveCity,
-                                                  Set<String> requestedTags,
+                                                  Set<Long> requestedTagIds,
                                                   boolean degraded,
                                                   boolean semanticMatched) {
         User user = scored.user();
@@ -394,7 +392,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         result.setAvatarUrl(user.getAvatarUrl());
         result.setGender(user.getGender());
         result.setCity(user.getCity());
-        result.setTags(user.getTags());
+        result.setTagNames(tagService.toDisplayTagNames(user.getTagIds()));
         result.setProfile(user.getProfile());
         result.setCreateTime(user.getCreateTime());
         result.setLastActiveTime(user.getLastActiveTime());
@@ -402,10 +400,15 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         if (StringUtils.isNotBlank(effectiveCity) && effectiveCity.equals(user.getCity())) {
             result.getReasons().add("所在城市符合本次要求");
         }
-        Set<String> commonTags = new LinkedHashSet<>(requestedTags);
-        commonTags.retainAll(parseTags(user.getTags()));
+        Set<Long> commonTags = new LinkedHashSet<>(requestedTagIds);
+        commonTags.retainAll(parseTagIds(user.getTagIds()));
         if (!commonTags.isEmpty()) {
-            result.getReasons().add("共同偏好：" + String.join("、", commonTags.stream().limit(2).toList()));
+            Map<Long, String> tagNames = tagService.getEnabledTagNameMap(commonTags);
+            String names = commonTags.stream().map(tagNames::get)
+                    .filter(Objects::nonNull).limit(2).collect(Collectors.joining("、"));
+            if (StringUtils.isNotBlank(names)) {
+                result.getReasons().add("共同偏好：" + names);
+            }
         }
         if (semanticMatched) {
             result.getReasons().add("活动与社交偏好较接近");
@@ -441,50 +444,27 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         return team;
     }
 
-    private Set<String> requestedUserTags(UserIntent intent) {
-        Set<String> tags = new LinkedHashSet<>();
-        if (intent != null) {
-            if (intent.getTags() != null) {
-                intent.getTags().forEach(tag -> addTag(tags, tag));
-            }
-        }
-        return tags;
-    }
-
-    private Set<String> parseTags(String value) {
-        if (StringUtils.isBlank(value)) {
+    private Set<Long> requestedUserTagIds(UserIntent intent) {
+        if (intent == null || intent.getTagIds() == null) {
             return Collections.emptySet();
         }
-        try {
-            List<String> values = objectMapper.readValue(value, new TypeReference<>() {
-            });
-            return normalizeTags(values);
-        } catch (Exception ignored) {
-            return normalizeTags(List.of(value.split("[,，]")));
-        }
+        return intent.getTagIds().stream()
+                .filter(Objects::nonNull)
+                .filter(tagId -> tagId > 0)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private Set<String> normalizeTags(Collection<String> tags) {
-        Set<String> result = new LinkedHashSet<>();
-        if (tags != null) {
-            tags.forEach(tag -> addTag(result, tag));
-        }
-        return result;
+    private Set<Long> parseTagIds(String value) {
+        return new LinkedHashSet<>(tagService.parseTagIds(value));
     }
 
-    private void addTag(Set<String> tags, String tag) {
-        if (StringUtils.isNotBlank(tag)) {
-            tags.add(tag.trim().toLowerCase(Locale.ROOT));
-        }
-    }
-
-    private double overlapScore(Set<String> requested, Set<String> candidate) {
+    private double overlapScore(Set<Long> requested, Set<Long> candidate) {
         if (requested.isEmpty() || candidate.isEmpty()) {
             return 0D;
         }
-        Set<String> intersection = new LinkedHashSet<>(requested);
+        Set<Long> intersection = new LinkedHashSet<>(requested);
         intersection.retainAll(candidate);
-        Set<String> union = new LinkedHashSet<>(requested);
+        Set<Long> union = new LinkedHashSet<>(requested);
         union.addAll(candidate);
         return union.isEmpty() ? 0D : (double) intersection.size() / union.size();
     }

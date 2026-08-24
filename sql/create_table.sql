@@ -3,6 +3,9 @@ create database if not exists sync_up_db;
 use sync_up_db;
 
 # TRUNCATE TABLE ai_tool_call_log;
+# TRUNCATE TABLE user_team;
+# TRUNCATE TABLE ai_team_embedding;
+TRUNCATE TABLE ai_team_draft;
 
 -- 用户表
 create table user
@@ -22,7 +25,7 @@ create table user
     lastActiveTime datetime null comment '最近活跃时间',
     isDelete     tinyint  default 0 not null comment '是否删除',
     userRole     int      default 0 not null comment '用户角色 0 - 普通用户 1 - 管理员',
-    tags         varchar(1024) null comment '标签 json 列表',
+    tagIds       json null comment '标准活动标签 id JSON 数组',
     profile      varchar(1024) null comment '个人简介 / 自我介绍'
 ) comment '用户';
 
@@ -247,19 +250,44 @@ create index idx_ai_chat_message_user_session_time on ai_chat_message (userId, s
 create index idx_ai_chat_message_user_time on ai_chat_message (userId, createTime);
 create index idx_ai_chat_message_expireAt on ai_chat_message (expireAt);
 
--- 标签表（可以不创建，因为标签字段已经放到用户表中）
+-- 受控活动标签分类表
+create table tag_category
+(
+    id          bigint auto_increment comment 'id' primary key,
+    code        varchar(64) not null comment '稳定分类代码',
+    name        varchar(64) not null comment '分类名称',
+    description varchar(512) null comment '分类说明',
+    status      tinyint default 1 not null comment '0-禁用，1-启用',
+    sortOrder   int default 0 not null comment '排序值',
+    createTime  datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime  datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete    tinyint default 0 not null comment '是否删除'
+) comment '活动标签分类';
+
+create unique index uk_tag_category_code on tag_category (code);
+create unique index uk_tag_category_name on tag_category (name);
+create index idx_tag_category_status_sort on tag_category (status, sortOrder);
+
+-- 受控活动标签。向量直接保存在标签表，当前规模无需独立向量表。
 create table tag
 (
-    id         bigint auto_increment comment 'id' primary key,
-    tagName    varchar(256) null comment '标签名称',
-    userId     bigint null comment '用户 id',
-    parentId   bigint null comment '父标签 id',
-    isParent   tinyint null comment '0 - 不是，1 - 父标签',
-    createTime datetime default CURRENT_TIMESTAMP null comment '创建时间',
-    updateTime datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete   tinyint  default 0 not null comment '是否删除',
-    constraint uniIdx_tagName
-        unique (tagName)
-) comment '标签';
+    id                  bigint auto_increment comment 'id' primary key,
+    categoryId          bigint not null comment '标签分类 id',
+    code                varchar(64) not null comment '稳定标签代码',
+    name                varchar(64) not null comment '标准标签名称',
+    description         varchar(512) not null comment '标签语义说明',
+    status              tinyint default 1 not null comment '0-禁用，1-启用',
+    sortOrder           int default 0 not null comment '排序值',
+    embeddingTextHash   char(64) null comment '标签向量原文 SHA-256',
+    embeddingModel      varchar(128) null comment 'Embedding 模型',
+    embeddingDimensions int null comment '向量维度',
+    vectorJson          mediumtext null comment '归一化后的 float 向量 JSON',
+    embeddingUpdatedAt  datetime null comment '向量更新时间',
+    createTime          datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime          datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete            tinyint default 0 not null comment '是否删除'
+) comment '受控活动标签';
 
-create index idx_userId on tag (userId);
+create unique index uk_tag_code on tag (code);
+create unique index uk_tag_category_name on tag (categoryId, name);
+create index idx_tag_category_status_sort on tag (categoryId, status, sortOrder);

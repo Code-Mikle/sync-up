@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.util.Date;
+import java.util.List;
 
 @Data
 public class AiUserProfile implements Serializable {
@@ -16,7 +17,7 @@ public class AiUserProfile implements Serializable {
 
     private Integer gender;
 
-    private String tags;
+    private List<String> tagNames;
 
     private String profile;
 

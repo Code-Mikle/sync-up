@@ -3,6 +3,7 @@ package com.mikle.syncup.service;
 import com.mikle.syncup.model.domain.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.mikle.syncup.model.vo.UserLoginVO;
+import com.mikle.syncup.model.vo.UserVO;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mikle.syncup.model.vo.UserSearchResultVO;
 
@@ -43,6 +44,11 @@ public interface UserService extends IService<User> {
     User getSafetyUser(User originUser);
 
     /**
+     * 将已脱敏用户转换为面向前端的用户资料。
+     */
+    UserVO getUserVO(User originUser);
+
+    /**
      * Convert a user entity to fields that are safe to expose to other users.
      */
     UserSearchResultVO getPublicUser(User originUser);
@@ -58,10 +64,10 @@ public interface UserService extends IService<User> {
     /**
      * 根据标签搜索用户
      *
-     * @param tagNameList
+     * @param tagIds 标准标签 id，满足任一标签即可
      * @return
      */
-    List<User> searchUsersByTags(List<String> tagNameList);
+    List<User> searchUsersByTags(List<Long> tagIds);
 
     /**
      * Keyword search for public user information.

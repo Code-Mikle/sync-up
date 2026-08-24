@@ -19,43 +19,25 @@
         </van-field>
         <div v-else-if="isTagsEdit" class="tag-editor">
           <div class="tag-editor__label">我的标签</div>
-          <div class="tag-editor__chips" v-if="tagList.length">
-            <van-tag
-                v-for="tag in tagList"
-                :key="tag"
-                closeable
-                round
-                size="medium"
-                @close="removeTag(tag)"
-            >
-              {{ tag }}
-            </van-tag>
-          </div>
-          <div class="tag-editor__empty" v-else>还没有标签，添加几个让别人更容易找到你。</div>
-          <div class="tag-editor__input">
-            <van-field
-                v-model="tagInput"
-                name="tagInput"
-                label="新增"
-                placeholder="输入标签，支持空格或逗号分隔"
-                maxlength="16"
-                clearable
-                @keydown.enter.prevent="addTagsFromInput"
-            />
-            <van-button size="small" round type="primary" plain native-type="button" @click="addTagsFromInput">
-              添加
-            </van-button>
-          </div>
-          <div class="tag-editor__suggestions">
-            <button
-                v-for="tag in suggestedTags"
-                :key="tag"
-                type="button"
-                :disabled="tagList.includes(tag)"
-                @click="addTag(tag)"
-            >
-              {{ tag }}
-            </button>
+          <p class="tag-editor__hint">从系统标签中选择，最多 10 个。标签会帮助 AI 为你匹配更合适的搭子。</p>
+          <div v-if="tagLoading" class="tag-editor__empty">正在加载标签…</div>
+          <div v-else-if="tagCategories.length === 0" class="tag-editor__empty">标签暂时不可用，请稍后重试。</div>
+          <div v-else class="tag-editor__categories">
+            <section v-for="category in tagCategories" :key="category.id" class="tag-editor__category">
+              <div class="tag-editor__category-name">{{ category.name }}</div>
+              <div class="tag-editor__suggestions">
+                <button
+                    v-for="tag in category.tags"
+                    :key="tag.id"
+                    type="button"
+                    :class="{ 'tag-editor__option--selected': selectedTagIds.includes(tag.id) }"
+                    :disabled="!selectedTagIds.includes(tag.id) && selectedTagIds.length >= MAX_TAGS"
+                    @click="toggleTag(tag.id)"
+                >
+                  {{ tag.name }}
+                </button>
+              </div>
+            </section>
           </div>
         </div>
         <van-field
@@ -82,12 +64,25 @@
 
 <script setup lang="ts">
 import {useRoute, useRouter} from "vue-router";
-import {computed, ref} from "vue";
+import {computed, onMounted, ref} from "vue";
 import myAxios from "../plugins/myAxios";
 import {showFailToast, showSuccessToast} from "vant";
 import {getCurrentUser} from "../services/user";
 import {genderOptions} from "../constants/user";
-import {parseUserTags} from "../utils/user";
+
+type TagOption = {
+  id: number;
+  name: string;
+  description?: string;
+};
+
+type TagCategory = {
+  id: number;
+  name: string;
+  tags: TagOption[];
+};
+
+const MAX_TAGS = 10;
 
 const route = useRoute();
 const router = useRouter();
@@ -108,10 +103,10 @@ const editUser = ref({
 
 const isGenderEdit = computed(() => editUser.value.editKey === 'gender');
 const isProfileEdit = computed(() => editUser.value.editKey === 'profile');
-const isTagsEdit = computed(() => editUser.value.editKey === 'tags');
-const tagInput = ref('');
-const tagList = ref<string[]>(parseUserTags(String(editUser.value.currentValue)));
-const suggestedTags = ['羽毛球', '足球', '篮球', '跑步', '健身', '徒步', '桌游', '电影', '探店', '编程'];
+const isTagsEdit = computed(() => editUser.value.editKey === 'tagIds');
+const tagCategories = ref<TagCategory[]>([]);
+const selectedTagIds = ref<number[]>(parseTagIds(editUser.value.currentValue));
+const tagLoading = ref(false);
 
 if (isGenderEdit.value && !['0', '1', '2'].includes(String(editUser.value.currentValue))) {
   editUser.value.currentValue = '2';
@@ -121,52 +116,57 @@ const getSubmitValue = () => {
   if (isGenderEdit.value) {
     return Number(editUser.value.currentValue);
   }
-  if (isTagsEdit.value) {
-    return JSON.stringify(tagList.value);
-  }
   return editUser.value.currentValue;
 }
 
-const normalizeTag = (tag: string) => tag.trim().replace(/^#/, '');
+function parseTagIds(value: unknown): number[] {
+  if (Array.isArray(value)) {
+    return value.map(Number).filter(id => Number.isInteger(id) && id > 0);
+  }
+  if (typeof value !== 'string' || !value.trim()) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+        ? parsed.map(Number).filter(id => Number.isInteger(id) && id > 0)
+        : [];
+  } catch {
+    return [];
+  }
+}
 
-const addTag = (tag: string) => {
-  const normalized = normalizeTag(tag);
-  if (!normalized) {
+const toggleTag = (tagId: number) => {
+  if (selectedTagIds.value.includes(tagId)) {
+    selectedTagIds.value = selectedTagIds.value.filter(id => id !== tagId);
     return;
   }
-  if (normalized.length > 12) {
-    showFailToast('单个标签最多 12 个字符');
+  if (selectedTagIds.value.length >= MAX_TAGS) {
+    showFailToast(`最多选择 ${MAX_TAGS} 个标签`);
     return;
   }
-  if (tagList.value.includes(normalized)) {
-    return;
-  }
-  if (tagList.value.length >= 12) {
-    showFailToast('最多设置 12 个标签');
-    return;
-  }
-  tagList.value.push(normalized);
+  selectedTagIds.value.push(tagId);
 };
 
-const addTagsFromInput = () => {
-  const tags = tagInput.value
-      .split(/[\s,，、]+/)
-      .map(normalizeTag)
-      .filter(Boolean);
-  tags.forEach(addTag);
-  tagInput.value = '';
-};
-
-const removeTag = (tag: string) => {
-  tagList.value = tagList.value.filter(item => item !== tag);
+const loadTags = async () => {
+  if (!isTagsEdit.value) {
+    return;
+  }
+  tagLoading.value = true;
+  try {
+    const response = await myAxios.get<TagCategory[]>('/tag/list');
+    tagCategories.value = response.code === 0 ? response.data ?? [] : [];
+  } catch (error) {
+    console.error('/tag/list error', error);
+    showFailToast('标签加载失败');
+  } finally {
+    tagLoading.value = false;
+  }
 };
 
 const onSubmit = async () => {
   submitting.value = true;
   try {
-    if (isTagsEdit.value && tagInput.value.trim()) {
-      addTagsFromInput();
-    }
     const currentUser = await getCurrentUser();
 
     if (!currentUser) {
@@ -176,10 +176,13 @@ const onSubmit = async () => {
 
     console.log(currentUser, '当前用户')
 
-    const res = await myAxios.post('/user/update', {
-      'id': currentUser.id,
-      [editUser.value.editKey as string]: getSubmitValue(),
-    })
+    const payload: Record<string, unknown> = { id: currentUser.id };
+    if (isTagsEdit.value) {
+      payload.tagIds = selectedTagIds.value;
+    } else {
+      payload[editUser.value.editKey as string] = getSubmitValue();
+    }
+    const res = await myAxios.post('/user/update', payload)
     console.log(res, '更新请求');
     if (res.code === 0 && res.data > 0) {
       showSuccessToast('修改成功');
@@ -195,6 +198,8 @@ const onSubmit = async () => {
   }
 };
 
+onMounted(loadTags);
+
 </script>
 
 <style scoped>
@@ -209,19 +214,10 @@ const onSubmit = async () => {
   font-weight: 900;
 }
 
-.tag-editor__chips,
 .tag-editor__suggestions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.tag-editor__chips :deep(.van-tag) {
-  padding: 5px 9px;
-  color: var(--app-primary-deep);
-  font-weight: 800;
-  background: rgba(var(--app-primary-rgb), 0.1);
-  border: 0;
 }
 
 .tag-editor__empty {
@@ -234,29 +230,23 @@ const onSubmit = async () => {
   border-radius: 12px;
 }
 
-.tag-editor__input {
+.tag-editor__hint {
+  margin: -2px 0 14px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tag-editor__categories {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  margin-top: 14px;
+  gap: 14px;
 }
 
-.tag-editor__input :deep(.van-cell) {
-  padding: 0;
-  background: transparent;
-}
-
-.tag-editor__input :deep(.van-field__body) {
-  min-height: 38px;
-  padding: 0 12px;
-  background: rgba(244, 245, 252, 0.92);
-  border: 1px solid rgba(40, 38, 101, 0.08);
-  border-radius: 999px;
-}
-
-.tag-editor__input :deep(.van-field__label) {
-  display: none;
+.tag-editor__category-name {
+  margin-bottom: 8px;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .tag-editor__suggestions {
@@ -277,5 +267,11 @@ const onSubmit = async () => {
 .tag-editor__suggestions button:disabled {
   color: var(--app-text-muted);
   background: rgba(109, 111, 139, 0.08);
+}
+
+.tag-editor__suggestions button.tag-editor__option--selected {
+  color: #fff;
+  background: var(--app-primary);
+  border-color: var(--app-primary);
 }
 </style>

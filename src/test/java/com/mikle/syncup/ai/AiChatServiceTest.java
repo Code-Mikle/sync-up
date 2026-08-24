@@ -154,7 +154,7 @@ class AiChatServiceTest {
                         """,
                 Integer.class);
         if (count == null || count == 0) {
-            jdbcTemplate.execute("alter table user add column profile varchar(1024) null comment '个人简介 / 自我介绍' after tags");
+            jdbcTemplate.execute("alter table user add column profile varchar(1024) null comment '个人简介 / 自我介绍' after tagIds");
         }
     }
 
@@ -359,12 +359,11 @@ class AiChatServiceTest {
         User loginUser = null;
         User matchedUser = null;
         try {
-            String uniqueTag = "stage16_match_" + UUID.randomUUID().toString().replace("-", "");
-            loginUser = createTestUser("[\"" + uniqueTag + "\"]");
-            matchedUser = createTestUser("[\"" + uniqueTag + "\"]");
+            loginUser = createTestUser("[107]");
+            matchedUser = createTestUser("[107]");
 
             UserIntent intent = new UserIntent();
-            intent.setTags(List.of(uniqueTag));
+            intent.setTagIds(List.of(107L));
             AiToolResult result = aiToolRegistry.execute("search_users", intent, loginUser);
 
             Assertions.assertTrue(result.isSuccess());
@@ -956,7 +955,7 @@ class AiChatServiceTest {
         return createTestUser(null);
     }
 
-    private User createTestUser(String tags) {
+    private User createTestUser(String tagIds) {
         User user = new User();
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
         user.setUsername("ai_test_" + suffix);
@@ -964,7 +963,7 @@ class AiChatServiceTest {
         user.setUserPassword(PASSWORD_ENCODER.encode(RAW_PASSWORD));
         user.setUserRole(0);
         user.setUserStatus(0);
-        user.setTags(tags);
+        user.setTagIds(tagIds);
         boolean saved = userService.save(user);
         Assertions.assertTrue(saved, "test user should be created");
         return user;

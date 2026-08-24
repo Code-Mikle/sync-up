@@ -87,9 +87,9 @@
                   <div class="profile-result__meta">
                     <span v-if="getProfileData(uiBlock)?.city">{{ getProfileData(uiBlock)?.city }}</span>
                   </div>
-                  <div class="profile-result__tags" v-if="formatUserTags(getProfileData(uiBlock)?.tags).length">
+                  <div class="profile-result__tags" v-if="formatUserTagNames(getProfileData(uiBlock)?.tagNames).length">
                     <van-tag
-                        v-for="tag in formatUserTags(getProfileData(uiBlock)?.tags)"
+                        v-for="tag in formatUserTagNames(getProfileData(uiBlock)?.tagNames)"
                         :key="`profile-${tag}`"
                         round
                     >
@@ -170,7 +170,7 @@
                     <h3>{{ user.username || "未命名用户" }}</h3>
                     <div class="user-recommend-card__tags">
                       <van-tag
-                          v-for="tag in formatUserTags(user.tags)"
+                          v-for="tag in formatUserTagNames(user.tagNames)"
                           :key="`${user.id}-${tag}`"
                           round
                       >
@@ -777,19 +777,8 @@ const getProfileData = (uiBlock: AiUiBlock): AiUserProfileData | undefined => {
   return uiBlock.data as AiUserProfileData;
 };
 
-const formatUserTags = (tags?: string) => {
-  if (!tags) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(tags);
-    if (Array.isArray(parsed)) {
-      return parsed.map(item => String(item)).filter(Boolean).slice(0, 4);
-    }
-  } catch (error) {
-    // Keep compatibility with comma-separated legacy tags.
-  }
-  return tags.split(/[,，]/).map(tag => tag.trim()).filter(Boolean).slice(0, 4);
+const formatUserTagNames = (tagNames?: string[]) => {
+  return (tagNames ?? []).filter(Boolean).slice(0, 4);
 };
 
 const formatCount = (value?: number) => {

@@ -54,7 +54,6 @@
 
 <script setup lang="ts">
 import {UserType} from "../models/user";
-import {parseUserTags} from "../utils/user";
 import {useRouter} from "vue-router";
 
 interface UserCardListProps {
@@ -69,7 +68,7 @@ const props = withDefaults(defineProps<UserCardListProps>(), {
 
 const router = useRouter();
 
-const getUserTags = (user: UserType) => parseUserTags(user.tags);
+const getUserTags = (user: UserType) => user.tagNames ?? [];
 
 const getAvatarText = (user: UserType) => {
   const name = user.username || user.userAccount || '?';

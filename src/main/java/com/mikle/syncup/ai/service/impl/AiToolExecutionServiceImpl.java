@@ -4,6 +4,7 @@ import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.agent.AiIntent;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.agent.UserIntent;
+import com.mikle.syncup.ai.model.agent.TagResolutionIntent;
 import com.mikle.syncup.ai.service.AiToolCallLogService;
 import com.mikle.syncup.ai.service.AiToolExecutionService;
 import com.mikle.syncup.ai.tool.AiToolRegistry;
@@ -56,10 +57,14 @@ public class AiToolExecutionServiceImpl implements AiToolExecutionService {
             return null;
         }
         if (intent instanceof UserIntent userIntent) {
-            return "tags=" + userIntent.getTags()
+            return "tagIds=" + userIntent.getTagIds()
                     + ", hasProfile=" + (userIntent.getProfile() != null)
                     + ", city=" + userIntent.getCity()
                     + ", gender=" + userIntent.getGender();
+        }
+        if (intent instanceof TagResolutionIntent tagResolutionIntent) {
+            return "tagQueryCount=" + (tagResolutionIntent.getTagQueries() == null
+                    ? 0 : tagResolutionIntent.getTagQueries().size());
         }
         if (!(intent instanceof TeamIntent teamIntent)) {
             return "intentType=" + intent.getClass().getSimpleName();

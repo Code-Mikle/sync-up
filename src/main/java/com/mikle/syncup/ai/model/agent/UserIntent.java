@@ -15,8 +15,8 @@ import java.util.List;
 @Schema(description = "AI 识别出的搭子搜索意图")
 public class UserIntent extends AiIntent {
 
-    @Schema(description = "希望匹配的兴趣标签；为空时不限制标签")
-    private List<String> tags = new ArrayList<>();
+    @Schema(description = "经 resolve_tags 归一化后的标准活动标签 id；为空时不限制标签")
+    private List<Long> tagIds = new ArrayList<>();
 
     @Schema(description = "本次希望匹配的搭子描述；为空时使用当前用户的 AI 匹配画像")
     private String profile;

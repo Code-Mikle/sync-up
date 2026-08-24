@@ -33,16 +33,16 @@ import {UserType} from "../models/user";
 import {normalizeUserList} from "../utils/user";
 
 const route = useRoute();
-const {tags} = route.query;
+const {tagIds, tagNames} = route.query;
 
 const userList = ref<UserType[]>([]);
 const loading = ref(false);
 
 const selectedTags = computed(() => {
-  if (Array.isArray(tags)) {
-    return tags.map(String);
+  if (Array.isArray(tagNames)) {
+    return tagNames.map(String);
   }
-  return tags ? [String(tags)] : [];
+  return tagNames ? [String(tagNames)] : [];
 });
 
 const loadData = async () => {
@@ -50,7 +50,7 @@ const loadData = async () => {
   try {
     const response = await myAxios.get<UserType[]>('/user/search/tags', {
       params: {
-        tagNameList: tags
+        tagIds
       },
       paramsSerializer: params => {
         return qs.stringify(params, {indices: false})

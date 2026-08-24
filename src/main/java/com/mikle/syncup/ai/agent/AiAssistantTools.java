@@ -9,6 +9,7 @@ import com.mikle.syncup.ai.model.vo.TeamDraftVO;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.agent.AiIntent;
 import com.mikle.syncup.ai.model.agent.UserIntent;
+import com.mikle.syncup.ai.model.agent.TagResolutionIntent;
 import com.mikle.syncup.ai.service.AiTeamDraftService;
 import com.mikle.syncup.ai.service.AiToolExecutionService;
 import com.mikle.syncup.ai.tool.CreateTeamDraftTool;
@@ -17,6 +18,7 @@ import com.mikle.syncup.ai.tool.GetTeamDetailsTool;
 import com.mikle.syncup.ai.tool.ListMyJoinedTeamsTool;
 import com.mikle.syncup.ai.tool.ListMyCreatedTeamsTool;
 import com.mikle.syncup.ai.tool.SearchUsersTool;
+import com.mikle.syncup.ai.tool.ResolveTagsTool;
 import com.mikle.syncup.ai.tool.DeleteTeamConfirmationTool;
 import com.mikle.syncup.ai.tool.SearchTeamsTool;
 import com.mikle.syncup.model.domain.User;
@@ -79,20 +81,44 @@ public class AiAssistantTools {
     @Tool(
             name = SearchUsersTool.TOOL_NAME,
             value = "根据当前用户本轮明确表达的条件搜索适合成为搭子的其他用户。" +
-                    "tags、profile、city、gender 均为可选条件；未提供 city 时后端使用当前用户常驻城市，未提供 gender 时不限制。" +
+                    "tagIds、profile、city、gender 均为可选条件；tagIds 只能使用本轮 resolve_tags 工具已确认的标准标签 id，" +
+                    "不得编造或直接使用自然语言标签。未提供 city 时后端使用当前用户常驻城市，未提供 gender 时不限制。" +
                     "profile 表示本次希望匹配的搭子描述；未提供时后端使用当前用户的 AI 匹配画像。" +
                     "只返回允许公开展示的用户资料，不得展示或复述内部用户画像。")
     public String searchUsers(
-            @P(value = "希望匹配的兴趣标签。只提取用户本轮明确提出的标签；未提及时留空。", required = false)
-            List<String> tags,
+            @P(value = "resolve_tags 返回并确认的标准标签 id。未提及活动或未能可靠归一化时留空。", required = false)
+            List<Long> tagIds,
             @P(value = "本次希望匹配的搭子描述。例如“性格随和、周末能一起徒步”。未提及时留空。", required = false)
             String profile,
             @P(value = "用户明确要求的目标城市；未提及时留空，由后端使用当前用户常驻城市。", required = false)
             String city,
             @P(value = "目标性别：0=男，1=女。未明确要求时必须留空，不得传 2。", required = false)
             Integer gender) {
-        UserIntent intent = buildUserIntent(tags, profile, city, gender);
+        UserIntent intent = buildUserIntent(tagIds, profile, city, gender);
         return executeAndRememberUserSearch(intent);
+    }
+
+    @Tool(
+            name = ResolveTagsTool.TOOL_NAME,
+            value = "将用户本轮表达的活动短语归一化为受控词表标签。用户要求推荐、搜索或寻找特定活动搭子时，" +
+                    "必须先调用本工具，再调用 search_users。对每个短语：RESOLVED 可直接使用 resolvedTag.tagId；" +
+                    "NEEDS_JUDGMENT 时只能从 candidates 中选择一个最符合的 tagId；UNRESOLVED 时不得编造 tagId。")
+    public String resolveTags(
+            @P(value = "从用户本轮需求中提取的活动短语，例如“附近玩两天”“一起打羽毛球”。最多 5 个。", required = true)
+            List<String> tagQueries) {
+        TagResolutionIntent intent = new TagResolutionIntent();
+        if (tagQueries != null) {
+            intent.setTagQueries(new ArrayList<>(tagQueries.stream()
+                    .filter(StringUtils::isNotBlank)
+                    .map(String::trim)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new))));
+        }
+        AiAgentToolContext.State state = aiAgentToolContext.getRequired();
+        attachSourceText(intent, state);
+        AiToolResult result = aiToolExecutionService.execute(
+                ResolveTagsTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
+        state.getToolResults().add(result);
+        return toJson(result);
     }
 
     @Tool(name = GetTeamDetailsTool.TOOL_NAME, value = "根据队伍 id 获取队伍的公开详情")
@@ -307,15 +333,16 @@ public class AiAssistantTools {
         }
     }
 
-    private UserIntent buildUserIntent(List<String> tags, String profile, String city, Integer gender) {
+    private UserIntent buildUserIntent(List<Long> tagIds, String profile, String city, Integer gender) {
         if (gender != null && gender != 0 && gender != 1) {
             throw new IllegalArgumentException("gender must be 0 or 1 when provided");
         }
         UserIntent intent = new UserIntent();
-        if (tags != null) {
-            intent.setTags(new ArrayList<>(tags.stream()
-                    .filter(StringUtils::isNotBlank)
-                    .map(String::trim)
+        if (tagIds != null) {
+            if (tagIds.stream().anyMatch(id -> id == null || id <= 0)) {
+                throw new IllegalArgumentException("tagIds must contain positive ids only");
+            }
+            intent.setTagIds(new ArrayList<>(tagIds.stream()
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new))));
         }
         if (StringUtils.isNotBlank(profile)) {

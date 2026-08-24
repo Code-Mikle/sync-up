@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.util.Date;
+import java.util.List;
 
 /**
  * Public user information returned by keyword search.
@@ -21,7 +22,7 @@ public class UserSearchResultVO implements Serializable {
 
     private String city;
 
-    private String tags;
+    private List<String> tagNames;
 
     /**
      * 用户个人简介 / 自我介绍

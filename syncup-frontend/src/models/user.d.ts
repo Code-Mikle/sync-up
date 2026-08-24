@@ -13,7 +13,8 @@ export type UserType = {
     city?: string;
     userStatus: number;
     userRole: number;
-    tags: string | string[];
+    tagIds?: number[];
+    tagNames?: string[];
     createTime: Date;
     lastActiveTime?: Date | string;
 };

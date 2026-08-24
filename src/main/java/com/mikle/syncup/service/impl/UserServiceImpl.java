@@ -4,9 +4,6 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
-import com.google.gson.reflect.TypeToken;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.constant.UserConstant;
 import com.mikle.syncup.exception.BusinessException;
@@ -14,7 +11,9 @@ import com.mikle.syncup.ai.service.AiUserProfileService;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.vo.UserLoginVO;
 import com.mikle.syncup.model.vo.UserSearchResultVO;
+import com.mikle.syncup.model.vo.UserVO;
 import com.mikle.syncup.service.UserService;
+import com.mikle.syncup.service.TagService;
 import com.mikle.syncup.mapper.UserMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -48,6 +47,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Resource
     private AiUserProfileService aiUserProfileService;
+
+    @Resource
+    private TagService tagService;
 
     /**
      * 盐值，混淆密码
@@ -146,7 +148,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         updateLastActiveTime(user.getId(), lastActiveTime);
         safetyUser.setLastActiveTime(lastActiveTime);
         UserLoginVO userLoginVO = new UserLoginVO();
-        userLoginVO.setUser(safetyUser);
+        userLoginVO.setUser(getUserVO(safetyUser));
         userLoginVO.setToken(StpUtil.getTokenValue());
         userLoginVO.setTokenName(TOKEN_NAME);
         userLoginVO.setTokenPrefix(TOKEN_PREFIX);
@@ -189,9 +191,34 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         safetyUser.setUserStatus(originUser.getUserStatus());
         safetyUser.setCreateTime(originUser.getCreateTime());
         safetyUser.setLastActiveTime(originUser.getLastActiveTime());
-        safetyUser.setTags(originUser.getTags());
+        safetyUser.setTagIds(originUser.getTagIds());
         safetyUser.setProfile(originUser.getProfile());
         return safetyUser;
+    }
+
+    @Override
+    public UserVO getUserVO(User originUser) {
+        if (originUser == null) {
+            return null;
+        }
+        UserVO userVO = new UserVO();
+        userVO.setId(originUser.getId());
+        userVO.setUsername(originUser.getUsername());
+        userVO.setUserAccount(originUser.getUserAccount());
+        userVO.setAvatarUrl(originUser.getAvatarUrl());
+        userVO.setGender(originUser.getGender());
+        userVO.setPhone(originUser.getPhone());
+        userVO.setEmail(originUser.getEmail());
+        userVO.setCity(originUser.getCity());
+        userVO.setUserRole(originUser.getUserRole());
+        userVO.setUserStatus(originUser.getUserStatus());
+        userVO.setCreateTime(originUser.getCreateTime());
+        userVO.setUpdateTime(originUser.getUpdateTime());
+        userVO.setLastActiveTime(originUser.getLastActiveTime());
+        userVO.setProfile(originUser.getProfile());
+        userVO.setTagIds(tagService.parseTagIds(originUser.getTagIds()));
+        userVO.setTagNames(tagService.toDisplayTagNames(originUser.getTagIds()));
+        return userVO;
     }
 
     /**
@@ -206,34 +233,27 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     /**
-     * 根据标签搜索用户（内存过滤）
-     * @param tagNameList 用户要拥有的标签
+     * 根据标准标签 id 搜索用户，默认命中任一标签即可。
      */
     @Override
-    public List<User> searchUsersByTags(List<String> tagNameList) {
-        if (CollectionUtils.isEmpty(tagNameList)) {
+    public List<User> searchUsersByTags(List<Long> tagIds) {
+        if (CollectionUtils.isEmpty(tagIds)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        List<String> normalizedTagNameList = tagNameList.stream()
-                .filter(StringUtils::isNotBlank)
-                .map(String::trim)
-                .collect(Collectors.toList());
-        if (CollectionUtils.isEmpty(normalizedTagNameList)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
-        // 1. 先查询所有用户
+        List<Long> normalizedTagIds = tagService.validateEnabledTagIds(tagIds).stream()
+                .map(com.mikle.syncup.model.domain.Tag::getId)
+                .toList();
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        List<User> userList = userMapper.selectList(queryWrapper);
-        // 2. 在内存中判断是否包含要求的标签
-        return userList.stream().filter(user -> {
-            Set<String> tempTagNameSet = parseTagNameSet(user.getTags());
-            for (String tagName : normalizedTagNameList) {
-                if (!tempTagNameSet.contains(tagName)) {
-                    return false;
-                }
+        queryWrapper.and(wrapper -> {
+            java.util.Iterator<Long> iterator = normalizedTagIds.iterator();
+            wrapper.apply("JSON_CONTAINS(tagIds, CAST({0} AS JSON))", iterator.next());
+            while (iterator.hasNext()) {
+                wrapper.or().apply("JSON_CONTAINS(tagIds, CAST({0} AS JSON))", iterator.next());
             }
-            return true;
-        }).map(this::getSafetyUser).collect(Collectors.toList());
+        });
+        return userMapper.selectList(queryWrapper).stream()
+                .map(this::getSafetyUser)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -257,14 +277,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
 
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tags", "profile", "createTime", "lastActiveTime");
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tagIds", "profile", "createTime", "lastActiveTime");
         if (excludeUserId != null && excludeUserId > 0) {
             queryWrapper.ne("id", excludeUserId);
         }
         queryWrapper.and(qw -> qw.eq("userStatus", 0).or().isNull("userStatus"));
         for (String keyword : normalizedKeywords) {
             queryWrapper.and(qw -> qw.like("username", keyword)
-                    .or().like("tags", keyword)
                     .or().like("profile", keyword));
         }
         queryWrapper.orderByDesc("updateTime");
@@ -289,7 +308,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         userSearchResultVO.setAvatarUrl(originUser.getAvatarUrl());
         userSearchResultVO.setGender(originUser.getGender());
         userSearchResultVO.setCity(originUser.getCity());
-        userSearchResultVO.setTags(originUser.getTags());
+        userSearchResultVO.setTagNames(tagService.toDisplayTagNames(originUser.getTagIds()));
         userSearchResultVO.setProfile(originUser.getProfile());
         userSearchResultVO.setCreateTime(originUser.getCreateTime());
         userSearchResultVO.setLastActiveTime(originUser.getLastActiveTime());
@@ -301,34 +320,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         updateUser.setId(userId);
         updateUser.setLastActiveTime(lastActiveTime);
         this.updateById(updateUser);
-    }
-
-    private Set<String> parseTagNameSet(String tagsStr) {
-        if (StringUtils.isBlank(tagsStr)) {
-            return Collections.emptySet();
-        }
-        String trimmedTags = tagsStr.trim();
-        Gson gson = new Gson();
-        try {
-            if (trimmedTags.startsWith("[")) {
-                Set<String> tagNameSet = gson.fromJson(trimmedTags, new TypeToken<Set<String>>() {
-                }.getType());
-                return Optional.ofNullable(tagNameSet).orElse(Collections.emptySet());
-            }
-            if (trimmedTags.startsWith("\"")) {
-                String tagName = gson.fromJson(trimmedTags, String.class);
-                return StringUtils.isBlank(tagName)
-                        ? Collections.emptySet()
-                        : Collections.singleton(tagName.trim());
-            }
-        } catch (JsonSyntaxException e) {
-            log.warn("parse user tags failed, tags={}", tagsStr, e);
-            return Collections.emptySet();
-        }
-        return Arrays.stream(trimmedTags.split("[,，]"))
-                .filter(StringUtils::isNotBlank)
-                .map(String::trim)
-                .collect(Collectors.toSet());
     }
 
     @Override
@@ -409,25 +400,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     @Override
     public boolean isAdmin(User loginUser) {
         return loginUser != null && loginUser.getUserRole() == UserConstant.ADMIN_ROLE;
-    }
-
-    /**
-     * 根据标签搜索用户（SQL 查询版）
-     * @param tagNameList 用户要拥有的标签
-     */
-    @Deprecated
-    private List<User> searchUsersByTagsBySQL(List<String> tagNameList) {
-        if (CollectionUtils.isEmpty(tagNameList)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
-        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        // 拼接 and 查询
-        // like '%Java%' and like '%Python%'
-        for (String tagName : tagNameList) {
-            queryWrapper = queryWrapper.like("tags", tagName);
-        }
-        List<User> userList = userMapper.selectList(queryWrapper);
-        return userList.stream().map(this::getSafetyUser).collect(Collectors.toList());
     }
 
 }

@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * Fields that a user is allowed to update through the public profile API.
@@ -37,8 +38,10 @@ public class UserUpdateRequest implements Serializable {
     @Size(max = 64)
     private String city;
 
-    @Size(max = 1024)
-    private String tags;
+    /**
+     * 受控活动标签 id；未传表示不修改用户标签，空数组表示清空。
+     */
+    private List<Long> tagIds;
 
     @Size(max = 500)
     private String profile;

@@ -39,7 +39,7 @@ public class InsertUsersTest {
 //            user.setUserPassword("12345678");
 //            user.setPhone("123");
 //            user.setEmail("123@qq.com");
-//            user.setTags("[]");
+//            user.setTagIds("[]");
 //            user.setUserStatus(0);
 //            user.setUserRole(0);
 //            userList.add(user);
@@ -73,7 +73,7 @@ public class InsertUsersTest {
 //                user.setUserPassword("12345678");
 //                user.setPhone("123");
 //                user.setEmail("123@qq.com");
-//                user.setTags("[]");
+//                user.setTagIds("[]");
 //                user.setUserStatus(0);
 //                user.setUserRole(0);
 //                userList.add(user);

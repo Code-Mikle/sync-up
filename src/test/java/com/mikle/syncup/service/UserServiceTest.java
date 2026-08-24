@@ -218,13 +218,13 @@ class UserServiceTest {
     @Test
     void searchUsersByTags_shouldReturnCreatedUser() {
         User user = null;
-        String tagA = "tag_" + randomSuffix();
-        String tagB = "tag_" + randomSuffix();
+        Long tagA = 107L;
+        Long tagB = 108L;
         try {
             user = createTestUser();
             User updateUser = new User();
             updateUser.setId(user.getId());
-            updateUser.setTags(String.format("[\"%s\",\"%s\"]", tagA, tagB));
+            updateUser.setTagIds(String.format("[%s,%s]", tagA, tagB));
             userService.updateById(updateUser);
 
             List<User> userList = userService.searchUsersByTags(Arrays.asList(tagA, tagB));
@@ -249,17 +249,17 @@ class UserServiceTest {
             User updateMatchedUser = new User();
             updateMatchedUser.setId(matchedUser.getId());
             updateMatchedUser.setUsername("badminton_" + randomSuffix());
-            updateMatchedUser.setTags("[\"Java\",\"羽毛球\",\"健身\"]");
+            updateMatchedUser.setTagIds("[107,102]");
             userService.updateById(updateMatchedUser);
 
             User updateUnmatchedUser = new User();
             updateUnmatchedUser.setId(unmatchedUser.getId());
             updateUnmatchedUser.setUsername("reading_" + randomSuffix());
-            updateUnmatchedUser.setTags("[\"Java\",\"阅读\"]");
+            updateUnmatchedUser.setTagIds("[704]");
             userService.updateById(updateUnmatchedUser);
 
             Page<UserSearchResultVO> userPage = userService.searchUsersByKeywords(
-                    Arrays.asList("Java", "羽毛球"),
+                    Arrays.asList("badminton"),
                     1,
                     5,
                     loginUser.getId()
