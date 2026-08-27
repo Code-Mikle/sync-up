@@ -8,6 +8,7 @@ import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.model.entity.AiTeamEmbedding;
 import com.mikle.syncup.ai.model.entity.AiUserProfileEmbedding;
 import com.mikle.syncup.ai.model.entity.AiUserProfileEntity;
+import com.mikle.syncup.ai.model.enums.ProfileStatus;
 import com.mikle.syncup.ai.model.schema.GeneratedEmbedding;
 import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
 import com.mikle.syncup.ai.model.vo.HybridRecommendationResult;
@@ -52,7 +53,7 @@ import java.util.stream.Collectors;
 @Service
 public class HybridRecommendationServiceImpl implements HybridRecommendationService {
 
-    private static final int ACTIVE = 1;
+    private static final int ACTIVE_EMBEDDING_STATUS = 1;
     private static final int CANDIDATE_LIMIT = 100;
 
     @Value("${sync-up.ai.user-search.min-semantic-score:0.62}")
@@ -251,7 +252,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         }
         return profileMapper.selectList(new QueryWrapper<AiUserProfileEntity>()
                         .in("userId", userIds)
-                        .eq("status", ACTIVE))
+                        .eq("status", ProfileStatus.ACTIVE.name()))
                 .stream()
                 .collect(Collectors.toMap(AiUserProfileEntity::getUserId, profile -> profile, (a, b) -> a));
     }
@@ -263,7 +264,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         Map<Long, AiUserProfileEmbedding> result = new LinkedHashMap<>();
         userEmbeddingMapper.selectList(new QueryWrapper<AiUserProfileEmbedding>()
                         .in("userId", userIds)
-                        .eq("status", ACTIVE)
+                        .eq("status", ACTIVE_EMBEDDING_STATUS)
                         .orderByDesc("profileVersion"))
                 .forEach(embedding -> result.putIfAbsent(embedding.getUserId(), embedding));
         return result;
@@ -487,7 +488,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
     private AiUserProfileEntity getActiveProfile(long userId) {
         return profileMapper.selectOne(new QueryWrapper<AiUserProfileEntity>()
                 .eq("userId", userId)
-                .eq("status", ACTIVE)
+                .eq("status", ProfileStatus.ACTIVE.name())
                 .last("limit 1"));
     }
 

@@ -19,6 +19,16 @@ public class AiUserProfileEntity implements Serializable {
 
     private Long userId;
 
+    private String activityPreferenceText;
+
+    private String socialPersonalityText;
+
+    private String partnerPreferenceText;
+
+    private String activityConstraintHabitText;
+
+    private String aiInteractionPreferenceText;
+
     private String profileText;
 
     private String matchProfileText;
@@ -27,16 +37,13 @@ public class AiUserProfileEntity implements Serializable {
 
     private Integer profileVersion;
 
-    private String sourceHash;
+    private String evidenceDigest;
 
     private String model;
 
     private String promptVersion;
 
-    /**
-     * 1 - active.
-     */
-    private Integer status;
+    private String status;
 
     private Date generatedAt;
 

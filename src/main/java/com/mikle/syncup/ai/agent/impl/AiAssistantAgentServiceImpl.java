@@ -6,13 +6,11 @@ import com.mikle.syncup.ai.agent.AiAssistantTools;
 import com.mikle.syncup.ai.agent.AssistantAgent;
 import com.mikle.syncup.ai.config.AiAgentProperties;
 import com.mikle.syncup.ai.exception.InvalidToolArgumentsException;
-import com.mikle.syncup.ai.memory.PersistentChatMemoryStore;
-import com.mikle.syncup.ai.model.vo.AiChatResponseVO;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
-import com.mikle.syncup.ai.service.AiConversationContextService;
-import com.mikle.syncup.ai.service.AiUserProfileService;
+import com.mikle.syncup.ai.model.entity.AiChatSession;
+import com.mikle.syncup.ai.model.vo.AiChatResponseVO;
+import com.mikle.syncup.ai.service.WorkingMemoryService;
 import com.mikle.syncup.model.domain.User;
-import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.tool.ToolErrorHandlerResult;
@@ -21,15 +19,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 @Slf4j
 @Service
 public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
-
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Resource
     private AiAgentProperties aiAgentProperties;
@@ -41,53 +35,32 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
     private AiAgentToolContext aiAgentToolContext;
 
     @Resource
-    private PersistentChatMemoryStore persistentChatMemoryStore;
-
-    @Resource
-    private AiConversationContextService aiConversationContextService;
-
-    @Resource
-    private AiUserProfileService aiUserProfileService;
+    private WorkingMemoryService workingMemoryService;
 
     @Resource(name = "chatModelPrototype")
     private ChatModel chatModel;
 
     @Override
-    public Optional<AiChatResponseVO> chat(String message, String sessionId, User loginUser) {
-        if (!aiAgentProperties.available()) {
+    public Optional<AiChatResponseVO> chat(String message, AiChatSession session, User loginUser) {
+        if (!aiAgentProperties.available()
+                || StringUtils.isBlank(message)
+                || message.length() > aiAgentProperties.getMaxInputLength()) {
             return Optional.empty();
         }
-        if (StringUtils.isBlank(message) || message.length() > aiAgentProperties.getMaxInputLength()) {
-            return Optional.empty();
-        }
-        String memoryId = buildMemoryId(loginUser, sessionId);
-        String modelMessage = buildModelMessage(message, sessionId, loginUser);
-        aiAgentToolContext.start(sessionId, loginUser, message);
+        String sessionKey = session == null ? "stateless" : session.getSessionKey();
+        String modelMessage = workingMemoryService.buildModelContext(session, loginUser, message);
+        aiAgentToolContext.start(sessionKey, loginUser, message);
         try {
             try {
-                return Optional.of(invokeAssistant(message, sessionId, memoryId, modelMessage));
+                return Optional.of(invokeAssistant(message, sessionKey, modelMessage));
             } catch (RuntimeException firstFailure) {
                 if (!canSafelyRetryAfterToolArgumentsFailure(firstFailure)) {
                     logAgentFailure(firstFailure, false);
                     return Optional.empty();
                 }
-
-                log.warn("Invalid AI tool arguments detected before any tool completed; clearing chat memory and retrying once. " +
-                                "provider={}, model={}, errorType={}",
-                        aiAgentProperties.getProvider(), aiAgentProperties.getModel(),
-                        firstFailure.getClass().getSimpleName());
+                aiAgentToolContext.start(sessionKey, loginUser, message);
                 try {
-                    persistentChatMemoryStore.deleteMessages(memoryId);
-                } catch (RuntimeException clearFailure) {
-                    log.warn("Failed to clear invalid AI chat memory; skip retry. provider={}, model={}, errorType={}",
-                            aiAgentProperties.getProvider(), aiAgentProperties.getModel(),
-                            clearFailure.getClass().getSimpleName());
-                    return Optional.empty();
-                }
-                aiAgentToolContext.start(sessionId, loginUser, message);
-
-                try {
-                    return Optional.of(invokeAssistant(message, sessionId, memoryId, modelMessage));
+                    return Optional.of(invokeAssistant(message, sessionKey, modelMessage));
                 } catch (RuntimeException retryFailure) {
                     logAgentFailure(retryFailure, true);
                     return Optional.empty();
@@ -98,16 +71,11 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
         }
     }
 
-    private AiChatResponseVO invokeAssistant(String originalMessage,
-                                             String sessionId,
-                                             String memoryId,
-                                             String modelMessage) {
-        AssistantAgent assistant = buildAssistant();
-        String reply = assistant.chat(memoryId, modelMessage);
+    private AiChatResponseVO invokeAssistant(String originalMessage, String sessionKey, String modelMessage) {
+        String reply = buildAssistant().chat(modelMessage);
         AiAgentToolContext.State state = aiAgentToolContext.snapshot();
-
         AiChatResponseVO response = new AiChatResponseVO();
-        response.setSessionId(sessionId);
+        response.setSessionId(sessionKey);
         response.setReply(reply);
         response.getUiBlocks().addAll(state.getUiBlocks());
         response.setIntent(buildResponseIntent(originalMessage, state));
@@ -116,12 +84,10 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
 
     private boolean canSafelyRetryAfterToolArgumentsFailure(RuntimeException failure) {
         AiAgentToolContext.State state = aiAgentToolContext.snapshot();
-        if (!state.getToolResults().isEmpty()
-                || state.getDraft() != null
-                || state.getDeleteConfirmation() != null) {
-            return false;
-        }
-        return isToolArgumentsFailure(failure);
+        return state.getToolResults().isEmpty()
+                && state.getDraft() == null
+                && state.getDeleteConfirmation() == null
+                && isToolArgumentsFailure(failure);
     }
 
     private boolean isToolArgumentsFailure(Throwable failure) {
@@ -132,49 +98,12 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
             }
             String message = current.getMessage();
             if (StringUtils.containsIgnoreCase(message, "function.arguments")
-                    && (StringUtils.containsIgnoreCase(message, "JSON")
-                    || StringUtils.containsIgnoreCase(message, "invalid_parameter_error"))) {
+                    && StringUtils.containsIgnoreCase(message, "JSON")) {
                 return true;
             }
             current = current.getCause();
         }
         return false;
-    }
-
-    private void logAgentFailure(RuntimeException failure, boolean retried) {
-        log.warn("AI agent failed, fallback to deterministic flow. provider={}, model={}, retried={}, errorType={}, message={}",
-                aiAgentProperties.getProvider(), aiAgentProperties.getModel(), retried,
-                failure.getClass().getSimpleName(), failure.getMessage(), failure);
-    }
-
-    private String buildMemoryId(User loginUser, String sessionId) {
-        return loginUser.getId() + ":" + sessionId;
-    }
-
-    private String buildModelMessage(String message, String sessionId, User loginUser) {
-        StringBuilder builder = new StringBuilder()
-                .append("当前服务端时间：")
-                .append(LocalDateTime.now().format(DATE_TIME_FORMATTER));
-        String recentBusinessContext = aiConversationContextService.buildRecentBusinessContext(loginUser, sessionId);
-        if (StringUtils.isNotBlank(recentBusinessContext)) {
-            builder.append("\n").append(recentBusinessContext);
-        }
-        String interactionProfile = loadInteractionProfile(loginUser.getId());
-        if (StringUtils.isNotBlank(interactionProfile)) {
-            builder.append("\n内部交流偏好（仅用于调整表达方式，禁止向用户展示或复述）：\n")
-                    .append(interactionProfile);
-        }
-        return builder.append("\n用户原始需求：").append(message).toString();
-    }
-
-    private String loadInteractionProfile(long userId) {
-        try {
-            return aiUserProfileService.getInteractionProfileText(userId);
-        } catch (RuntimeException e) {
-            log.warn("load internal AI interaction profile failed, userId={}, errorType={}",
-                    userId, e.getClass().getSimpleName());
-            return null;
-        }
     }
 
     private TeamIntent buildResponseIntent(String message, AiAgentToolContext.State state) {
@@ -188,28 +117,18 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
     }
 
     private AssistantAgent buildAssistant() {
-        AiServices<AssistantAgent> builder = AiServices.builder(AssistantAgent.class)
+        return AiServices.builder(AssistantAgent.class)
                 .chatModel(chatModel)
                 .tools(aiAssistantTools)
-                .toolArgumentsErrorHandler((error, context) -> {
-                    String toolName = context.toolExecutionRequest() == null
-                            ? "unknown"
-                            : context.toolExecutionRequest().name();
-                    log.warn("AI tool argument binding failed. toolName={}, errorType={}",
-                            toolName, error.getClass().getSimpleName());
-                    return ToolErrorHandlerResult.text(
-                            "工具参数格式不正确，请重新调用该工具；未提供的可选参数必须省略。"
-                    );
-                })
-                .maxSequentialToolsInvocations(Math.max(1, aiAgentProperties.getMaxToolCalls()));
-        if (aiAgentProperties.getMemory().isEnabled()) {
-            builder.chatMemoryProvider(memoryId -> MessageWindowChatMemory.builder()
-                    .id(memoryId)
-                    .maxMessages(Math.max(2, aiAgentProperties.getMemory().getMaxMessages()))
-                    .chatMemoryStore(persistentChatMemoryStore)
-                    .build());
-        }
-        return builder.build();
+                .toolArgumentsErrorHandler((error, context) -> ToolErrorHandlerResult.text(
+                        "工具参数格式不正确，请重新调用该工具；未提供的可选参数必须省略。"))
+                .maxSequentialToolsInvocations(Math.max(1, aiAgentProperties.getMaxToolCalls()))
+                .build();
     }
 
+    private void logAgentFailure(RuntimeException failure, boolean retried) {
+        log.warn("AI agent failed, fallback to deterministic flow. provider={}, model={}, retried={}, errorType={}",
+                aiAgentProperties.getProvider(), aiAgentProperties.getModel(), retried,
+                failure.getClass().getSimpleName());
+    }
 }

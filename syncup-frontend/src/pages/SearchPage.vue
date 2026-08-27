@@ -4,7 +4,7 @@
       <van-search
           v-model="searchText"
           show-action
-          placeholder="输入关键词，例如：羽毛球 研二 健身"
+          placeholder="输入关键词，例如：足球 健身"
           shape="round"
           clearable
           @search="resetAndSearch"

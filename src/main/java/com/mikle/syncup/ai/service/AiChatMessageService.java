@@ -2,7 +2,7 @@ package com.mikle.syncup.ai.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.mikle.syncup.ai.model.entity.AiChatMessage;
-import com.mikle.syncup.ai.model.vo.AiBusinessEventVO;
+import com.mikle.syncup.ai.model.entity.AiChatSession;
 import com.mikle.syncup.ai.model.vo.AiChatHistoryVO;
 import com.mikle.syncup.ai.model.vo.AiChatResponseVO;
 import com.mikle.syncup.model.domain.User;
@@ -11,15 +11,25 @@ import java.util.List;
 
 public interface AiChatMessageService extends IService<AiChatMessage> {
 
-    void saveUserMessage(User loginUser, String sessionId, String content);
+    AiChatMessage saveUserMessage(User loginUser, AiChatSession session, String content);
 
-    void saveAssistantMessage(User loginUser, String sessionId, String content, AiChatResponseVO response);
+    AiChatMessage saveAssistantMessage(User loginUser,
+                                       AiChatSession session,
+                                       String content,
+                                       AiChatResponseVO response);
 
-    void saveTeamDraftConfirmedEvent(User loginUser, String sessionId, String draftId, Long teamId);
+    AiChatMessage saveTeamDraftConfirmedEvent(User loginUser, AiChatSession session, String draftId, Long teamId);
 
-    void saveTeamDeletedEvent(User loginUser, String sessionId, Long teamId);
+    AiChatMessage saveTeamDeletedEvent(User loginUser, AiChatSession session, Long teamId);
 
-    List<AiBusinessEventVO> listRecentBusinessEvents(User loginUser, String sessionId, int limit);
+    List<AiChatMessage> listClosedMessages(long chatSessionId,
+                                            long afterMessageId,
+                                            long lastClosedMessageId,
+                                            int limit);
+
+    List<AiChatMessage> listLatestClosedMessages(long chatSessionId,
+                                                  long lastClosedMessageId,
+                                                  int limit);
 
     AiChatHistoryVO getLatestHistory(User loginUser);
 

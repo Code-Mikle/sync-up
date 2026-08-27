@@ -32,21 +32,8 @@ public class AiAgentProperties {
 
     private boolean logResponses = false;
 
-    private Memory memory = new Memory();
-
     public boolean available() {
         return enabled && StringUtils.isNotBlank(apiKey);
     }
 
-    @Data
-    public static class Memory {
-
-        private boolean enabled = true;
-
-        private int maxMessages = 20;
-
-        private long redisTtlHours = 12;
-
-        private long mysqlTtlHours = 24;
-    }
 }

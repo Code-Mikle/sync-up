@@ -7,6 +7,8 @@ import com.mikle.syncup.ai.model.entity.AiTeamDraft;
 import com.mikle.syncup.ai.model.vo.AiTeamDraftConfirmResponse;
 import com.mikle.syncup.ai.model.vo.TeamDraftVO;
 import com.mikle.syncup.ai.service.AiChatMessageService;
+import com.mikle.syncup.ai.service.AiChatSessionService;
+import com.mikle.syncup.ai.service.AiMemoryPipelineService;
 import com.mikle.syncup.ai.service.AiTeamDraftService;
 import com.mikle.syncup.ai.service.AiToolCallLogService;
 import com.mikle.syncup.common.ErrorCode;
@@ -42,6 +44,12 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
 
     @Resource
     private AiChatMessageService aiChatMessageService;
+
+    @Resource
+    private AiChatSessionService aiChatSessionService;
+
+    @Resource
+    private AiMemoryPipelineService memoryPipelineService;
 
     @Override
     public TeamDraftVO saveDraft(TeamDraftVO draft, User loginUser, String sessionId) {
@@ -80,12 +88,13 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
                     System.currentTimeMillis() - start
             );
             if (confirmedDraft != null) {
-                aiChatMessageService.saveTeamDraftConfirmedEvent(
-                        loginUser,
-                        confirmedDraft.getSessionId(),
+                var chatSession = aiChatSessionService.getOrCreate(loginUser.getId(), confirmedDraft.getSessionId());
+                var event = aiChatMessageService.saveTeamDraftConfirmedEvent(
+                        loginUser, chatSession,
                         response.getDraftId(),
                         response.getTeamId()
                 );
+                if (event != null) memoryPipelineService.onChatTurnCompleted(loginUser.getId(), chatSession, event.getId());
             }
             return response;
         } catch (RuntimeException e) {

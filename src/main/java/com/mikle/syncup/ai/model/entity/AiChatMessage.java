@@ -19,7 +19,7 @@ public class AiChatMessage implements Serializable {
 
     private Long userId;
 
-    private String sessionId;
+    private Long chatSessionId;
 
     /**
      * user / assistant / event.
@@ -41,7 +41,7 @@ public class AiChatMessage implements Serializable {
      */
     private Integer visible;
 
-    private Date expireAt;
+    private Date retentionExpireAt;
 
     private Date createTime;
 

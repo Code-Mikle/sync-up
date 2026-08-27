@@ -2,6 +2,7 @@ create database if not exists sync_up_db;
 
 use sync_up_db;
 
+TRUNCATE TABLE user;
 # TRUNCATE TABLE ai_tool_call_log;
 # TRUNCATE TABLE user_team;
 # TRUNCATE TABLE ai_team_embedding;
@@ -130,24 +131,29 @@ create index idx_ai_tool_call_log_action_status on ai_tool_call_log (actionType,
 -- AI 内部用户画像表
 create table ai_user_profile
 (
-    id                     bigint auto_increment comment 'id' primary key,
-    userId                 bigint not null comment '用户 id',
-    profileText            text not null comment '完整五段式内部画像',
-    matchProfileText       text not null comment '用于匹配的前四段画像',
-    interactionProfileText text not null comment '仅用于 AI 交流方式的第五段画像',
-    profileVersion         int not null comment '画像版本号',
-    sourceHash             char(64) not null comment '脱敏来源文本 SHA-256',
-    model                  varchar(128) not null comment '生成模型',
-    promptVersion          varchar(64) not null comment '画像 Prompt 版本',
-    status                 tinyint default 1 not null comment '1 - 有效',
-    generatedAt            datetime not null comment '生成时间',
-    createTime             datetime default CURRENT_TIMESTAMP null comment '创建时间',
-    updateTime             datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete               tinyint default 0 not null comment '是否删除'
+    id                          bigint auto_increment comment 'id' primary key,
+    userId                      bigint not null comment '用户 id',
+    activityPreferenceText      text not null comment '兴趣与活动偏好',
+    socialPersonalityText       text not null comment '社交与性格倾向',
+    partnerPreferenceText       text not null comment '搭子匹配偏好',
+    activityConstraintHabitText text not null comment '活动约束与习惯',
+    aiInteractionPreferenceText text not null comment 'AI 交互偏好',
+    profileText                 text not null comment '完整五段式内部画像',
+    matchProfileText            text not null comment '用于匹配的前四段画像',
+    interactionProfileText      text not null comment '仅用于 AI 交流方式的第五段画像',
+    profileVersion              int not null comment '画像版本号',
+    evidenceDigest              char(64) not null comment '画像证据 SHA-256',
+    model                       varchar(128) not null comment '生成模型',
+    promptVersion               varchar(64) not null comment '画像 Prompt 版本',
+    status                      varchar(32) not null comment 'ACTIVE / REBUILD_REQUIRED',
+    generatedAt                 datetime not null comment '生成时间',
+    createTime                  datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime                  datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete                    tinyint default 0 not null comment '是否删除'
 ) comment 'AI 内部用户文本画像';
 
 create unique index uk_ai_user_profile_userId on ai_user_profile (userId);
-create index idx_ai_user_profile_updateTime on ai_user_profile (updateTime);
+create index idx_ai_user_profile_status_updateTime on ai_user_profile (status, updateTime);
 
 -- AI 用户画像向量表
 create table ai_user_profile_embedding
@@ -189,66 +195,139 @@ create table ai_team_embedding
 create unique index uk_ai_team_embedding_team_version on ai_team_embedding (teamId, contentVersion);
 create index idx_ai_team_embedding_team_status on ai_team_embedding (teamId, status);
 
--- AI 用户画像生成任务表
-create table ai_profile_generation_task
+-- AI 聊天会话与滚动摘要表
+create table ai_chat_session
 (
-    id             bigint auto_increment comment 'id' primary key,
-    userId         bigint not null comment '用户 id',
-    sourceText     varchar(1000) not null comment '脱敏后的自我介绍快照',
-    sourceHash     char(64) not null comment '脱敏来源文本 SHA-256',
-    status         tinyint default 0 not null comment '0 - 待处理，1 - 处理中，2 - 成功，3 - 失败，4 - 已被新任务替代',
-    retryCount     int default 0 not null comment '已重试次数',
-    nextRetryAt    datetime null comment '下次重试时间',
-    lastError      varchar(1024) null comment '最后一次错误摘要',
-    model          varchar(128) null comment '生成模型',
-    promptVersion  varchar(64) not null comment '画像 Prompt 版本',
-    profileVersion int null comment '成功生成的画像版本号',
-    createTime     datetime default CURRENT_TIMESTAMP null comment '创建时间',
-    updateTime     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete       tinyint default 0 not null comment '是否删除'
-) comment 'AI 用户画像生成任务';
+    id                             bigint auto_increment comment 'id' primary key,
+    userId                         bigint not null comment '用户 id',
+    sessionKey                     varchar(64) not null comment 'API 会话标识',
+    summary                        text null comment '滚动会话摘要',
+    lastSummaryMessageId           bigint default 0 not null comment '摘要已覆盖的消息 ID',
+    summaryVersion                 int default 0 not null comment '摘要 CAS 版本',
+    summaryUpdatedAt               datetime null comment '摘要更新时间',
+    summaryModel                   varchar(128) null comment '摘要模型',
+    summaryPromptVersion           varchar(64) null comment '摘要 Prompt 版本',
+    lastClosedMessageId            bigint default 0 not null comment '已完成回复的消息 ID',
+    lastEpisodeExtractedMessageId  bigint default 0 not null comment '已提取为 Episode 的消息 ID',
+    createTime                     datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime                     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete                       tinyint default 0 not null comment '是否删除'
+) comment 'AI 聊天会话和滚动摘要';
 
-create index idx_ai_profile_generation_status_retry on ai_profile_generation_task (status, nextRetryAt);
-create index idx_ai_profile_generation_user_time on ai_profile_generation_task (userId, createTime);
+create unique index uk_ai_chat_session_user_key on ai_chat_session (userId, sessionKey);
+create index idx_ai_chat_session_user_time on ai_chat_session (userId, updateTime);
 
--- AI 短期会话记忆表
-create table ai_chat_memory
-(
-    id           bigint auto_increment comment 'id' primary key,
-    memoryId     varchar(160) not null comment '会话记忆 id，userId:sessionId',
-    userId       bigint not null comment '用户 id',
-    sessionId    varchar(64) not null comment 'AI 对话会话 id',
-    messagesJson mediumtext not null comment 'LangChain4j ChatMessage JSON',
-    messageCount int default 0 not null comment '消息数量',
-    expireAt     datetime not null comment '过期时间',
-    createTime   datetime default CURRENT_TIMESTAMP null comment '创建时间',
-    updateTime   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete     tinyint default 0 not null comment '是否删除'
-) comment 'AI 短期会话记忆';
-
-create unique index uk_ai_chat_memory_memoryId on ai_chat_memory (memoryId);
-create index idx_ai_chat_memory_user_time on ai_chat_memory (userId, updateTime);
-create index idx_ai_chat_memory_expireAt on ai_chat_memory (expireAt);
-
--- AI 用户可见聊天记录表
+-- AI 原始聊天消息表（唯一的对话事实来源）
 create table ai_chat_message
 (
-    id           bigint auto_increment comment 'id' primary key,
-    userId       bigint not null comment '用户 id',
-    sessionId    varchar(64) not null comment 'AI 对话会话 id',
-    role         varchar(16) not null comment 'user / assistant / event',
-    content      varchar(2048) null comment '展示文本或事件文本，已做最小化脱敏',
-    responseJson mediumtext null comment 'AI 响应或事件载荷 JSON',
-    visible      tinyint default 1 not null comment '是否在聊天页展示',
-    expireAt     datetime not null comment '过期时间',
-    createTime   datetime default CURRENT_TIMESTAMP null comment '创建时间',
-    updateTime   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete     tinyint default 0 not null comment '是否删除'
-) comment 'AI 用户可见聊天记录';
+    id                  bigint auto_increment comment 'id' primary key,
+    userId              bigint not null comment '用户 id',
+    chatSessionId       bigint not null comment 'ai_chat_session.id',
+    role                varchar(16) not null comment 'user / assistant / event',
+    content             varchar(2048) null comment '展示文本或事件文本，最小化脱敏',
+    responseJson        mediumtext null comment 'AI 响应或事件载荷 JSON',
+    visible             tinyint default 1 not null comment '是否在聊天页展示',
+    retentionExpireAt   datetime null comment '长期保留过期时间',
+    createTime          datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    updateTime          datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete            tinyint default 0 not null comment '是否删除'
+) comment 'AI 原始聊天消息和业务事件';
 
-create index idx_ai_chat_message_user_session_time on ai_chat_message (userId, sessionId, createTime);
+create index idx_ai_chat_message_session_id on ai_chat_message (chatSessionId, id);
 create index idx_ai_chat_message_user_time on ai_chat_message (userId, createTime);
-create index idx_ai_chat_message_expireAt on ai_chat_message (expireAt);
+create index idx_ai_chat_message_retention on ai_chat_message (retentionExpireAt);
+
+-- Episode 提取可靠任务表
+create table ai_episode_extraction_task
+(
+    id                      bigint auto_increment comment 'id' primary key,
+    userId                  bigint not null,
+    chatSessionId           bigint null,
+    sourceType              varchar(32) not null comment 'CHAT_MESSAGE / SELF_INTRODUCTION',
+    sourceText              text null comment '非聊天来源快照',
+    sourceReferenceId       varchar(128) null,
+    fromMessageIdExclusive  bigint null,
+    toMessageIdInclusive    bigint null,
+    status                  varchar(16) not null comment 'PENDING / PROCESSING / SUCCESS / FAILED',
+    retryCount              int default 0 not null,
+    nextRetryAt             datetime null,
+    lastError               varchar(1024) null,
+    model                   varchar(128) null,
+    promptVersion           varchar(64) null,
+    createTime              datetime default CURRENT_TIMESTAMP null,
+    updateTime              datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete                tinyint default 0 not null,
+    unique key uk_ai_episode_extract_range (chatSessionId, fromMessageIdExclusive, toMessageIdInclusive),
+    key idx_ai_episode_extract_status_retry (status, nextRetryAt),
+    key idx_ai_episode_extract_user_source (userId, sourceType, createTime)
+) comment 'Episode 提取可靠任务';
+
+create table ai_user_episode
+(
+    id                          bigint auto_increment comment 'id' primary key,
+    userId                      bigint not null,
+    profileType                 varchar(64) not null,
+    content                     varchar(1024) not null,
+    sourceType                  varchar(32) not null,
+    sourceSessionId             bigint null,
+    sourceMessageIds            json null,
+    sourceReferenceId           varchar(128) null,
+    signalType                  varchar(16) not null,
+    priority                    varchar(16) not null,
+    evidenceGroupKey            varchar(128) not null,
+    dedupeHash                  char(64) not null,
+    extractionTaskId            bigint null,
+    supersededEpisodeIds        json null comment '当前纠正证据明确替代的 Episode ID',
+    status                      varchar(16) not null,
+    consolidatedProfileVersion  int null,
+    observedAt                  datetime not null,
+    createTime                  datetime default CURRENT_TIMESTAMP null,
+    updateTime                  datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete                    tinyint default 0 not null,
+    unique key uk_ai_episode_task_dedupe (extractionTaskId, dedupeHash),
+    key idx_ai_episode_user_type_status_time (userId, profileType, status, observedAt),
+    key idx_ai_episode_source_session (sourceSessionId)
+) comment '用户画像证据 Episode';
+
+create table ai_profile_update_task
+(
+    id                      bigint auto_increment comment 'id' primary key,
+    userId                  bigint not null,
+    profileType             varchar(64) not null,
+    triggerType             varchar(32) not null,
+    targetEvidenceDigest    char(64) not null,
+    expectedProfileVersion  int null,
+    status                  varchar(16) not null,
+    retryCount              int default 0 not null,
+    nextRetryAt             datetime null,
+    lastError               varchar(1024) null,
+    model                   varchar(128) null,
+    promptVersion           varchar(64) null,
+    createTime              datetime default CURRENT_TIMESTAMP null,
+    updateTime              datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete                tinyint default 0 not null,
+    unique key uk_ai_profile_update_digest (userId, profileType, targetEvidenceDigest),
+    key idx_ai_profile_update_status_retry (status, nextRetryAt)
+) comment '统一画像更新任务';
+
+create table ai_user_profile_revision
+(
+    id                  bigint auto_increment comment 'id' primary key,
+    userId              bigint not null,
+    profileType         varchar(64) not null,
+    fromProfileVersion  int null,
+    toProfileVersion    int not null,
+    triggerType         varchar(32) not null,
+    oldContent          text null,
+    newContent          text not null,
+    evidenceEpisodeIds  json not null,
+    model               varchar(128) not null,
+    promptVersion       varchar(64) not null,
+    createTime          datetime default CURRENT_TIMESTAMP null,
+    updateTime          datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    isDelete            tinyint default 0 not null,
+    key idx_ai_profile_revision_user_type_version (userId, profileType, toProfileVersion)
+) comment '画像版本修订记录';
 
 -- 受控活动标签分类表
 create table tag_category

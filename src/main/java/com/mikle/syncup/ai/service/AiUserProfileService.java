@@ -8,8 +8,6 @@ public interface AiUserProfileService extends IService<AiUserProfileEntity> {
 
     void onSelfIntroductionChanged(long userId, String sourceText);
 
-    int processPendingTasks();
-
     AiUserProfileEntity getInternalProfile(long userId);
 
     AiUserProfileEmbedding getActiveEmbedding(long userId);

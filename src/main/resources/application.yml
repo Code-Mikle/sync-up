@@ -46,8 +46,29 @@ knife4j:
 
 sync-up:
   ai:
-    profile-generation:
-      fixed-delay-ms: ${SYNC_UP_AI_PROFILE_GENERATION_FIXED_DELAY_MS:60000}
+    memory:
+      chat-history-retention-days: ${SYNC_UP_AI_MEMORY_CHAT_HISTORY_RETENTION_DAYS:365}
+      working-memory:
+        recent-message-count: ${SYNC_UP_AI_MEMORY_RECENT_MESSAGE_COUNT:20}
+        summary-batch-size: ${SYNC_UP_AI_MEMORY_SUMMARY_BATCH_SIZE:10}
+        summary-input-max-tokens: ${SYNC_UP_AI_MEMORY_SUMMARY_INPUT_MAX_TOKENS:4000}
+        max-context-tokens: ${SYNC_UP_AI_MEMORY_MAX_CONTEXT_TOKENS:6000}
+        summary-max-chars: ${SYNC_UP_AI_MEMORY_SUMMARY_MAX_CHARS:1500}
+      summary-scan-fixed-delay-ms: ${SYNC_UP_AI_MEMORY_SUMMARY_SCAN_FIXED_DELAY_MS:60000}
+      task-scan-fixed-delay-ms: ${SYNC_UP_AI_MEMORY_TASK_SCAN_FIXED_DELAY_MS:30000}
+      episode:
+        extraction-enabled: ${SYNC_UP_AI_MEMORY_EPISODE_EXTRACTION_ENABLED:true}
+        max-retries: ${SYNC_UP_AI_MEMORY_EPISODE_MAX_RETRIES:3}
+        processing-timeout-minutes: ${SYNC_UP_AI_MEMORY_EPISODE_TIMEOUT_MINUTES:10}
+        batch-size: ${SYNC_UP_AI_MEMORY_EPISODE_TASK_BATCH_SIZE:20}
+        message-batch-size: ${SYNC_UP_AI_MEMORY_EPISODE_MESSAGE_BATCH_SIZE:100}
+        message-batch-max-tokens: ${SYNC_UP_AI_MEMORY_EPISODE_MESSAGE_BATCH_MAX_TOKENS:6000}
+      profile-update:
+        default-evidence-threshold: ${SYNC_UP_AI_MEMORY_PROFILE_THRESHOLD:5}
+        max-wait-days: ${SYNC_UP_AI_MEMORY_PROFILE_MAX_WAIT_DAYS:7}
+        max-retries: ${SYNC_UP_AI_MEMORY_PROFILE_MAX_RETRIES:3}
+        processing-timeout-minutes: ${SYNC_UP_AI_MEMORY_PROFILE_TIMEOUT_MINUTES:10}
+        batch-size: ${SYNC_UP_AI_MEMORY_PROFILE_TASK_BATCH_SIZE:20}
     embedding:
       enabled: ${SYNC_UP_AI_EMBEDDING_ENABLED:${SYNC_UP_AI_AGENT_ENABLED:false}}
       base-url: ${SYNC_UP_AI_EMBEDDING_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
@@ -80,11 +101,6 @@ sync-up:
       timeout-ms: ${SYNC_UP_AI_AGENT_TIMEOUT_MS:60000}
       max-tool-calls: ${SYNC_UP_AI_AGENT_MAX_TOOL_CALLS:3}
       max-input-length: ${SYNC_UP_AI_AGENT_MAX_INPUT_LENGTH:1000}
-      memory:
-        enabled: ${SYNC_UP_AI_MEMORY_ENABLED:true}
-        max-messages: ${SYNC_UP_AI_MEMORY_MAX_MESSAGES:20}
-        redis-ttl-hours: ${SYNC_UP_AI_MEMORY_REDIS_TTL_HOURS:12}
-        mysql-ttl-hours: ${SYNC_UP_AI_MEMORY_MYSQL_TTL_HOURS:24}
       log-requests: ${SYNC_UP_AI_AGENT_LOG_REQUESTS:false}
       log-responses: ${SYNC_UP_AI_AGENT_LOG_RESPONSES:false}
 

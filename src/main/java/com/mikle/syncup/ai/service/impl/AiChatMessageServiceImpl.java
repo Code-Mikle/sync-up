@@ -5,188 +5,246 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mikle.syncup.ai.config.AiAgentProperties;
+import com.mikle.syncup.ai.config.AiMemoryProperties;
 import com.mikle.syncup.ai.mapper.AiChatMessageMapper;
+import com.mikle.syncup.ai.mapper.AiChatSessionMapper;
+import com.mikle.syncup.ai.mapper.AiEpisodeExtractionTaskMapper;
+import com.mikle.syncup.ai.mapper.AiUserEpisodeMapper;
+import com.mikle.syncup.ai.mapper.AiUserProfileEmbeddingMapper;
+import com.mikle.syncup.ai.mapper.AiUserProfileMapper;
 import com.mikle.syncup.ai.model.entity.AiChatMessage;
-import com.mikle.syncup.ai.model.vo.AiBusinessEventVO;
+import com.mikle.syncup.ai.model.entity.AiChatSession;
+import com.mikle.syncup.ai.model.entity.AiEpisodeExtractionTask;
+import com.mikle.syncup.ai.model.entity.AiUserEpisode;
+import com.mikle.syncup.ai.model.entity.AiUserProfileEmbedding;
+import com.mikle.syncup.ai.model.entity.AiUserProfileEntity;
+import com.mikle.syncup.ai.model.enums.EpisodeStatus;
+import com.mikle.syncup.ai.model.enums.MemoryTaskStatus;
+import com.mikle.syncup.ai.model.enums.ProfileStatus;
+import com.mikle.syncup.ai.model.enums.ProfileUpdateTriggerType;
 import com.mikle.syncup.ai.model.vo.AiChatHistoryVO;
 import com.mikle.syncup.ai.model.vo.AiChatMessageVO;
 import com.mikle.syncup.ai.model.vo.AiChatResponseVO;
 import com.mikle.syncup.ai.service.AiChatMessageService;
+import com.mikle.syncup.ai.service.AiProfileUpdateTaskService;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Service
 public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, AiChatMessage>
         implements AiChatMessageService {
 
     private static final int VISIBLE = 1;
-
     private static final int HIDDEN = 0;
-
     private static final String ROLE_USER = "user";
-
     private static final String ROLE_ASSISTANT = "assistant";
-
     private static final String ROLE_EVENT = "event";
-
-    private static final String EVENT_TEAM_DRAFT_CONFIRMED = "TEAM_DRAFT_CONFIRMED";
-
     private static final String EVENT_TEAM_CREATED = "TEAM_CREATED";
-
     private static final String EVENT_TEAM_DELETED = "TEAM_DELETED";
-
     private static final String SUBJECT_TEAM = "TEAM";
-
     private static final int MAX_CONTENT_LENGTH = 2048;
 
     @Resource
     private AiChatMessageMapper aiChatMessageMapper;
 
     @Resource
-    private AiAgentProperties aiAgentProperties;
+    private AiChatSessionMapper aiChatSessionMapper;
+
+    @Resource
+    private AiEpisodeExtractionTaskMapper extractionTaskMapper;
+
+    @Resource
+    private AiUserEpisodeMapper episodeMapper;
+
+    @Resource
+    private AiUserProfileMapper profileMapper;
+
+    @Resource
+    private AiUserProfileEmbeddingMapper profileEmbeddingMapper;
+
+    @Resource
+    private AiProfileUpdateTaskService profileUpdateTaskService;
+
+    @Resource
+    private AiMemoryProperties memoryProperties;
 
     @Resource
     private ObjectMapper objectMapper;
 
     @Override
-    public void saveUserMessage(User loginUser, String sessionId, String content) {
-        saveMessage(loginUser, sessionId, ROLE_USER, content, null, VISIBLE);
+    public AiChatMessage saveUserMessage(User loginUser, AiChatSession session, String content) {
+        return saveMessage(loginUser, session, ROLE_USER, content, null, VISIBLE);
     }
 
     @Override
-    public void saveAssistantMessage(User loginUser, String sessionId, String content, AiChatResponseVO response) {
-        saveMessage(loginUser, sessionId, ROLE_ASSISTANT, content, writeJson(response), VISIBLE);
+    public AiChatMessage saveAssistantMessage(User loginUser,
+                                               AiChatSession session,
+                                               String content,
+                                               AiChatResponseVO response) {
+        return saveMessage(loginUser, session, ROLE_ASSISTANT, content, writeJson(response), VISIBLE);
     }
 
     @Override
-    public void saveTeamDraftConfirmedEvent(User loginUser, String sessionId, String draftId, Long teamId) {
-        if (StringUtils.isBlank(sessionId)) {
-            return;
+    public AiChatMessage saveTeamDraftConfirmedEvent(User loginUser, AiChatSession session, String draftId, Long teamId) {
+        if (session == null) {
+            return null;
         }
-        String content = "用户已确认创建队伍，draftId=" + draftId + "，teamId=" + teamId;
         EventPayload payload = new EventPayload(
-                EVENT_TEAM_CREATED,
-                SUBJECT_TEAM,
-                teamId,
-                null,
-                "CREATED",
-                "SUCCESS",
-                "创建队伍成功：#" + teamId,
-                draftId,
-                teamId
-        );
-        saveMessage(loginUser, sessionId, ROLE_EVENT, content, writeJson(payload), HIDDEN);
+                EVENT_TEAM_CREATED, SUBJECT_TEAM, teamId, null,
+                "CREATED", "SUCCESS", "创建队伍成功：#" + teamId, draftId, teamId);
+        return saveMessage(loginUser, session, ROLE_EVENT,
+                "用户已确认创建队伍，draftId=" + draftId + "，teamId=" + teamId,
+                writeJson(payload), HIDDEN);
     }
 
     @Override
-    public void saveTeamDeletedEvent(User loginUser, String sessionId, Long teamId) {
-        if (StringUtils.isBlank(sessionId)) {
-            return;
+    public AiChatMessage saveTeamDeletedEvent(User loginUser, AiChatSession session, Long teamId) {
+        if (session == null) {
+            return null;
         }
-        String content = "用户已确认删除队伍，teamId=" + teamId;
         EventPayload payload = new EventPayload(
-                EVENT_TEAM_DELETED,
-                SUBJECT_TEAM,
-                teamId,
-                null,
-                "DELETED",
-                "SUCCESS",
-                "删除队伍成功：#" + teamId,
-                null,
-                teamId
-        );
-        saveMessage(loginUser, sessionId, ROLE_EVENT, content, writeJson(payload), HIDDEN);
+                EVENT_TEAM_DELETED, SUBJECT_TEAM, teamId, null,
+                "DELETED", "SUCCESS", "删除队伍成功：#" + teamId, null, teamId);
+        return saveMessage(loginUser, session, ROLE_EVENT,
+                "用户已确认删除队伍，teamId=" + teamId,
+                writeJson(payload), HIDDEN);
     }
 
     @Override
-    public List<AiBusinessEventVO> listRecentBusinessEvents(User loginUser, String sessionId, int limit) {
-        validateLoginUser(loginUser);
-        if (StringUtils.isBlank(sessionId)) {
+    public List<AiChatMessage> listClosedMessages(long chatSessionId,
+                                                   long afterMessageId,
+                                                   long lastClosedMessageId,
+                                                   int limit) {
+        if (chatSessionId <= 0 || lastClosedMessageId <= afterMessageId || limit <= 0) {
             return List.of();
         }
-        Date now = new Date();
-        List<AiChatMessage> events = list(new QueryWrapper<AiChatMessage>()
-                .eq("userId", loginUser.getId())
-                .eq("sessionId", sessionId.trim())
-                .eq("role", ROLE_EVENT)
-                .gt("expireAt", now)
-                .orderByDesc("createTime")
-                .orderByDesc("id")
-                .last("limit " + Math.max(1, Math.min(limit, 20))));
-        List<AiBusinessEventVO> result = new ArrayList<>();
-        for (AiChatMessage event : events) {
-            AiBusinessEventVO businessEvent = readBusinessEvent(event);
-            if (businessEvent != null) {
-                result.add(businessEvent);
-            }
+        return list(new QueryWrapper<AiChatMessage>()
+                .eq("chatSessionId", chatSessionId)
+                .gt("id", afterMessageId)
+                .le("id", lastClosedMessageId)
+                .orderByAsc("id")
+                .last("limit " + Math.max(1, Math.min(limit, 200))));
+    }
+
+    @Override
+    public List<AiChatMessage> listLatestClosedMessages(long chatSessionId,
+                                                         long lastClosedMessageId,
+                                                         int limit) {
+        if (chatSessionId <= 0 || lastClosedMessageId <= 0 || limit <= 0) {
+            return List.of();
         }
-        return result;
+        List<AiChatMessage> messages = list(new QueryWrapper<AiChatMessage>()
+                .eq("chatSessionId", chatSessionId)
+                .le("id", lastClosedMessageId)
+                .orderByDesc("id")
+                .last("limit " + Math.max(1, Math.min(limit, 200))));
+        java.util.Collections.reverse(messages);
+        return messages;
     }
 
     @Override
     public AiChatHistoryVO getLatestHistory(User loginUser) {
         validateLoginUser(loginUser);
-        Date now = new Date();
-        AiChatMessage latest = getOne(new QueryWrapper<AiChatMessage>()
-                .eq("userId", loginUser.getId())
-                .gt("expireAt", now)
-                .orderByDesc("createTime")
-                .last("limit 1"));
         AiChatHistoryVO history = new AiChatHistoryVO();
-        if (latest == null || StringUtils.isBlank(latest.getSessionId())) {
+        AiChatSession latest = aiChatSessionMapper.selectOne(new QueryWrapper<AiChatSession>()
+                .eq("userId", loginUser.getId())
+                .orderByDesc("updateTime")
+                .last("limit 1"));
+        if (latest == null) {
             return history;
         }
-        history.setSessionId(latest.getSessionId());
+        history.setSessionId(latest.getSessionKey());
         List<AiChatMessage> messages = list(new QueryWrapper<AiChatMessage>()
-                .eq("userId", loginUser.getId())
-                .eq("sessionId", latest.getSessionId())
-                .gt("expireAt", now)
-                .orderByAsc("createTime")
+                .eq("chatSessionId", latest.getId())
                 .orderByAsc("id"));
-        history.setMessages(messages.stream().map(this::toVO).toList());
+        history.setMessages(messages.stream().map(message -> toVO(message, latest.getSessionKey())).toList());
         return history;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int deleteExpiredPhysically() {
-        return aiChatMessageMapper.deleteExpiredPhysically(new Date());
+        List<AiChatMessage> expired = list(new QueryWrapper<AiChatMessage>()
+                .isNotNull("retentionExpireAt").lt("retentionExpireAt", new Date())
+                .orderByAsc("id").last("limit 1000"));
+        if (expired.isEmpty()) return 0;
+        List<Long> messageIds = expired.stream().map(AiChatMessage::getId).toList();
+        Set<Long> sessionIds = expired.stream().map(AiChatMessage::getChatSessionId)
+                .filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        String messageIdsJson = writeJson(messageIds);
+        List<AiUserEpisode> affectedEpisodes = episodeMapper.selectList(new QueryWrapper<AiUserEpisode>()
+                .apply("JSON_OVERLAPS(sourceMessageIds, CAST({0} AS JSON))", messageIdsJson));
+        Set<Long> affectedUsers = affectedEpisodes.stream().map(AiUserEpisode::getUserId)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        if (!affectedEpisodes.isEmpty()) {
+            episodeMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<AiUserEpisode>()
+                    .set("status", EpisodeStatus.INVALID.name())
+                    .in("id", affectedEpisodes.stream().map(AiUserEpisode::getId).toList()));
+        }
+        if (!sessionIds.isEmpty()) {
+            extractionTaskMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<AiEpisodeExtractionTask>()
+                    .set("status", MemoryTaskStatus.SUPERSEDED.name())
+                    .in("chatSessionId", sessionIds)
+                    .in("status", MemoryTaskStatus.PENDING.name(), MemoryTaskStatus.PROCESSING.name()));
+            aiChatSessionMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<AiChatSession>()
+                    .set("summary", null).set("lastSummaryMessageId", 0)
+                    .set("summaryModel", null).set("summaryPromptVersion", null).set("summaryUpdatedAt", null)
+                    .in("id", sessionIds));
+        }
+        for (Long userId : affectedUsers) {
+            profileUpdateTaskService.supersedeActiveTasks(userId);
+            profileMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<AiUserProfileEntity>()
+                    .set("status", ProfileStatus.REBUILD_REQUIRED.name()).eq("userId", userId));
+            profileEmbeddingMapper.update(null,
+                    new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<AiUserProfileEmbedding>()
+                            .set("status", 0).eq("userId", userId).eq("status", 1));
+        }
+        int deleted = aiChatMessageMapper.deletePhysicallyByIds(messageIds);
+        for (Long userId : affectedUsers) {
+            profileUpdateTaskService.enqueueRebuildAll(userId, ProfileUpdateTriggerType.SOURCE_DELETED);
+        }
+        return deleted;
     }
 
-    private void saveMessage(User loginUser,
-                             String sessionId,
-                             String role,
-                             String content,
-                             String responseJson,
-                             Integer visible) {
+    private AiChatMessage saveMessage(User loginUser,
+                                      AiChatSession session,
+                                      String role,
+                                      String content,
+                                      String responseJson,
+                                      Integer visible) {
         validateLoginUser(loginUser);
-        if (StringUtils.isBlank(sessionId)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "sessionId is required");
+        if (session == null || session.getId() == null || session.getUserId() == null
+                || !session.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "chat session is invalid");
         }
         AiChatMessage message = new AiChatMessage();
         message.setUserId(loginUser.getId());
-        message.setSessionId(sessionId.trim());
+        message.setChatSessionId(session.getId());
         message.setRole(role);
         message.setContent(sanitizeContent(content));
         message.setResponseJson(responseJson);
         message.setVisible(visible);
-        message.setExpireAt(resolveExpireAt());
+        message.setRetentionExpireAt(resolveRetentionExpireAt());
         if (!save(message)) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "save AI chat message failed");
         }
+        return message;
     }
 
-    private Date resolveExpireAt() {
-        long ttlHours = Math.max(1, aiAgentProperties.getMemory().getMysqlTtlHours());
-        return new Date(System.currentTimeMillis() + ttlHours * 60 * 60 * 1000L);
+    private Date resolveRetentionExpireAt() {
+        long days = memoryProperties.getChatHistoryRetentionDays();
+        return days <= 0 ? null : Date.from(new Date().toInstant().plus(days, ChronoUnit.DAYS));
     }
 
     private String sanitizeContent(String content) {
@@ -211,10 +269,10 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
         }
     }
 
-    private AiChatMessageVO toVO(AiChatMessage message) {
+    private AiChatMessageVO toVO(AiChatMessage message, String sessionKey) {
         AiChatMessageVO vo = new AiChatMessageVO();
         vo.setId(message.getId());
-        vo.setSessionId(message.getSessionId());
+        vo.setSessionId(sessionKey);
         vo.setRole(message.getRole());
         vo.setContent(message.getContent());
         vo.setVisible(message.getVisible());
@@ -231,7 +289,7 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
     private AiChatResponseVO readResponse(String responseJson) {
         try {
             return objectMapper.readValue(responseJson, AiChatResponseVO.class);
-        } catch (Exception e) {
+        } catch (Exception ignored) {
             return null;
         }
     }
@@ -244,68 +302,9 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
                 vo.setRelatedTeamId(jsonNode.path("relatedTeamId").asLong());
             }
             vo.setRelatedDraftId(jsonNode.path("relatedDraftId").asText(null));
-        } catch (Exception e) {
+        } catch (Exception ignored) {
             vo.setEventType(null);
         }
-    }
-
-    private AiBusinessEventVO readBusinessEvent(AiChatMessage message) {
-        try {
-            if (message == null || StringUtils.isBlank(message.getResponseJson())) {
-                return null;
-            }
-            JsonNode jsonNode = objectMapper.readTree(message.getResponseJson());
-            String rawEventType = jsonNode.path("eventType").asText(null);
-            if (StringUtils.isBlank(rawEventType)) {
-                return null;
-            }
-            Long relatedTeamId = jsonNode.hasNonNull("relatedTeamId") ? jsonNode.path("relatedTeamId").asLong() : null;
-            String normalizedEventType = EVENT_TEAM_DRAFT_CONFIRMED.equals(rawEventType)
-                    ? EVENT_TEAM_CREATED
-                    : rawEventType;
-
-            AiBusinessEventVO event = new AiBusinessEventVO();
-            event.setEventType(normalizedEventType);
-            event.setSubjectType(jsonNode.path("subjectType").asText(resolveSubjectType(normalizedEventType)));
-            event.setSubjectId(jsonNode.hasNonNull("subjectId") ? jsonNode.path("subjectId").asLong() : relatedTeamId);
-            event.setSubjectName(jsonNode.path("subjectName").asText(null));
-            event.setAction(jsonNode.path("action").asText(resolveAction(normalizedEventType)));
-            event.setStatus(jsonNode.path("status").asText("SUCCESS"));
-            event.setSummary(jsonNode.path("summary").asText(resolveSummary(normalizedEventType, relatedTeamId)));
-            event.setRelatedDraftId(jsonNode.path("relatedDraftId").asText(null));
-            event.setRelatedTeamId(relatedTeamId);
-            event.setOccurredAt(message.getCreateTime());
-            return event;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String resolveSubjectType(String eventType) {
-        if (EVENT_TEAM_CREATED.equals(eventType) || EVENT_TEAM_DELETED.equals(eventType)) {
-            return SUBJECT_TEAM;
-        }
-        return null;
-    }
-
-    private String resolveAction(String eventType) {
-        if (EVENT_TEAM_CREATED.equals(eventType)) {
-            return "CREATED";
-        }
-        if (EVENT_TEAM_DELETED.equals(eventType)) {
-            return "DELETED";
-        }
-        return null;
-    }
-
-    private String resolveSummary(String eventType, Long teamId) {
-        if (EVENT_TEAM_CREATED.equals(eventType)) {
-            return "创建队伍成功：#" + teamId;
-        }
-        if (EVENT_TEAM_DELETED.equals(eventType)) {
-            return "删除队伍成功：#" + teamId;
-        }
-        return eventType;
     }
 
     private void validateLoginUser(User loginUser) {

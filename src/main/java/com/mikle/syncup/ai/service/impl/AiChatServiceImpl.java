@@ -8,6 +8,8 @@ import com.mikle.syncup.ai.model.dto.AiTeamDetailsRequest;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.service.AiChatMessageService;
+import com.mikle.syncup.ai.service.AiChatSessionService;
+import com.mikle.syncup.ai.service.AiMemoryPipelineService;
 import com.mikle.syncup.ai.service.AiChatService;
 import com.mikle.syncup.ai.service.AiToolExecutionService;
 import com.mikle.syncup.ai.tool.DeleteTeamTool;
@@ -15,6 +17,7 @@ import com.mikle.syncup.ai.tool.GetTeamDetailsTool;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
+import com.mikle.syncup.ai.model.entity.AiChatSession;
 import com.mikle.syncup.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
@@ -41,6 +44,12 @@ public class AiChatServiceImpl implements AiChatService {
     private AiChatMessageService aiChatMessageService;
 
     @Resource
+    private AiChatSessionService aiChatSessionService;
+
+    @Resource
+    private AiMemoryPipelineService memoryPipelineService;
+
+    @Resource
     private AiToolExecutionService aiToolExecutionService;
 
     @Override
@@ -54,11 +63,14 @@ public class AiChatServiceImpl implements AiChatService {
         }
         User loginUser = userService.getLoginUser(request);
         String sessionId = resolveSessionId(aiChatRequest.getSessionId());
-        aiChatMessageService.saveUserMessage(loginUser, sessionId, message);
-        Optional<AiChatResponseVO> agentResponse = aiAssistantAgentService.chat(message, sessionId, loginUser);
+        AiChatSession session = aiChatSessionService.getOrCreate(loginUser.getId(), sessionId);
+        aiChatMessageService.saveUserMessage(loginUser, session, message);
+        Optional<AiChatResponseVO> agentResponse = aiAssistantAgentService.chat(message, session, loginUser);
         if (agentResponse.isPresent()) {
             AiChatResponseVO response = agentResponse.get();
-            aiChatMessageService.saveAssistantMessage(loginUser, sessionId, response.getReply(), response);
+            response.setSessionId(sessionId);
+            var assistantMessage = aiChatMessageService.saveAssistantMessage(loginUser, session, response.getReply(), response);
+            memoryPipelineService.onChatTurnCompleted(loginUser.getId(), session, assistantMessage.getId());
             return response;
         }
 
@@ -66,7 +78,8 @@ public class AiChatServiceImpl implements AiChatService {
         response.setSessionId(sessionId);
         response.setReply(AI_UNAVAILABLE_REPLY);
         response.setNeedClarification(false);
-        aiChatMessageService.saveAssistantMessage(loginUser, sessionId, response.getReply(), response);
+        var assistantMessage = aiChatMessageService.saveAssistantMessage(loginUser, session, response.getReply(), response);
+        memoryPipelineService.onChatTurnCompleted(loginUser.getId(), session, assistantMessage.getId());
         return response;
     }
 
@@ -97,7 +110,9 @@ public class AiChatServiceImpl implements AiChatService {
         String sessionId = resolveSessionId(aiTeamDetailsRequest == null ? null : aiTeamDetailsRequest.getSessionId());
         AiToolResult result = executeToolWithAudit(DeleteTeamTool.TOOL_NAME, intent, loginUser, sessionId);
         if (result.isSuccess()) {
-            aiChatMessageService.saveTeamDeletedEvent(loginUser, sessionId, teamId);
+            AiChatSession session = aiChatSessionService.getOrCreate(loginUser.getId(), sessionId);
+            var event = aiChatMessageService.saveTeamDeletedEvent(loginUser, session, teamId);
+            if (event != null) memoryPipelineService.onChatTurnCompleted(loginUser.getId(), session, event.getId());
         }
         return result;
     }
