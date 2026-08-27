@@ -51,8 +51,9 @@ Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Sprin
 
 **标签搜索与搭子匹配**
 
-- 用户可以维护个人标签，标签以 JSON 形式存储在用户表中。
-- 支持按标签搜索用户，适合快速找到具备某些共同特征的人。
+- 用户只能从系统维护的受控活动标签中选择，用户表以 JSON 保存标准标签 ID。
+- 后端校验标签存在、启用、去重且不超过 10 个；前端不维护独立标签字典。
+- AI 使用 `resolve_tags` 将自然语言活动归一化为标准标签 ID，再调用 `search_users`。
 - 首页提供推荐用户列表，并使用 Redis 做短期缓存。
 - 匹配模式先按城市、活动标签和可见状态筛选，再结合本轮需求、内部匹配画像、标签重合度和活跃度排序。
 
@@ -67,7 +68,7 @@ Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Sprin
 **AI 组队助手（阶段 1）**
 
 - 支持 `POST /api/ai/chat`，根据自然语言识别组队需求。
-- 支持受控工具：队伍查询、队伍详情、搭子推荐、队伍草稿、我创建的队伍、我的公开资料。
+- 支持受控工具：队伍查询、标签解析、搭子搜索、队伍详情、队伍草稿、我创建/加入的队伍、我的公开资料和删除确认。
 - 支持“我加入的队伍”和“我的公开资料”查询；加入、退出队伍以及修改自我介绍仍需在普通页面执行。
 - 支持 LangChain4j 工具调用编排，默认关闭；未配置模型时自动降级到 Mock 解析和固定工具链。
 - 模型默认配置为 `qwen3.7-max-2026-05-20`，通过 DashScope / 百炼 OpenAI 兼容接口接入。
@@ -77,14 +78,23 @@ Sync Up 是一个面向移动端的找搭子与组队匹配系统，基于 Sprin
 **AI 用户画像（阶段 2）**
 
 - 用户只维护 `user.profile` 自我介绍；AI 画像是系统内部派生数据，不提供查看、确认、拒绝或修改接口。
-- 自我介绍发生变化后创建 `ai_profile_generation_task`，定时批量调用模型生成五段式文本画像。
+- 自我介绍和聊天中的稳定证据先抽取为可追溯 Episode，再按画像维度合并更新五段式画像。
 - `profileText` 保存完整画像，`matchProfileText` 只保留前四段，`interactionProfileText` 只保留 AI 交流偏好。
 - 系统只为 `matchProfileText` 生成一个整体 Embedding，并保存模型、维度、画像版本和生成状态；向量写入前统一做归一化。
 - 城市、性别、账号等确定信息不重复写入 AI 画像，后续匹配继续从用户资料做硬条件过滤。
 - AI 助手只在内部加载 `interactionProfileText` 调整表达方式，不通过工具或前端返回画像正文。
-- 任务支持抢占、重试、超时恢复和新任务淘汰旧任务；只有新文本和新向量都成功后才原子切换版本，任一步失败都保留上一有效版本且不阻断资料编辑。
+- Episode 与画像更新任务支持抢占、重试、超时恢复和旧任务淘汰；只有新文本和新向量都成功后才在短事务内切换版本并记录 Revision。
 - 固定画像质量参考集包含 10 类自我介绍，离线检查五段完整性、已表达事实保留、敏感或无依据推断排除，以及匹配文本与交互文本隔离。
 - `interactionProfileText` 不参与推荐；搭子和队伍只使用前四段派生的 `matchProfileText` 形成查询语义。
+
+**AI 会话记忆（阶段 2，进行中）**
+
+- `ai_chat_message` 是用户消息、助手响应和隐藏业务事件的唯一原始事实源。
+- `ai_chat_session` 保存会话归属、滚动 Summary 和闭合、摘要、Episode 提取游标。
+- Working Memory 使用“交互画像 + 旧 Summary + 最近原始消息 + 当前输入”，并按 Token 预算裁剪。
+- Summary 只压缩上下文，不能直接作为长期画像事实；长期画像只能使用有来源的 Episode。
+- 原始聊天消息默认保留 365 天，统一定时任务负责摘要、Episode、画像更新和过期消息清理。
+- 新管线代码与表结构已接入，但关键失败、纠正、删除、并发和迁移测试仍在收口，详见实施状态文档。
 
 **混合推荐（阶段 3）**
 
@@ -222,7 +232,7 @@ sequenceDiagram
     F->>C: POST /api/ai/chat
     C->>A: 获取登录用户并进入 AI 流程
     A->>A: LangChain4j Agent 可用则选择工具，否则降级 Mock 固定链路
-    A->>T: 调用 searchTeams / recommendUsers / createTeamDraft
+    A->>T: 调用 search_teams / resolve_tags / search_users / create_team_draft
     T->>S: 复用现有队伍和用户服务
     T->>D: 写入工具审计或草稿
     A-->>C: 返回回复、工具结果和草稿
@@ -239,11 +249,11 @@ sequenceDiagram
 | 模块 | 说明 |
 | --- | --- |
 | 用户模块 | 注册、登录、退出、当前用户、用户更新、管理员查询和删除 |
-| 标签模块 | 用户标签维护、按标签搜索、标签 JSON 解析 |
+| 标签模块 | 受控标签维护、标签 ID 校验、标签 Embedding、自然语言归一化和按标签搜索 |
 | 推荐模块 | 首页推荐、Redis 缓存、定时缓存预热 |
 | 匹配模块 | 城市与活动硬过滤、画像向量排序、业务重排、推荐原因和失败降级 |
 | 队伍模块 | 创建、更新、查询、加入、退出、删除、我创建、我加入 |
-| AI 助手模块 | 自然语言组队、受控工具调用、队伍草稿、确认创建、工具审计 |
+| AI 助手模块 | 自然语言组队、受控工具调用、会话记忆、内部画像、队伍草稿、确认创建和工具审计 |
 | 导入模块 | EasyExcel 批量导入用户数据 |
 | 基础能力 | 统一响应、错误码、全局异常、逻辑删除、接口文档配置 |
 
@@ -253,27 +263,31 @@ sequenceDiagram
 
 | 表名 | 作用 |
 | --- | --- |
-| `user` | 用户信息、账号、密码、头像、联系方式、角色、标签 JSON |
+| `user` | 用户信息、账号、密码、头像、联系方式、角色、标准标签 ID JSON |
 | `team` | 队伍信息、最大人数、过期时间、队长、状态、密码 |
 | `user_team` | 用户和队伍的加入关系 |
-| `tag` | 标签表，当前可以不启用，因为用户标签已存入 `user.tags` |
+| `tag_category` | 受控活动标签分类 |
+| `tag` | 受控活动标签、语义描述和当前版本标签向量 |
 | `ai_team_draft` | AI 生成的队伍草稿、确认状态、过期时间和确认后的队伍 ID |
 | `ai_tool_call_log` | AI 工具调用和草稿确认的脱敏审计记录 |
 | `ai_user_profile` | 系统内部五段式文本画像、匹配文本、交互文本及版本元数据 |
-| `ai_profile_generation_task` | 自我介绍变更产生的画像生成任务、重试状态和错误摘要 |
 | `ai_user_profile_embedding` | 匹配画像的归一化向量、画像版本、模型、维度和有效状态 |
 | `ai_team_embedding` | 队伍检索文本的归一化向量、内容版本、哈希、模型、维度和有效状态 |
-| `ai_chat_memory` | AI 短期会话记忆，保存 24 小时内的 LangChain4j 消息窗口 |
-| `ai_chat_message` | 用户消息、助手响应和隐藏业务事件，用于恢复最近聊天历史 |
+| `ai_chat_session` | AI 会话、滚动 Summary 和闭合/摘要/Episode 处理游标 |
+| `ai_chat_message` | 用户消息、助手响应和隐藏业务事件，是唯一原始会话事实源 |
+| `ai_episode_extraction_task` | 从聊天范围或自我介绍可靠抽取 Episode 的任务 |
+| `ai_user_episode` | 带画像维度、来源、信号、状态和纠正关系的长期证据 |
+| `ai_profile_update_task` | 按维度合并证据并更新画像的可靠任务 |
+| `ai_user_profile_revision` | 画像版本修订及其证据 Episode 追溯记录 |
 
 设计取舍：
 
 - 主键使用自增 `BIGINT`，对中小型项目足够直接。
 - 时间字段使用 `DATETIME`，表中保留 `createTime` 和 `updateTime`。
 - 使用 `isDelete` 配合 MyBatis-Plus 做逻辑删除。
-- 当前标签存在 `user.tags` 字段中，适合快速落地；如果后续标签查询、统计、推荐规则变复杂，再拆成标签关系表更稳妥。
+- 当前用户标签以标准 ID JSON 保存于 `user.tagIds`。在标签数量和查询规模没有证明 JSON 成为瓶颈前，不增加用户标签关系表。
 - 当前不依赖数据库外键，关系一致性主要由业务层和事务维护，部署和迁移成本更低。
-- AI 相关表不保存登录 Token、模型 API Key 和队伍密码；画像任务中的自我介绍快照会做手机号、邮箱和密钥类信息最小化处理。
+- AI 相关表不保存登录 Token、模型 API Key 和队伍密码；自我介绍、消息、Episode 和审计内容按最小必要原则处理敏感信息。
 
 ## 接口概览
 
@@ -293,6 +307,12 @@ sequenceDiagram
 | `GET` | `/api/user/match` | 获取最匹配的用户 |
 | `POST` | `/api/user/update` | 更新用户信息 |
 | `POST` | `/api/user/delete` | 管理员删除用户 |
+
+### 标签接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/tag/list` | 获取启用的受控标签分类和标签 |
 
 ### 队伍接口
 
@@ -410,24 +430,18 @@ sync-up
 
 ```bash
 mysql -u root -p < sql/create_table.sql
+mysql -u root -p sync_up_db < sql/controlled_tag_seed.sql
 ```
 
-已有数据库按阶段升级时，推荐顺序如下：
+已有数据库当前可用的增量脚本如下：
 
 ```bash
-mysql -u root -p sync_up_db < sql/stage0_baseline_migration.sql
-mysql -u root -p sync_up_db < sql/stage0_5_team_search_migration.sql
-mysql -u root -p sync_up_db < sql/stage1_3_ai_team_draft_migration.sql
-mysql -u root -p sync_up_db < sql/stage1_4_ai_audit_migration.sql
-mysql -u root -p sync_up_db < sql/stage2_ai_user_profile_migration.sql
-mysql -u root -p sync_up_db < sql/stage2_1_ai_chat_memory_migration.sql
-mysql -u root -p sync_up_db < sql/stage2_2_ai_chat_message_migration.sql
-mysql -u root -p sync_up_db < sql/stage2_3_internal_text_profile_migration.sql
-mysql -u root -p sync_up_db < sql/stage2_4_ai_profile_embedding_migration.sql
-mysql -u root -p sync_up_db < sql/stage3_team_activity_category_migration.sql
-mysql -u root -p sync_up_db < sql/stage4_user_city_active_migration.sql
-mysql -u root -p sync_up_db < sql/stage3_1_team_embedding_migration.sql
+mysql -u root -p sync_up_db < sql/migration/20260821_controlled_tags_schema.sql
+mysql -u root -p sync_up_db < sql/controlled_tag_seed.sql
+mysql -u root -p sync_up_db < sql/stage5_memory_redesign.sql
 ```
+
+`sql/stage5_memory_redesign.sql` 会删除并重建 AI 记忆与画像相关表，不修改用户、队伍和标签表。它会丢弃旧 AI 派生数据，执行前必须备份数据库并确认影响范围。旧阶段迁移脚本当前不在仓库中，不应按历史文档中的文件名执行。
 
 AI Agent 默认关闭，不影响本地启动。需要接入真实模型时，在 `.env` 或运行环境中配置：
 
@@ -438,32 +452,29 @@ SYNC_UP_AI_AGENT_MODEL=qwen3.7-max-2026-05-20
 SYNC_UP_AI_EMBEDDING_ENABLED=true
 SYNC_UP_AI_EMBEDDING_MODEL=text-embedding-v4
 SYNC_UP_AI_EMBEDDING_DIMENSIONS=1024
-SYNC_UP_AI_PROFILE_GENERATION_FIXED_DELAY_MS=60000
 SYNC_UP_AI_TEAM_EMBEDDING_FIXED_DELAY_MS=60000
-SYNC_UP_AI_MEMORY_MAX_MESSAGES=20
-SYNC_UP_AI_MEMORY_REDIS_TTL_HOURS=12
-SYNC_UP_AI_MEMORY_MYSQL_TTL_HOURS=24
+SYNC_UP_AI_TAG_EMBEDDING_FIXED_DELAY_MS=60000
+SYNC_UP_AI_MEMORY_CHAT_HISTORY_RETENTION_DAYS=365
+SYNC_UP_AI_MEMORY_RECENT_MESSAGE_COUNT=20
+SYNC_UP_AI_MEMORY_SUMMARY_BATCH_SIZE=10
+SYNC_UP_AI_MEMORY_MAX_CONTEXT_TOKENS=6000
+SYNC_UP_AI_MEMORY_EPISODE_EXTRACTION_ENABLED=true
+SYNC_UP_AI_MEMORY_PROFILE_THRESHOLD=5
 ```
 
 启动后端：
 
 ```bash
-./mvnw spring-boot:run
-```
-
-Windows：
-
-```bash
-mvnw.cmd spring-boot:run
+mvn spring-boot:run
 ```
 
 编译检查：
 
 ```bash
-./mvnw -DskipTests compile
+mvn -DskipTests compile
 ```
 
-如果本机没有可用的 Maven Wrapper，或 Windows PowerShell 执行策略阻止脚本运行，可以使用本机 Maven，并将依赖仓库放到项目目录：
+仓库当前缺少 `.mvn/wrapper/maven-wrapper.properties`，因此暂时使用本机 Maven。需要把依赖仓库放到项目目录时可以执行：
 
 ```bash
 mvn "-Dmaven.repo.local=.m2/repository" test
@@ -517,7 +528,7 @@ README 只保留启动和验证入口：
 
 后端全量测试：
 
-    mvn.cmd "-Dmaven.repo.local=.m2/repository" test
+    mvn test
 
 前端验证：
 
