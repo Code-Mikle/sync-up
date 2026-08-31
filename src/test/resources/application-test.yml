@@ -1,0 +1,27 @@
+spring:
+  config:
+    import: optional:file:.env.test[.properties]
+
+  datasource:
+    url: jdbc:mysql://${TEST_MYSQL_HOST:localhost}:${TEST_MYSQL_PORT:3306}/sync_up_test?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${TEST_MYSQL_USERNAME}
+    password: ${TEST_MYSQL_PASSWORD}
+
+  data:
+    redis:
+      host: ${TEST_REDIS_HOST:localhost}
+      port: ${TEST_REDIS_PORT:6379}
+      database: ${TEST_REDIS_DATABASE}
+
+sync-up:
+  scheduling:
+    enabled: false
+
+  ai:
+    agent:
+      enabled: false
+    embedding:
+      enabled: false
+    memory:
+      episode:
+        extraction-enabled: false

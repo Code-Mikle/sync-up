@@ -3,12 +3,10 @@ package com.mikle.syncup;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.EnableAsync;
 
 @SpringBootApplication
 @MapperScan({"com.mikle.syncup.mapper", "com.mikle.syncup.ai.mapper"})
-@EnableScheduling
 @EnableAsync
 public class MyApplication {
 

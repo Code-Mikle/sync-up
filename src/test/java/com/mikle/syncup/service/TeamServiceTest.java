@@ -1,6 +1,8 @@
 package com.mikle.syncup.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
+import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.mapper.TeamMapper;
 import com.mikle.syncup.mapper.UserMapper;
@@ -9,20 +11,25 @@ import com.mikle.syncup.model.domain.Team;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.domain.UserTeam;
 import com.mikle.syncup.model.dto.TeamQuery;
+import com.mikle.syncup.model.enums.TeamStatusEnum;
 import com.mikle.syncup.model.request.TeamJoinRequest;
 import com.mikle.syncup.model.request.TeamQuitRequest;
 import com.mikle.syncup.model.vo.TeamUserVO;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
+import javax.sql.DataSource;
 import java.math.BigDecimal;
-import java.util.Date;
-import java.util.List;
-import java.util.Queue;
-import java.util.UUID;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -32,6 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @SpringBootTest
+@ActiveProfiles(profiles = "test")
 class TeamServiceTest {
 
     @Resource
@@ -43,6 +51,7 @@ class TeamServiceTest {
     @Resource
     private UserTeamService userTeamService;
 
+    @Autowired
     @Resource
     private TeamMapper teamMapper;
 
@@ -52,45 +61,223 @@ class TeamServiceTest {
     @Resource
     private UserTeamMapper userTeamMapper;
 
+    @Resource
+    private DataSource dataSource;
+
+    @BeforeEach
+    void ensureUsingTestDatabase() throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            String databaseName = connection.getCatalog();
+
+            Assertions.assertEquals(
+                    "sync_up_test",
+                    databaseName,
+                    "当前连接的不是 sync_up_test，已停止测试，避免污染开发数据库"
+            );
+        }
+    }
+
     @Test
-    void addTeam_pessimisticLock_shouldNotExceed5() throws Exception {
-        User loginUser = createTestUser();
-        int maxTeamCount = 5;
-        int requestCount = 20;
-        ExecutorService pool = Executors.newFixedThreadPool(requestCount);
+    @Transactional
+    void joinTeam_publicTeam_shouldCreateMembership() {
+        // Arrange
+        User creator = createTestUser();
+        User member = createTestUser();
+        long teamId = createPublicTeam(creator.getId());
+
+        TeamJoinRequest request = new TeamJoinRequest();
+        request.setTeamId(teamId);
+
+        // Act
+        boolean joined = teamService.joinTeam(request, member);
+
+        // Assert
+        Assertions.assertTrue(joined);
+
+        long relationCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, member.getId())
+                .count();
+
+        Assertions.assertEquals(1L, relationCount);
+    }
+
+    @Test
+    @Transactional
+    void joinTeam_duplicateJoin_shouldBeRejected() {
+        // Arrange
+        User creator = createTestUser();
+        User member = createTestUser();
+        long teamId = createTeam(creator, 5);
+
+        TeamJoinRequest joinRequest = new TeamJoinRequest();
+        joinRequest.setTeamId(teamId);
+
+        // Act: First time joining
+        boolean firstJoinResult = teamService.joinTeam(joinRequest, member);
+
+        // Assert: Successfully joined for the first time
+        Assertions.assertTrue(firstJoinResult);
+
+        // Act: The same user attempts to join again
+        BusinessException exception = Assertions.assertThrows(
+                BusinessException.class,
+                () -> teamService.joinTeam(joinRequest, member)
+        );
+
+        // Assert: verify that the failure reason is indeed duplicate joining
+        Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
+        Assertions.assertEquals("user already joined this team", exception.getDescription());
+
+        // Assert: only one relationship record between the user and the team can exist in the database
+        Long memberShipCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getUserId, creator.getId())
+                .eq(UserTeam::getTeamId, teamId)
+                .count();
+
+        Assertions.assertEquals(1, memberShipCount);
+
+    }
+
+    @Test
+    @Transactional
+    void joinTeam_whenTeamIsFull_shouldBeRejected() {
+        // Arrange
+        User creator = createTestUser();
+        User member = createTestUser();
+        long teamId = createTeam(creator, 1);
+
+        TeamJoinRequest joinRequest = new TeamJoinRequest();
+        joinRequest.setTeamId(teamId);
+
+        // Act: attempts to join
+        BusinessException exception = Assertions.assertThrows(
+                BusinessException.class,
+                () -> teamService.joinTeam(joinRequest, member)
+        );
+
+        // Assert: failed to join
+        Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
+        Assertions.assertEquals("team is full", exception.getDescription());
+
+        // Assert: the team size does not exceed the maximum limit
+        Long count = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .count();
+
+        Assertions.assertEquals(1L, count);
+
+        // Assert: no relationship record is created for the rejected user
+        Long rejectedMemberCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, member.getId())
+                .count();
+
+        Assertions.assertEquals(0L, rejectedMemberCount);
+    }
+
+    @Test
+    @Transactional
+    void joinTeam_whenTeamIsExpired_shouldBeRejected() {
+        // Arrange
+        User creator = createTestUser();
+        User member = createTestUser();
+        long teamId = createTeam(creator, 5);
+
+        // sets the team as expired one minute ago
+        Team expiredTeam = new Team();
+        expiredTeam.setId(teamId);
+        expiredTeam.setExpireTime(new Date(System.currentTimeMillis() - 60_000));
+        boolean updated = teamService.updateById(expiredTeam);
+        Assertions.assertTrue(updated, "test team should be marked as expired");
+
+        TeamJoinRequest joinRequest = new TeamJoinRequest();
+        joinRequest.setTeamId(teamId);
+
+        // Act: attempts to join an expired team
+        BusinessException exception = Assertions.assertThrows(
+                BusinessException.class,
+                () -> teamService.joinTeam(joinRequest, member)
+        );
+
+        // Assert: failed to join
+        Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
+        Assertions.assertEquals("team has expired", exception.getDescription());
+
+        // Assert: the team size does not exceed the maximum limit
+        Long count = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .count();
+
+        Assertions.assertEquals(1L, count);
+
+        // Assert: no relationship record is created for the rejected user
+        Long rejectedMemberCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, member.getId())
+                .count();
+
+        Assertions.assertEquals(0L, rejectedMemberCount);
+    }
+
+    @Test
+    void joinTeam_whenUsersCompeteForLastSlot_shouldAllowOnlyOneMember() throws Exception {
+        int candidateCount = 10;
+
+        User creator = null;
+        List<User> candidates = new ArrayList<>();
+        ExecutorService pool = Executors.newFixedThreadPool(candidateCount);
 
         try {
-            clearUserTeams(loginUser.getId());
+            // Arrange：最大人数为 2，队长已经占用一个名额
+            creator = createTestUser();
+            long teamId = createTeam(creator, 2);
 
-            CountDownLatch ready = new CountDownLatch(requestCount);
+            for (int i = 0; i < candidateCount; i++) {
+                candidates.add(createTestUser());
+            }
+
+            CountDownLatch ready = new CountDownLatch(candidateCount);
             CountDownLatch start = new CountDownLatch(1);
-            CountDownLatch done = new CountDownLatch(requestCount);
-            AtomicInteger success = new AtomicInteger();
-            AtomicInteger failedByQuota = new AtomicInteger();
+            CountDownLatch done = new CountDownLatch(candidateCount);
+
+            AtomicInteger successCount = new AtomicInteger();
+            AtomicInteger fullRejectedCount = new AtomicInteger();
             Queue<Throwable> unexpectedErrors = new ConcurrentLinkedQueue<>();
 
-            for (int i = 0; i < requestCount; i++) {
-                final int idx = i;
+            for (User candidate : candidates) {
                 pool.submit(() -> {
                     ready.countDown();
+
                     try {
+                        // 等待所有线程准备好后统一开始
                         start.await();
 
-                        Team team = new Team();
-                        team.setName("t" + idx + UUID.randomUUID().toString().substring(0, 6));
-                        team.setDescription("lock test");
-                        team.setActivityCategory(9);
-                        team.setMaxNum(5);
-                        team.setStatus(0);
-                        team.setExpireTime(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000));
+                        TeamJoinRequest joinRequest = new TeamJoinRequest();
+                        joinRequest.setTeamId(teamId);
 
-                        long teamId = teamService.addTeam(team, loginUser);
-                        if (teamId > 0) {
-                            success.incrementAndGet();
+                        boolean joined = teamService.joinTeam(
+                                joinRequest,
+                                candidate
+                        );
+
+                        if (joined) {
+                            successCount.incrementAndGet();
+                        } else {
+                            unexpectedErrors.add(
+                                    new AssertionError(
+                                            "joinTeam returned false without an exception"
+                                    )
+                            );
                         }
                     } catch (BusinessException e) {
-                        failedByQuota.incrementAndGet();
-                    } catch (Exception e) {
+                        if (e.getCode() == ErrorCode.PARAMS_ERROR.getCode()
+                                && "team is full".equals(e.getDescription())) {
+                            fullRejectedCount.incrementAndGet();
+                        } else {
+                            unexpectedErrors.add(e);
+                        }
+                    } catch (Throwable e) {
                         unexpectedErrors.add(e);
                     } finally {
                         done.countDown();
@@ -98,74 +285,372 @@ class TeamServiceTest {
                 });
             }
 
-            Assertions.assertTrue(ready.await(10, TimeUnit.SECONDS), "worker threads are not ready");
+            // 等待所有工作线程进入准备状态
+            Assertions.assertTrue(
+                    ready.await(10, TimeUnit.SECONDS),
+                    "worker threads were not ready in time"
+            );
+
+            // 同时释放所有线程
             start.countDown();
-            Assertions.assertTrue(done.await(60, TimeUnit.SECONDS), "concurrent requests did not finish");
 
-            long finalTeamCount = countTeamsCreatedBy(loginUser.getId());
-            long finalUserTeamCount = countUserTeamRelationsByUser(loginUser.getId());
+            Assertions.assertTrue(
+                    done.await(30, TimeUnit.SECONDS),
+                    "concurrent join requests did not finish in time"
+            );
 
-            Assertions.assertTrue(unexpectedErrors.isEmpty(),
-                    () -> "unexpected errors: " + unexpectedErrors.stream()
-                            .map(error -> error.getClass().getName() + ": " + error.getMessage())
-                            .collect(Collectors.joining("; ")));
-            Assertions.assertEquals(maxTeamCount, finalTeamCount, "created team count should reach the limit exactly");
-            Assertions.assertEquals(maxTeamCount, finalUserTeamCount, "user_team relation count should match created teams");
-            Assertions.assertEquals(maxTeamCount, success.get(), "only the first 5 requests should succeed");
-            Assertions.assertEquals(requestCount - maxTeamCount, failedByQuota.get(),
-                    "remaining requests should fail because of the quota");
+            // Assert：不能出现数据库异常、锁超时等意外错误
+            Assertions.assertTrue(
+                    unexpectedErrors.isEmpty(),
+                    () -> "unexpected errors: "
+                            + unexpectedErrors.stream()
+                            .map(error -> error.getClass().getSimpleName()
+                                    + ": " + error.getMessage())
+                            .collect(Collectors.joining("; "))
+            );
+
+            // Assert：只有一个候选用户加入成功
+            Assertions.assertEquals(
+                    1,
+                    successCount.get(),
+                    "only one candidate should get the last slot"
+            );
+
+            // Assert：其他候选用户都因为队伍已满而被拒绝
+            Assertions.assertEquals(
+                    candidateCount - 1,
+                    fullRejectedCount.get(),
+                    "remaining candidates should be rejected because the team is full"
+            );
+
+            // Assert：队伍最终只有队长和一个新成员
+            long totalMembershipCount = userTeamService.lambdaQuery()
+                    .eq(UserTeam::getTeamId, teamId)
+                    .count();
+
+            Assertions.assertEquals(
+                    2L,
+                    totalMembershipCount,
+                    "team membership must not exceed maxNum"
+            );
+
+            // Assert：候选用户中恰好只有一个产生了关系记录
+            List<Long> candidateIds = candidates.stream()
+                    .map(User::getId)
+                    .toList();
+
+            long joinedCandidateCount = userTeamService.lambdaQuery()
+                    .eq(UserTeam::getTeamId, teamId)
+                    .in(UserTeam::getUserId, candidateIds)
+                    .count();
+
+            Assertions.assertEquals(
+                    1L,
+                    joinedCandidateCount,
+                    "exactly one candidate membership should exist"
+            );
         } finally {
             pool.shutdownNow();
             pool.awaitTermination(10, TimeUnit.SECONDS);
-            cleanupUserAndTeams(loginUser);
+
+            // 队长清理会先删除其创建的队伍及队伍关系
+            cleanupUserAndTeams(creator);
+
+            for (User candidate : candidates) {
+                cleanupUserAndTeams(candidate);
+            }
         }
     }
 
     @Test
-    void joinTeam_duplicateJoin_shouldBeRejected() {
-        User creator = null;
-        User member = null;
-        try {
-            creator = createTestUser();
-            member = createTestUser();
-            long teamId = createTeam(creator, 2);
+    @Transactional
+    void joinTeam_whenTeamIsPrivate_shouldBeRejected() {
+        // Arrange
+        User creator = createTestUser();
+        User member = createTestUser();
+        long teamId = createTeam(creator, 5);
 
-            TeamJoinRequest joinRequest = new TeamJoinRequest();
-            joinRequest.setTeamId(teamId);
+        // sets the team as private
+        Team privateTeam = new Team();
+        privateTeam.setId(teamId);
+        privateTeam.setStatus(TeamStatusEnum.PRIVATE.getValue());
+        int updated = teamMapper.updateById(privateTeam);
+        Assertions.assertEquals(1, updated);
 
-            Assertions.assertTrue(teamService.joinTeam(joinRequest, member));
-            User joinedMember = member;
-            Assertions.assertThrows(BusinessException.class, () -> teamService.joinTeam(joinRequest, joinedMember));
-            Assertions.assertEquals(1, countUserTeamRelationsByUser(member.getId()));
-        } finally {
-            cleanupUserAndTeams(creator);
-            cleanupUserAndTeams(member);
-        }
+        TeamJoinRequest teamJoinRequest = new TeamJoinRequest();
+        teamJoinRequest.setTeamId(teamId);
+
+        // Act: attempts to join the private team
+        BusinessException exception = Assertions.assertThrows(
+                BusinessException.class,
+                () -> teamService.joinTeam(teamJoinRequest, member)
+        );
+
+        // Assert: failed to join
+        Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
+        Assertions.assertEquals("cannot join a private team", exception.getDescription());
+
+        // Assert: no relationship record is created for the rejected user
+        Long rejectedMemberCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, member.getId())
+                .count();
+
+        Assertions.assertEquals(0L, rejectedMemberCount);
     }
 
     @Test
-    void quitTeam_physicalDelete_shouldAllowRejoin() {
-        User creator = null;
-        User member = null;
-        try {
-            creator = createTestUser();
-            member = createTestUser();
-            long teamId = createTeam(creator, 2);
+    @Transactional
+    void joinTeam_whenEncryptedTeamWithCorrectPassword_shouldSucceed() {
+        // Arrange
+        User creator = createTestUser();
+        User member = createTestUser();
+        long teamId = createTeam(creator, 5);
 
-            TeamJoinRequest joinRequest = new TeamJoinRequest();
-            joinRequest.setTeamId(teamId);
-            Assertions.assertTrue(teamService.joinTeam(joinRequest, member));
+        // sets the team as encrypted
+        Team encryptedTeam = new Team();
+        encryptedTeam.setId(teamId);
+        encryptedTeam.setPassword("12345678");
+        encryptedTeam.setStatus(TeamStatusEnum.SECRET.getValue());
+        int updated = teamMapper.updateById(encryptedTeam);
+        Assertions.assertEquals(1, updated);
 
-            TeamQuitRequest quitRequest = new TeamQuitRequest();
-            quitRequest.setTeamId(teamId);
-            Assertions.assertTrue(teamService.quitTeam(quitRequest, member));
+        TeamJoinRequest teamJoinRequest = new TeamJoinRequest();
+        teamJoinRequest.setTeamId(teamId);
+        teamJoinRequest.setPassword("12345678");
 
-            Assertions.assertTrue(teamService.joinTeam(joinRequest, member));
-            Assertions.assertEquals(1, countUserTeamRelationsByUser(member.getId()));
-        } finally {
-            cleanupUserAndTeams(creator);
-            cleanupUserAndTeams(member);
-        }
+        // Act: attempts to join the encrypted team
+        boolean joined = teamService.joinTeam(teamJoinRequest, member);
+
+        // Assert: successfully joined
+        Assertions.assertTrue(joined);
+
+        Long count = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, member.getId())
+                .count();
+        Assertions.assertEquals(1L, count);
+    }
+
+    @Test
+    @Transactional
+    void joinTeam_whenEncryptedTeamWithWrongPassword_shouldFail() {
+        // Arrange
+        User creator = createTestUser();
+        User member = createTestUser();
+        long teamId = createTeam(creator, 5);
+
+        // sets the team as encrypted
+        Team encryptedTeam = new Team();
+        encryptedTeam.setId(teamId);
+        encryptedTeam.setPassword("12345678");
+        encryptedTeam.setStatus(TeamStatusEnum.SECRET.getValue());
+        int updated = teamMapper.updateById(encryptedTeam);
+        Assertions.assertEquals(1, updated);
+
+        TeamJoinRequest teamJoinRequest = new TeamJoinRequest();
+        teamJoinRequest.setTeamId(teamId);
+        teamJoinRequest.setPassword("31223666");
+
+        // Act: attempts to join the encrypted team
+        BusinessException exception = Assertions.assertThrows(
+                BusinessException.class,
+                () -> teamService.joinTeam(teamJoinRequest, member)
+        );
+
+        // Assert: failed to join
+        Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
+        Assertions.assertEquals("wrong password", exception.getDescription());
+
+        // Assert:
+        Long count = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, member.getId())
+                .count();
+        Assertions.assertEquals(0L, count);
+    }
+
+    @Test
+    @Transactional
+    void joinTeam_whenUserRejoinsAfterQuit_shouldSucceed() {
+        // Arrange
+        User creator = createTestUser();
+        User member = createTestUser();
+        long teamId = createTeam(creator, 2);
+
+        TeamJoinRequest joinRequest = new TeamJoinRequest();
+        joinRequest.setTeamId(teamId);
+
+        boolean firstJoinResult = teamService.joinTeam(joinRequest, member);
+        Assertions.assertTrue(firstJoinResult);
+
+        TeamQuitRequest quitRequest = new TeamQuitRequest();
+        quitRequest.setTeamId(teamId);
+
+        // Act：先退出
+        boolean quitResult = teamService.quitTeam(quitRequest, member);
+        Assertions.assertTrue(quitResult);
+
+        long relationCountAfterQuit = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, member.getId())
+                .count();
+
+        Assertions.assertEquals(0L, relationCountAfterQuit);
+
+        // Act：退出后重新加入
+        boolean rejoinResult = teamService.joinTeam(joinRequest, member);
+
+        // Assert
+        Assertions.assertTrue(rejoinResult);
+
+        long relationCountAfterRejoin = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, member.getId())
+                .count();
+
+        Assertions.assertEquals(1L, relationCountAfterRejoin);
+
+        // 队伍最终有队长和重新加入的成员
+        long totalMembershipCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .count();
+
+        Assertions.assertEquals(2L, totalMembershipCount);
+    }
+
+    @Test
+    @Transactional
+    void quitTeam_whenMemberQuits_shouldRemoveMembershipAndKeepTeam() {
+        User creator = createTestUser();
+        User member = createTestUser();
+        long teamId = createTeam(creator, 2);
+        TeamJoinRequest teamJoinRequest = new TeamJoinRequest();
+        teamJoinRequest.setTeamId(teamId);
+        boolean joined = teamService.joinTeam(teamJoinRequest, member);
+        Assertions.assertTrue(joined);
+
+        // Act: attempts to quit team
+        TeamQuitRequest quitRequest = new TeamQuitRequest();
+        quitRequest.setTeamId(teamId);
+        boolean quited = teamService.quitTeam(quitRequest, member);
+
+        // Assert: successfully quited
+        Assertions.assertTrue(quited);
+        // Assert: varifies that the data in the database is consistent
+        Long memberRelationCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, member.getId())
+                .count();
+        Assertions.assertEquals(0L, memberRelationCount);
+
+        // 队长关系仍然存在
+        long creatorRelationCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, creator.getId())
+                .count();
+
+        Assertions.assertEquals(1L, creatorRelationCount);
+
+        // 队伍中最终只剩队长
+        long totalMembershipCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .count();
+
+        Assertions.assertEquals(1L, totalMembershipCount);
+
+        // 普通成员退出不能导致队伍被删除
+        Team remainingTeam = teamService.getById(teamId);
+
+        Assertions.assertNotNull(remainingTeam);
+        Assertions.assertEquals(creator.getId(), remainingTeam.getUserId());
+    }
+
+    @Test
+    @Transactional
+    void quitTeam_whenCaptainQuits_shouldTransferCaptainAndKeepTeam() {
+        // Arrange
+        User creator = createTestUser();
+        User member = createTestUser();
+        long teamId = createTeam(creator, 2);
+
+        TeamJoinRequest joinRequest = new TeamJoinRequest();
+        joinRequest.setTeamId(teamId);
+
+        boolean joined = teamService.joinTeam(joinRequest, member);
+        Assertions.assertTrue(joined);
+
+        TeamQuitRequest quitRequest = new TeamQuitRequest();
+        quitRequest.setTeamId(teamId);
+
+        // Act：队长退出
+        boolean quitResult = teamService.quitTeam(quitRequest, creator);
+
+        // Assert：退出成功
+        Assertions.assertTrue(quitResult);
+
+        // 原队长的成员关系已经删除
+        long creatorRelationCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, creator.getId())
+                .count();
+
+        Assertions.assertEquals(0L, creatorRelationCount);
+
+        // 原成员关系仍然存在
+        long memberRelationCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .eq(UserTeam::getUserId, member.getId())
+                .count();
+
+        Assertions.assertEquals(1L, memberRelationCount);
+
+        // 队伍最终只剩一个成员
+        long totalMembershipCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .count();
+
+        Assertions.assertEquals(1L, totalMembershipCount);
+
+        // 队伍没有被删除
+        Team remainingTeam = teamService.getById(teamId);
+
+        Assertions.assertNotNull(remainingTeam);
+
+        // 剩余成员被转为新队长
+        Assertions.assertEquals(
+                member.getId(),
+                remainingTeam.getUserId()
+        );
+    }
+
+    @Test
+    @Transactional
+    void quitTeam_whenLastOneQuits_shouldRemoveTeamAndMembership() {
+        User creator = createTestUser();
+        long teamId = createTeam(creator, 2);
+
+        TeamQuitRequest teamQuitRequest = new TeamQuitRequest();
+        teamQuitRequest.setTeamId(teamId);
+        // 队长退出队伍
+        boolean quiteResult = teamService.quitTeam(teamQuitRequest, creator);
+        Assertions.assertTrue(quiteResult);
+
+        // 原队伍关系已删除
+        Long memberRelationCount = userTeamService.lambdaQuery()
+                .eq(UserTeam::getTeamId, teamId)
+                .count();
+        Assertions.assertEquals(0L, memberRelationCount);
+
+        // 原队伍已删除
+        Long teamCount = teamService.lambdaQuery()
+                .eq(Team::getId, teamId)
+                .count();
+        Assertions.assertEquals(0L, teamCount);
+
+        // 退出队伍不能删除用户
+        User remainingCreator = userService.getById(creator.getId());
+        Assertions.assertNotNull(remainingCreator);
     }
 
     @Test
@@ -258,22 +743,28 @@ class TeamServiceTest {
         return user;
     }
 
-    private long countTeamsCreatedBy(long userId) {
-        return teamService.count(new QueryWrapper<Team>().eq("userId", userId));
-    }
+    private long createPublicTeam(long userId) {
+        Team team = new Team();
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 5);
+        team.setName("lock_team" + suffix);
+        team.setMaxNum(5);
+        team.setUserId(userId);
+        team.setStatus(0);
 
-    private long countUserTeamRelationsByUser(long userId) {
-        return userTeamService.count(new QueryWrapper<UserTeam>().eq("userId", userId));
+        boolean saved = teamService.save(team);
+        Assertions.assertTrue(saved, "test team should be created");
+        return team.getId();
     }
 
     private long createTeam(User creator, int maxNum) {
         Team team = new Team();
         team.setName("t_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8));
-        team.setDescription("stage0 test");
+        team.setDescription("lock_team");
         team.setActivityCategory(9);
         team.setMaxNum(maxNum);
         team.setStatus(0);
         team.setExpireTime(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000));
+
         return teamService.addTeam(team, creator);
     }
 
@@ -295,6 +786,7 @@ class TeamServiceTest {
         team.setSkillLevel(skillLevel);
         return teamService.addTeam(team, creator);
     }
+
 
     private int resolveActivityCategory(String activityType) {
         if ("徒步".equals(activityType)) {

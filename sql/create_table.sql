@@ -1,10 +1,14 @@
 create database if not exists sync_up_db;
 
+create database if not exists sync_up_test;
+use sync_up_test;
+
 use sync_up_db;
 
 TRUNCATE TABLE user;
+TRUNCATE TABLE team;
+TRUNCATE TABLE user_team;
 # TRUNCATE TABLE ai_tool_call_log;
-# TRUNCATE TABLE user_team;
 # TRUNCATE TABLE ai_team_embedding;
 TRUNCATE TABLE ai_team_draft;
 
@@ -27,10 +31,9 @@ create table user
     isDelete     tinyint  default 0 not null comment '是否删除',
     userRole     int      default 0 not null comment '用户角色 0 - 普通用户 1 - 管理员',
     tagIds       json null comment '标准活动标签 id JSON 数组',
-    profile      varchar(1024) null comment '个人简介 / 自我介绍'
+    profile      varchar(1024) null comment '个人简介 / 自我介绍',
+    unique key uk_user_userAccount (userAccount)
 ) comment '用户';
-
-create unique index uk_user_userAccount on user (userAccount);
 
 -- 队伍表
 create table team
@@ -53,11 +56,10 @@ create table team
     password    varchar(512) null comment '密码',
     createTime  datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime  datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete    tinyint  default 0 not null comment '是否删除'
+    isDelete    tinyint  default 0 not null comment '是否删除',
+    key idx_team_userId (userId),
+    key idx_team_search (status, city, activityCategory, startTime)
 ) comment '队伍';
-
-create index idx_team_userId on team (userId);
-create index idx_team_search on team (status, city, activityCategory, startTime);
 
 -- 用户队伍关系表
 create table user_team
@@ -68,11 +70,10 @@ create table user_team
     joinTime   datetime null comment '加入时间',
     createTime datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete   tinyint  default 0 not null comment '是否删除'
+    isDelete   tinyint  default 0 not null comment '是否删除',
+    unique key uk_user_team_userId_teamId (userId, teamId),
+    key idx_user_team_teamId (teamId)
 ) comment '用户队伍关系';
-
-create unique index uk_user_team_userId_teamId on user_team (userId, teamId);
-create index idx_user_team_teamId on user_team (teamId);
 
 -- AI 队伍草稿表
 create table ai_team_draft
@@ -98,11 +99,10 @@ create table ai_team_draft
     expiresAt       datetime not null comment '草稿过期时间',
     createTime      datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime      datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete        tinyint default 0 not null comment '是否删除'
+    isDelete        tinyint default 0 not null comment '是否删除',
+    unique key uk_ai_team_draft_draftId (draftId),
+    key idx_ai_team_draft_user_status (userId, status, expiresAt)
 ) comment 'AI 队伍草稿';
-
-create unique index uk_ai_team_draft_draftId on ai_team_draft (draftId);
-create index idx_ai_team_draft_user_status on ai_team_draft (userId, status, expiresAt);
 
 -- AI 工具调用审计表
 create table ai_tool_call_log
@@ -121,12 +121,11 @@ create table ai_tool_call_log
     relatedTeamId    bigint null comment '关联队伍 id',
     createTime       datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete         tinyint default 0 not null comment '是否删除'
+    isDelete         tinyint default 0 not null comment '是否删除',
+    key idx_ai_tool_call_log_user_time (userId, createTime),
+    key idx_ai_tool_call_log_session (sessionId),
+    key idx_ai_tool_call_log_action_status (actionType, status)
 ) comment 'AI 工具调用审计';
-
-create index idx_ai_tool_call_log_user_time on ai_tool_call_log (userId, createTime);
-create index idx_ai_tool_call_log_session on ai_tool_call_log (sessionId);
-create index idx_ai_tool_call_log_action_status on ai_tool_call_log (actionType, status);
 
 -- AI 内部用户画像表
 create table ai_user_profile
@@ -149,11 +148,10 @@ create table ai_user_profile
     generatedAt                 datetime not null comment '生成时间',
     createTime                  datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime                  datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete                    tinyint default 0 not null comment '是否删除'
+    isDelete                    tinyint default 0 not null comment '是否删除',
+    unique key uk_ai_user_profile_userId (userId),
+    key idx_ai_user_profile_status_updateTime (status, updateTime)
 ) comment 'AI 内部用户文本画像';
-
-create unique index uk_ai_user_profile_userId on ai_user_profile (userId);
-create index idx_ai_user_profile_status_updateTime on ai_user_profile (status, updateTime);
 
 -- AI 用户画像向量表
 create table ai_user_profile_embedding
@@ -169,11 +167,10 @@ create table ai_user_profile_embedding
     generatedAt      datetime not null comment '生成时间',
     createTime       datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete         tinyint default 0 not null comment '是否删除'
+    isDelete         tinyint default 0 not null comment '是否删除',
+    unique key uk_ai_profile_embedding_user_version (userId, profileVersion),
+    key idx_ai_profile_embedding_user_status (userId, status)
 ) comment 'AI 用户画像版本化向量';
-
-create unique index uk_ai_profile_embedding_user_version on ai_user_profile_embedding (userId, profileVersion);
-create index idx_ai_profile_embedding_user_status on ai_user_profile_embedding (userId, status);
 
 -- AI 队伍检索向量表
 create table ai_team_embedding
@@ -189,11 +186,10 @@ create table ai_team_embedding
     generatedAt      datetime not null comment '生成时间',
     createTime       datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete         tinyint default 0 not null comment '是否删除'
+    isDelete         tinyint default 0 not null comment '是否删除',
+    unique key uk_ai_team_embedding_team_version (teamId, contentVersion),
+    key idx_ai_team_embedding_team_status (teamId, status)
 ) comment 'AI 队伍版本化检索向量';
-
-create unique index uk_ai_team_embedding_team_version on ai_team_embedding (teamId, contentVersion);
-create index idx_ai_team_embedding_team_status on ai_team_embedding (teamId, status);
 
 -- AI 聊天会话与滚动摘要表
 create table ai_chat_session
@@ -211,11 +207,10 @@ create table ai_chat_session
     lastEpisodeExtractedMessageId  bigint default 0 not null comment '已提取为 Episode 的消息 ID',
     createTime                     datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime                     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete                       tinyint default 0 not null comment '是否删除'
+    isDelete                       tinyint default 0 not null comment '是否删除',
+    unique key uk_ai_chat_session_user_key (userId, sessionKey),
+    key idx_ai_chat_session_user_time (userId, updateTime)
 ) comment 'AI 聊天会话和滚动摘要';
-
-create unique index uk_ai_chat_session_user_key on ai_chat_session (userId, sessionKey);
-create index idx_ai_chat_session_user_time on ai_chat_session (userId, updateTime);
 
 -- AI 原始聊天消息表（唯一的对话事实来源）
 create table ai_chat_message
@@ -230,12 +225,11 @@ create table ai_chat_message
     retentionExpireAt   datetime null comment '长期保留过期时间',
     createTime          datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime          datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete            tinyint default 0 not null comment '是否删除'
+    isDelete            tinyint default 0 not null comment '是否删除',
+    key idx_ai_chat_message_session_id (chatSessionId, id),
+    key idx_ai_chat_message_user_time (userId, createTime),
+    key idx_ai_chat_message_retention (retentionExpireAt)
 ) comment 'AI 原始聊天消息和业务事件';
-
-create index idx_ai_chat_message_session_id on ai_chat_message (chatSessionId, id);
-create index idx_ai_chat_message_user_time on ai_chat_message (userId, createTime);
-create index idx_ai_chat_message_retention on ai_chat_message (retentionExpireAt);
 
 -- Episode 提取可靠任务表
 create table ai_episode_extraction_task
@@ -244,11 +238,11 @@ create table ai_episode_extraction_task
     userId                  bigint not null,
     chatSessionId           bigint null,
     sourceType              varchar(32) not null comment 'CHAT_MESSAGE / SELF_INTRODUCTION',
-    sourceText              text null comment '非聊天来源快照',
+    sourceText              varchar(2048) null comment '非聊天来源的脱敏文本快照',
     sourceReferenceId       varchar(128) null,
     fromMessageIdExclusive  bigint null,
     toMessageIdInclusive    bigint null,
-    status                  varchar(16) not null comment 'PENDING / PROCESSING / SUCCESS / FAILED',
+    status                  varchar(16) not null comment 'PENDING / PROCESSING / SUCCESS / FAILED / SUPERSEDED',
     retryCount              int default 0 not null,
     nextRetryAt             datetime null,
     lastError               varchar(1024) null,
@@ -272,13 +266,13 @@ create table ai_user_episode
     sourceSessionId             bigint null,
     sourceMessageIds            json null,
     sourceReferenceId           varchar(128) null,
-    signalType                  varchar(16) not null,
-    priority                    varchar(16) not null,
+    signalType                  varchar(16) not null comment 'INFERRED / EXPLICIT / CORRECTION',
+    priority                    varchar(16) not null comment 'NORMAL / IMMEDIATE',
     evidenceGroupKey            varchar(128) not null,
     dedupeHash                  char(64) not null,
     extractionTaskId            bigint null,
     supersededEpisodeIds        json null comment '当前纠正证据明确替代的 Episode ID',
-    status                      varchar(16) not null,
+    status                      varchar(16) not null comment 'PENDING / CONSOLIDATED / INVALID',
     consolidatedProfileVersion  int null,
     observedAt                  datetime not null,
     createTime                  datetime default CURRENT_TIMESTAMP null,
@@ -297,7 +291,7 @@ create table ai_profile_update_task
     triggerType             varchar(32) not null,
     targetEvidenceDigest    char(64) not null,
     expectedProfileVersion  int null,
-    status                  varchar(16) not null,
+    status                  varchar(16) not null comment 'PENDING / PROCESSING / SUCCESS / FAILED / SUPERSEDED',
     retryCount              int default 0 not null,
     nextRetryAt             datetime null,
     lastError               varchar(1024) null,
@@ -340,12 +334,11 @@ create table tag_category
     sortOrder   int default 0 not null comment '排序值',
     createTime  datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime  datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete    tinyint default 0 not null comment '是否删除'
+    isDelete    tinyint default 0 not null comment '是否删除',
+    unique key uk_tag_category_code (code),
+    unique key uk_tag_category_name (name),
+    key idx_tag_category_status_sort (status, sortOrder)
 ) comment '活动标签分类';
-
-create unique index uk_tag_category_code on tag_category (code);
-create unique index uk_tag_category_name on tag_category (name);
-create index idx_tag_category_status_sort on tag_category (status, sortOrder);
 
 -- 受控活动标签。向量直接保存在标签表，当前规模无需独立向量表。
 create table tag
@@ -364,9 +357,8 @@ create table tag
     embeddingUpdatedAt  datetime null comment '向量更新时间',
     createTime          datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime          datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-    isDelete            tinyint default 0 not null comment '是否删除'
+    isDelete            tinyint default 0 not null comment '是否删除',
+    unique key uk_tag_code (code),
+    unique key uk_tag_category_name (categoryId, name),
+    key idx_tag_category_status_sort (categoryId, status, sortOrder)
 ) comment '受控活动标签';
-
-create unique index uk_tag_code on tag (code);
-create unique index uk_tag_category_name on tag (categoryId, name);
-create index idx_tag_category_status_sort on tag (categoryId, status, sortOrder);
