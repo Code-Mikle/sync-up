@@ -2,6 +2,7 @@ package com.mikle.syncup.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mikle.syncup.assembler.UserAssembler;
 import com.mikle.syncup.common.BaseResponse;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.common.PageResult;
@@ -46,6 +47,9 @@ public class UserController {
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private UserAssembler userAssembler;
 
     @Resource
     private TagService tagService;
@@ -97,7 +101,7 @@ public class UserController {
     @GetMapping("/current")
     public BaseResponse<UserVO> getCurrentUser(HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
-        return ResultUtils.success(userService.getUserVO(loginUser));
+        return ResultUtils.success(userAssembler.toCurrentUserVO(loginUser));
     }
 
     /**
@@ -113,7 +117,7 @@ public class UserController {
         if (user == null || (user.getUserStatus() != null && user.getUserStatus() != 0)) {
             throw new BusinessException(ErrorCode.NULL_ERROR, "用户不存在或已不可见");
         }
-        return ResultUtils.success(userService.getPublicUser(user));
+        return ResultUtils.success(userAssembler.toPublicUserVO(user));
     }
 
     @GetMapping("/search")
@@ -127,22 +131,23 @@ public class UserController {
         }
         List<User> userList = userService.list(queryWrapper);
         List<UserVO> list = userList.stream()
-                .map(userService::getUserVO)
+                .map(userAssembler::toCurrentUserVO)
                 .collect(Collectors.toList());
         return ResultUtils.success(list);
     }
 
     @GetMapping("/search/tags")
-    public BaseResponse<List<UserSearchResultVO>> searchUsersByTags(@RequestParam(required = false) List<Long> tagIds) {
+    public BaseResponse<Page<UserSearchResultVO>> searchUsersByTags(
+            @RequestParam(required = false) List<Long> tagIds,
+            @RequestParam(defaultValue = "1") long pageNum,
+            @RequestParam(defaultValue = "5") long pageSize,
+            HttpServletRequest request) {
         if (CollectionUtils.isEmpty(tagIds)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        List<User> userList = userService.searchUsersByTags(tagIds);
-        return ResultUtils.success(
-                userList.stream()
-                        .map(userService::getPublicUser)
-                        .toList()
-        );
+        User loginUser = userService.getLoginUser(request);
+        return ResultUtils.success(userService.searchUsersByTags(
+                tagIds, pageNum, pageSize, loginUser.getId()));
     }
 
     @GetMapping("/search/keywords")
@@ -179,7 +184,7 @@ public class UserController {
         Page<UserSearchResultVO> userPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
         userPage.setRecords(entityPage.getRecords()
                 .stream()
-                .map(userService::getPublicUser)
+                .map(userAssembler::toPublicUserVO)
                 .toList()
         );
         // 写缓存

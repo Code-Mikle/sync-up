@@ -127,8 +127,9 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
     }
 
     private void logAgentFailure(RuntimeException failure, boolean retried) {
-        log.warn("AI agent failed, fallback to deterministic flow. provider={}, model={}, retried={}, errorType={}",
+        log.warn("AI agent failed, fallback to deterministic flow. provider={}, model={}, retried={}, errorType={}," +
+                        "message={}",
                 aiAgentProperties.getProvider(), aiAgentProperties.getModel(), retried,
-                failure.getClass().getSimpleName());
+                failure.getClass().getSimpleName(), failure.getMessage(), failure);
     }
 }

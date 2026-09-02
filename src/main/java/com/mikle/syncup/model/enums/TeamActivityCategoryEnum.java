@@ -17,8 +17,7 @@ public enum TeamActivityCategoryEnum {
     LEISURE_ENTERTAINMENT(5, "休闲娱乐", "侧重看电影、K歌、看展、逛街、摄影等"),
     FOOD_EXPLORATION(6, "美食探店", "侧重吃饭、探店、咖啡、火锅、夜宵等"),
     LEARNING_GROWTH(7, "学习成长", "侧重考研、考证、语言交换、读书会、自习、刷题等"),
-    TRAVEL_TOUR(8, "旅行出游", "侧重跨城市长途旅行、拼车、自驾游、结伴游等"),
-    OTHER(9, "其他", "无法归入以上类别的活动");
+    TRAVEL_TOUR(8, "旅行出游", "侧重跨城市长途旅行、拼车、自驾游、结伴游等");
 
     private final Integer code;
 

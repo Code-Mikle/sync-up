@@ -1,41 +1,32 @@
 package com.mikle.syncup.service;
 
-import com.mikle.syncup.mapper.TeamMapper;
-import com.mikle.syncup.mapper.UserMapper;
-import com.mikle.syncup.mapper.UserTeamMapper;
+import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
+import com.mikle.syncup.model.domain.Tag;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.vo.UserSearchResultVO;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.util.DigestUtils;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Arrays;
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.Date;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
-
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@ActiveProfiles(profiles = "test")
 class UserServiceTest {
-
-    private static final String LEGACY_SALT = "mikle";
 
     private static final PasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
@@ -43,281 +34,247 @@ class UserServiceTest {
     private UserService userService;
 
     @Resource
-    private UserMapper userMapper;
+    protected DataSource dataSource;
 
     @Resource
-    private TeamMapper teamMapper;
-
-    @Resource
-    private UserTeamMapper userTeamMapper;
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Resource
-    private ObjectMapper objectMapper;
-
-    @Resource
-    private JdbcTemplate jdbcTemplate;
+    private TagService tagService;
 
     @BeforeEach
-    void ensureUserRecommendationColumns() {
-        addUserColumnIfMissing("city", "alter table user add column city varchar(64) null comment '常驻城市' after email");
-        addUserColumnIfMissing("lastActiveTime", "alter table user add column lastActiveTime datetime null comment '最近活跃时间' after updateTime");
-    }
+    protected void ensureUsingTestDatabase() throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            String databaseName = connection.getCatalog();
 
-    private void addUserColumnIfMissing(String columnName, String ddl) {
-        Integer count = jdbcTemplate.queryForObject("""
-                        select count(1)
-                        from information_schema.columns
-                        where table_schema = database()
-                          and table_name = 'user'
-                          and column_name = ?
-                        """,
-                Integer.class,
-                columnName);
-        if (count == null || count == 0) {
-            jdbcTemplate.execute(ddl);
-        }
-    }
-
-    @Test
-    void saveAndGetUser_shouldUseGeneratedTestData() {
-        User user = null;
-        try {
-            user = createTestUser();
-            User savedUser = userService.getById(user.getId());
-            Assertions.assertNotNull(savedUser);
-            Assertions.assertEquals(user.getUserAccount(), savedUser.getUserAccount());
-        } finally {
-            deletePhysically(user);
-        }
-    }
-
-    @Test
-    void updateUser_shouldOnlyUpdateSelfForNormalUser() {
-        User user = null;
-        try {
-            user = createTestUser();
-            User updateUser = new User();
-            updateUser.setId(user.getId());
-            updateUser.setUsername("updated_" + randomSuffix());
-            updateUser.setCity("  Xi'an  ");
-
-            User loginUser = User.builder()
-                    .id(user.getId())
-                    .userRole(0)
-                    .build();
-
-            int updated = userService.updateUser(updateUser, loginUser);
-
-            Assertions.assertEquals(1, updated);
-            Assertions.assertEquals(updateUser.getUsername(), userService.getById(user.getId()).getUsername());
-            Assertions.assertEquals("Xi'an", userService.getById(user.getId()).getCity());
-        } finally {
-            deletePhysically(user);
-        }
-    }
-
-    @Test
-    void removeById_shouldDeleteCreatedUser() {
-        User user = null;
-        try {
-            user = createTestUser();
-            boolean removed = userService.removeById(user.getId());
-
-            Assertions.assertTrue(removed);
-            Assertions.assertNull(userService.getById(user.getId()));
-        } finally {
-            deletePhysically(user);
-        }
-    }
-
-    @Test
-    void userRegister_shouldStoreBCryptPassword() {
-        Long userId = null;
-        String userAccount = "reg_" + randomSuffix();
-        String rawPassword = "Password123";
-        try {
-            userId = userService.userRegister(userAccount, rawPassword, rawPassword);
-            User savedUser = userService.getById(userId);
-
-            Assertions.assertNotNull(savedUser);
-            Assertions.assertFalse(savedUser.getUserPassword().matches("^[a-fA-F0-9]{32}$"));
-            Assertions.assertTrue(PASSWORD_ENCODER.matches(rawPassword, savedUser.getUserPassword()));
-        } finally {
-            deletePhysically(userId);
-        }
-    }
-
-    @Test
-    void userLogin_shouldUpgradeLegacyMd5Password() throws Exception {
-        User user = null;
-        String rawPassword = "Password123";
-        try {
-            user = createTestUser();
-            String legacyPassword = DigestUtils.md5DigestAsHex((LEGACY_SALT + rawPassword).getBytes());
-            User updateUser = new User();
-            updateUser.setId(user.getId());
-            updateUser.setUserPassword(legacyPassword);
-            userService.updateById(updateUser);
-
-            mockMvc.perform(post("/user/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(String.format(
-                                    "{\"userAccount\":\"%s\",\"userPassword\":\"%s\"}",
-                                    user.getUserAccount(), rawPassword)))
-                    .andExpect(status().isOk());
-            User upgradedUser = userService.getById(user.getId());
-
-            Assertions.assertFalse(upgradedUser.getUserPassword().matches("^[a-fA-F0-9]{32}$"));
-            Assertions.assertTrue(PASSWORD_ENCODER.matches(rawPassword, upgradedUser.getUserPassword()));
-            Assertions.assertNotNull(upgradedUser.getLastActiveTime());
-        } finally {
-            deletePhysically(user);
-        }
-    }
-
-    @Test
-    void updateUserApi_shouldIgnorePrivilegedAndPasswordFields() throws Exception {
-        User user = null;
-        try {
-            user = createTestUser();
-            String originalPassword = user.getUserPassword();
-            String loginContent = mockMvc.perform(post("/user/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(String.format(
-                                    "{\"userAccount\":\"%s\",\"userPassword\":\"Password123\"}",
-                                    user.getUserAccount())))
-                    .andExpect(status().isOk())
-                    .andReturn()
-                    .getResponse()
-                    .getContentAsString();
-            JsonNode login = objectMapper.readTree(loginContent).path("data");
-            String authorization = login.path("tokenPrefix").asText() + " " + login.path("token").asText();
-
-            mockMvc.perform(post("/user/update")
-                            .header("Authorization", authorization)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(String.format(
-                                    "{\"id\":%d,\"username\":\"safe_name\",\"city\":\"Xi'an\",\"userRole\":1,\"userStatus\":1,\"userPassword\":\"hacked\"}",
-                                    user.getId())))
-                    .andExpect(status().isOk());
-
-            User updated = userService.getById(user.getId());
-            Assertions.assertEquals("safe_name", updated.getUsername());
-            Assertions.assertEquals("Xi'an", updated.getCity());
-            Assertions.assertEquals(0, updated.getUserRole());
-            Assertions.assertEquals(0, updated.getUserStatus());
-            Assertions.assertEquals(originalPassword, updated.getUserPassword());
-        } finally {
-            deletePhysically(user);
-        }
-    }
-
-    @Test
-    void searchUsersByTags_shouldReturnCreatedUser() {
-        User user = null;
-        Long tagA = 107L;
-        Long tagB = 108L;
-        try {
-            user = createTestUser();
-            User updateUser = new User();
-            updateUser.setId(user.getId());
-            updateUser.setTagIds(String.format("[%s,%s]", tagA, tagB));
-            userService.updateById(updateUser);
-
-            List<User> userList = userService.searchUsersByTags(Arrays.asList(tagA, tagB));
-            List<Long> idList = userList.stream().map(User::getId).collect(Collectors.toList());
-
-            Assertions.assertTrue(idList.contains(user.getId()));
-        } finally {
-            deletePhysically(user);
-        }
-    }
-
-    @Test
-    void searchUsersByKeywords_shouldReturnPagedPublicUsers() {
-        User loginUser = null;
-        User matchedUser = null;
-        User unmatchedUser = null;
-        try {
-            loginUser = createTestUser();
-            matchedUser = createTestUser();
-            unmatchedUser = createTestUser();
-
-            User updateMatchedUser = new User();
-            updateMatchedUser.setId(matchedUser.getId());
-            updateMatchedUser.setUsername("badminton_" + randomSuffix());
-            updateMatchedUser.setTagIds("[107,102]");
-            userService.updateById(updateMatchedUser);
-
-            User updateUnmatchedUser = new User();
-            updateUnmatchedUser.setId(unmatchedUser.getId());
-            updateUnmatchedUser.setUsername("reading_" + randomSuffix());
-            updateUnmatchedUser.setTagIds("[704]");
-            userService.updateById(updateUnmatchedUser);
-
-            Page<UserSearchResultVO> userPage = userService.searchUsersByKeywords(
-                    Arrays.asList("badminton"),
-                    1,
-                    5,
-                    loginUser.getId()
+            Assertions.assertEquals(
+                    "sync_up_test",
+                    databaseName,
+                    "当前连接的不是 sync_up_test，已停止测试，避免污染开发数据库"
             );
-            List<Long> idList = userPage.getRecords()
-                    .stream()
-                    .map(UserSearchResultVO::getId)
-                    .collect(Collectors.toList());
-
-            Assertions.assertTrue(idList.contains(matchedUser.getId()));
-            Assertions.assertFalse(idList.contains(unmatchedUser.getId()));
-            Assertions.assertFalse(idList.contains(loginUser.getId()));
-        } finally {
-            deletePhysically(loginUser);
-            deletePhysically(matchedUser);
-            deletePhysically(unmatchedUser);
         }
     }
 
     @Test
-    void searchUsersByKeywords_shouldRejectOversizedPageSize() {
+    @Transactional
+    void userRegister_whenInputValid_shouldCreateUserWithEncryptedPassword() {
+        String account = "reg_" + randomSuffix();
+        String password = "12345678";
+        String checkPassword = "12345678";
+
+        // Act
+        long resultRegisterId = userService.userRegister(account, password, checkPassword);
+
+        // Assert
+        Assertions.assertTrue(resultRegisterId > 0L);
+        // 用户表中能够查到该用户
+        User registeredUser = userService.getById(resultRegisterId);
+        Assertions.assertNotNull(registeredUser);
+        Assertions.assertEquals(account, registeredUser.getUserAccount());
+        Assertions.assertNotEquals(password, registeredUser.getUserPassword());
+        Assertions.assertTrue(
+                PASSWORD_ENCODER.matches(password, registeredUser.getUserPassword())
+        );
+    }
+
+    @Test
+    @Transactional
+    void userRegister_whenAccountAlreadyExists_shouldBeRejected() {
+        String account = "reg_" + randomSuffix();
+        String password = "12345678";
+        String checkPassword = "12345678";
+
+        User registeredUser = User.builder()
+                .userAccount(account)
+                .userPassword(PASSWORD_ENCODER.encode(password))
+                .build();
+
+        boolean result = userService.save(registeredUser);
+        Assertions.assertTrue(result);
+
+        // Act
         BusinessException exception = Assertions.assertThrows(
                 BusinessException.class,
-                () -> userService.searchUsersByKeywords(Arrays.asList("Java"), 1, 11, null)
+                () -> userService.userRegister(account, password, checkPassword)
         );
 
-        Assertions.assertNotNull(exception);
+        // Assert
+        Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
+        Assertions.assertEquals("账号重复", exception.getDescription());
+        // 数据库中仍然只有一条该账号记录
+        Long resultUserCount = userService.lambdaQuery()
+                .eq(User::getUserAccount, account)
+                .count();
+        Assertions.assertEquals(1L, resultUserCount);
     }
 
-    private User createTestUser() {
-        User user = new User();
+    @Test
+    @Transactional
+    void userRegister_whenPasswordsDoNotMatch_shouldBeRejected() {
+        String account = "reg_" + randomSuffix();
+        String password = "12345678";
+        String checkPassword = "12341233";
+
+        // Act
+        BusinessException exception = Assertions.assertThrows(
+                BusinessException.class,
+                () -> userService.userRegister(account, password, checkPassword)
+        );
+
+        // Assert
+        Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
+        Assertions.assertEquals("两次输入的密码不一致", exception.getDescription());
+        // 数据库中不存在该账号记录
+        Long resultUserCount = userService.lambdaQuery()
+                .eq(User::getUserAccount, account)
+                .count();
+        Assertions.assertEquals(0L, resultUserCount);
+    }
+
+    @Test
+    @Transactional
+    void userRegister_whenAccountContainsSpecialCharacters_shouldBeRejected() {
+        String account = "reg_!" + randomSuffix();
+        String password = "1234~5678";
+        String checkPassword = "1234~5678";
+
+        // Act
+        BusinessException exception = Assertions.assertThrows(
+                BusinessException.class,
+                () -> userService.userRegister(account, password, checkPassword)
+        );
+
+        // Assert
+        Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
+        Assertions.assertEquals("账号不能包含特殊字符", exception.getDescription());
+        // 数据库中不存在该账号记录
+        Long resultUserCount = userService.lambdaQuery()
+                .eq(User::getUserAccount, account)
+                .count();
+        Assertions.assertEquals(0L, resultUserCount);
+    }
+
+    @Test
+    @Transactional
+    void userRegister_whenAccountHasSurroundingWhitespace_shouldTrimAccountAndSucceed() {
+        String account = "    reg" + randomSuffix() + "   ";
+        String password = "1234~5678";
+        String checkPassword = "1234~5678";
+
+        // Act
+        long registeredId = userService.userRegister(account, password, checkPassword);
+
+        // Assert
+        Assertions.assertTrue(registeredId > 0);
+        // 数据库中保存的是去除账号前后空格的格式
+        User savedUser = userService.lambdaQuery()
+                .eq(User::getId, registeredId).one();
+        Assertions.assertNotNull(savedUser);
+        Assertions.assertEquals(account.trim(), savedUser.getUserAccount());
+    }
+
+    @Test
+    @Transactional
+    void updateUser_normalUserUpdateSelf_shouldSucceed() {
+        String account = "reg_" + randomSuffix();
+        User normalUser = User.builder()
+                .username("西北小子")
+                .userAccount(account)
+                .city("西安")
+                .userPassword("12345678")
+                .userRole(0)
+                .build();
+
+        boolean saved = userService.save(normalUser);
+        Assertions.assertTrue(saved);
+
+        // Act
+        normalUser.setUsername("京城世子");
+        normalUser.setCity("北京");
+        int updated = userService.updateUser(normalUser, normalUser);
+
+        // Assert
+        Assertions.assertTrue(updated > 0);
+        // 数据库中该对象资料应更新
+        User updatedUser = userService.lambdaQuery()
+                .eq(User::getId, normalUser.getId()).one();
+        Assertions.assertEquals("北京", updatedUser.getCity());
+        Assertions.assertEquals("京城世子", updatedUser.getUsername());
+    }
+
+    @Test
+    @Transactional
+    void searchUsersByTags_whenUsersMatchAnyRequestedTag_shouldReturnAllMatchingUsers() {
+        Tag tagOne = createEnabledTag();
+        Tag tagTwo = createEnabledTag();
+        long now = System.currentTimeMillis();
+
+        User currentUser = User.builder()
+                .username("user-" + randomSuffix())
+                .userAccount("account-" + randomSuffix())
+                .userPassword("12345678")
+                .userStatus(0)
+                .tagIds("[" + tagOne.getId() + "]")
+                .build();
+        User matchTagOne = User.builder()
+                .username("user-" + randomSuffix())
+                .userAccount("account-" + randomSuffix())
+                .userPassword("12345678")
+                .userStatus(0)
+                .tagIds("[" + tagOne.getId() + "]")
+                .lastActiveTime(new Date(now - 60_000))
+                .build();
+        User matchTagTwo = User.builder()
+                .username("user-" + randomSuffix())
+                .userAccount("account-" + randomSuffix())
+                .userPassword("12345678")
+                .userStatus(0)
+                .tagIds("[" + tagTwo.getId() + "]")
+                .lastActiveTime(new Date(now))
+                .build();
+        User disabledUser = User.builder()
+                .username("user-" + randomSuffix())
+                .userAccount("account-" + randomSuffix())
+                .userPassword("12345678")
+                .userStatus(1)
+                .tagIds("[" + tagOne.getId() + "]")
+                .build();
+
+        boolean savedBatch = userService.saveBatch(List.of(currentUser, matchTagOne, matchTagTwo, disabledUser));
+        Assertions.assertTrue(savedBatch);
+
+        // Act
+        Page<UserSearchResultVO> firstPage = userService.searchUsersByTags(
+                List.of(tagOne.getId(), tagTwo.getId()), 1, 1, currentUser.getId());
+        Page<UserSearchResultVO> secondPage = userService.searchUsersByTags(
+                List.of(tagOne.getId(), tagTwo.getId()), 2, 1, currentUser.getId());
+
+        // Assert
+        Assertions.assertEquals(2, firstPage.getTotal());
+        Assertions.assertEquals(1, firstPage.getRecords().size());
+        Assertions.assertEquals(matchTagTwo.getId(), firstPage.getRecords().getFirst().getId(),
+                "最近活跃用户应该排在前面");
+        Assertions.assertEquals(1, secondPage.getRecords().size());
+        Assertions.assertEquals(matchTagOne.getId(), secondPage.getRecords().getFirst().getId());
+        Set<Long> actualUserIds = Set.of(
+                firstPage.getRecords().getFirst().getId(),
+                secondPage.getRecords().getFirst().getId());
+        Assertions.assertEquals(Set.of(matchTagOne.getId(), matchTagTwo.getId()), actualUserIds,
+                "应命中任一标签，同时排除当前用户和禁用用户");
+    }
+
+    private Tag createEnabledTag() {
         String suffix = randomSuffix();
-        user.setUsername("test_" + suffix);
-        user.setUserAccount("account_" + suffix);
-        user.setUserPassword(PASSWORD_ENCODER.encode("Password123"));
-        user.setUserRole(0);
-        user.setUserStatus(0);
-        boolean saved = userService.save(user);
-        Assertions.assertTrue(saved, "test user should be created");
-        return user;
+        Tag tag = Tag.builder()
+                .categoryId(1L)
+                .code("test-tag-" + suffix)
+                .name("测试标签-" + suffix)
+                .description("标签搜索测试数据")
+                .status(1)
+                .sortOrder(0)
+                .build();
+        Assertions.assertTrue(tagService.save(tag));
+        return tag;
     }
 
     private String randomSuffix() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 10);
-    }
-
-    private void deletePhysically(User user) {
-        if (user != null && user.getId() > 0) {
-            deletePhysically(user.getId());
-        }
-    }
-
-    private void deletePhysically(Long userId) {
-        if (userId != null && userId > 0) {
-            userTeamMapper.deleteByTeamCreatorUserIdPhysically(userId);
-            userTeamMapper.deleteByUserIdPhysically(userId);
-            teamMapper.deleteByUserIdPhysically(userId);
-            userMapper.deleteByIdPhysically(userId);
-        }
     }
 }

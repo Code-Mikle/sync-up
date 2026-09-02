@@ -224,7 +224,9 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
                 queryWrapper.eq("status", statusEnum.getValue());
             }
         }
-        queryWrapper.and(qw -> qw.gt("expireTime", new Date()).or().isNull("expireTime"));
+        queryWrapper.and(qw ->
+                qw.gt("expireTime", new Date()).or().isNull("expireTime")
+        );
         List<Team> teamList = this.list(queryWrapper);
         if (CollectionUtils.isEmpty(teamList)) {
             return new ArrayList<>();
@@ -330,6 +332,9 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         }
         Integer status = team.getStatus();
         TeamStatusEnum teamStatusEnum = TeamStatusEnum.getEnumByValue(status);
+        if (teamStatusEnum == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "invalid team status");
+        }
         if (TeamStatusEnum.PRIVATE.equals(teamStatusEnum)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "cannot join a private team");
         }
@@ -355,7 +360,11 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
         }
 
         long teamHasJoinNum = this.countTeamUserByTeamId(teamId);
-        if (teamHasJoinNum >= team.getMaxNum()) {
+        Integer maxNum = team.getMaxNum();
+        if (maxNum == null || maxNum <= 0) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "invalid team size");
+        }
+        if (teamHasJoinNum >= maxNum) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "team is full");
         }
 

@@ -11,7 +11,7 @@ import org.apache.ibatis.annotations.Select;
  * 用户 Mapper
  */
 public interface UserMapper extends BaseMapper<User> {
-    @Select("SELECT id FROM `user` WHERE id = #{userId} FOR UPDATE")
+    @Select("SELECT id FROM `user` WHERE id = #{userId} AND isDelete = 0 FOR UPDATE")
     Long lockUserById(@Param("userId") Long userId);
 
     @Delete("DELETE FROM `user` WHERE id = #{userId}")

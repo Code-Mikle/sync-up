@@ -99,7 +99,7 @@ sync-up:
       api-key: ${DASHSCOPE_API_KEY:}
       temperature: ${SYNC_UP_AI_AGENT_TEMPERATURE:0.1}
       timeout-ms: ${SYNC_UP_AI_AGENT_TIMEOUT_MS:60000}
-      max-tool-calls: ${SYNC_UP_AI_AGENT_MAX_TOOL_CALLS:3}
+      max-tool-calls: ${SYNC_UP_AI_AGENT_MAX_TOOL_CALLS:7}
       max-input-length: ${SYNC_UP_AI_AGENT_MAX_INPUT_LENGTH:1000}
       log-requests: ${SYNC_UP_AI_AGENT_LOG_REQUESTS:false}
       log-responses: ${SYNC_UP_AI_AGENT_LOG_RESPONSES:false}

@@ -4,14 +4,15 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mikle.syncup.assembler.UserAssembler;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.constant.UserConstant;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.ai.service.AiUserProfileService;
+import com.mikle.syncup.model.domain.Tag;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.vo.UserLoginVO;
 import com.mikle.syncup.model.vo.UserSearchResultVO;
-import com.mikle.syncup.model.vo.UserVO;
 import com.mikle.syncup.service.UserService;
 import com.mikle.syncup.service.TagService;
 import com.mikle.syncup.mapper.UserMapper;
@@ -22,7 +23,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
-import org.springframework.util.DigestUtils;
 
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,9 +34,6 @@ import java.util.stream.Collectors;
 import static com.mikle.syncup.constant.UserConstant.TOKEN_NAME;
 import static com.mikle.syncup.constant.UserConstant.TOKEN_PREFIX;
 
-/**
- * 用户服务实现类
- */
 @Service
 @Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
@@ -51,12 +48,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     @Resource
     private TagService tagService;
 
-    /**
-     * 盐值，混淆密码
-     */
     private static final PasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
-    private static final String SALT = "mikle";
+    @Resource
+    private UserAssembler userAssembler;
 
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
@@ -106,25 +101,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         return user.getId();
     }
 
-
     @Override
     public UserLoginVO userLogin(String userAccount, String userPassword, HttpServletRequest request) {
         // 1. 校验
-        if (StringUtils.isAnyBlank(userAccount, userPassword)) {
-            return null;
-        }
-        if (userAccount.length() < 4) {
-            return null;
-        }
-        if (userPassword.length() < 8) {
-            return null;
-        }
+        if (StringUtils.isAnyBlank(userAccount, userPassword)) { return null; }
+        if (userAccount.length() < 4) { return null; }
+        if (userPassword.length() < 8) { return null; }
         // 账户不能包含特殊字符
         String validPattern = "[`~!@#$%^&*()+=|{}':;',\\\\[\\\\].<>/?~！@#￥%……&*（）——+|{}【】‘；：”“’。，、？]";
         Matcher matcher = Pattern.compile(validPattern).matcher(userAccount);
-        if (matcher.find()) {
-            return null;
-        }
+        if (matcher.find()) { return null; }
         // 查询用户是否存在
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("userAccount", userAccount);
@@ -134,91 +120,31 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             log.info("user login failed, userAccount cannot match userPassword");
             return null;
         }
-        if (isLegacyMd5Password(user.getUserPassword())) {
-            User updateUser = new User();
-            updateUser.setId(user.getId());
-            updateUser.setUserPassword(PASSWORD_ENCODER.encode(userPassword));
-            this.updateById(updateUser);
-        }
-        // 3. 用户脱敏
-        User safetyUser = getSafetyUser(user);
-        // 4. 记录用户的登录态
+        // 3. 记录用户的登录态
         StpUtil.login(user.getId());
         Date lastActiveTime = new Date();
         updateLastActiveTime(user.getId(), lastActiveTime);
-        safetyUser.setLastActiveTime(lastActiveTime);
+        user.setLastActiveTime(lastActiveTime);
         UserLoginVO userLoginVO = new UserLoginVO();
-        userLoginVO.setUser(getUserVO(safetyUser));
+        userLoginVO.setUser(userAssembler.toCurrentUserVO(user));
         userLoginVO.setToken(StpUtil.getTokenValue());
         userLoginVO.setTokenName(TOKEN_NAME);
         userLoginVO.setTokenPrefix(TOKEN_PREFIX);
         return userLoginVO;
     }
 
-    private boolean passwordMatches(String rawPassword, String storedPassword) {
-        if (StringUtils.isBlank(rawPassword) || StringUtils.isBlank(storedPassword)) {
-            return false;
-        }
-        if (isLegacyMd5Password(storedPassword)) {
-            String legacyPassword = DigestUtils.md5DigestAsHex((SALT + rawPassword).getBytes());
-            return legacyPassword.equals(storedPassword);
-        }
-        return PASSWORD_ENCODER.matches(rawPassword, storedPassword);
-    }
-
-    private boolean isLegacyMd5Password(String storedPassword) {
-        return storedPassword != null && storedPassword.matches("^[a-fA-F0-9]{32}$");
-    }
-
-    /**
-     * 用户脱敏
-     */
     @Override
-    public User getSafetyUser(User originUser) {
-        if (originUser == null) {
-            return null;
+    public User getLoginUser(HttpServletRequest request) {
+        if (!StpUtil.isLogin()) {
+            throw new BusinessException(ErrorCode.NOT_LOGIN);
         }
-        User safetyUser = new User();
-        safetyUser.setId(originUser.getId());
-        safetyUser.setUsername(originUser.getUsername());
-        safetyUser.setUserAccount(originUser.getUserAccount());
-        safetyUser.setAvatarUrl(originUser.getAvatarUrl());
-        safetyUser.setGender(originUser.getGender());
-        safetyUser.setPhone(originUser.getPhone());
-        safetyUser.setEmail(originUser.getEmail());
-        safetyUser.setCity(originUser.getCity());
-        safetyUser.setUserRole(originUser.getUserRole());
-        safetyUser.setUserStatus(originUser.getUserStatus());
-        safetyUser.setCreateTime(originUser.getCreateTime());
-        safetyUser.setLastActiveTime(originUser.getLastActiveTime());
-        safetyUser.setTagIds(originUser.getTagIds());
-        safetyUser.setProfile(originUser.getProfile());
-        return safetyUser;
-    }
-
-    @Override
-    public UserVO getUserVO(User originUser) {
-        if (originUser == null) {
-            return null;
+        long userId = StpUtil.getLoginIdAsLong();
+        User user = this.getById(userId);
+        if (user == null) {
+            StpUtil.logout();
+            throw new BusinessException(ErrorCode.NOT_LOGIN, "登录用户不存在");
         }
-        UserVO userVO = new UserVO();
-        userVO.setId(originUser.getId());
-        userVO.setUsername(originUser.getUsername());
-        userVO.setUserAccount(originUser.getUserAccount());
-        userVO.setAvatarUrl(originUser.getAvatarUrl());
-        userVO.setGender(originUser.getGender());
-        userVO.setPhone(originUser.getPhone());
-        userVO.setEmail(originUser.getEmail());
-        userVO.setCity(originUser.getCity());
-        userVO.setUserRole(originUser.getUserRole());
-        userVO.setUserStatus(originUser.getUserStatus());
-        userVO.setCreateTime(originUser.getCreateTime());
-        userVO.setUpdateTime(originUser.getUpdateTime());
-        userVO.setLastActiveTime(originUser.getLastActiveTime());
-        userVO.setProfile(originUser.getProfile());
-        userVO.setTagIds(tagService.parseTagIds(originUser.getTagIds()));
-        userVO.setTagNames(tagService.toDisplayTagNames(originUser.getTagIds()));
-        return userVO;
+        return userAssembler.toAuthenticatedUser(user);
     }
 
     /**
@@ -230,96 +156,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             StpUtil.logout();
         }
         return 1;
-    }
-
-    /**
-     * 根据标准标签 id 搜索用户，默认命中任一标签即可。
-     */
-    @Override
-    public List<User> searchUsersByTags(List<Long> tagIds) {
-        if (CollectionUtils.isEmpty(tagIds)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR);
-        }
-        List<Long> normalizedTagIds = tagService.validateEnabledTagIds(tagIds).stream()
-                .map(com.mikle.syncup.model.domain.Tag::getId)
-                .toList();
-        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.and(wrapper -> {
-            java.util.Iterator<Long> iterator = normalizedTagIds.iterator();
-            wrapper.apply("JSON_CONTAINS(tagIds, CAST({0} AS JSON))", iterator.next());
-            while (iterator.hasNext()) {
-                wrapper.or().apply("JSON_CONTAINS(tagIds, CAST({0} AS JSON))", iterator.next());
-            }
-        });
-        return userMapper.selectList(queryWrapper).stream()
-                .map(this::getSafetyUser)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public Page<UserSearchResultVO> searchUsersByKeywords(List<String> keywords, long pageNum, long pageSize, Long excludeUserId) {
-        if (pageNum <= 0) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "pageNum must be greater than 0");
-        }
-        if (pageSize <= 0 || pageSize > 10) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "pageSize must be between 1 and 10");
-        }
-        List<String> normalizedKeywords = Optional.ofNullable(keywords)
-                .orElse(Collections.emptyList())
-                .stream()
-                .filter(StringUtils::isNotBlank)
-                .map(String::trim)
-                .distinct()
-                .limit(5)
-                .collect(Collectors.toList());
-        if (CollectionUtils.isEmpty(normalizedKeywords)) {
-            return new Page<>(pageNum, pageSize, 0);
-        }
-
-        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tagIds", "profile", "createTime", "lastActiveTime");
-        if (excludeUserId != null && excludeUserId > 0) {
-            queryWrapper.ne("id", excludeUserId);
-        }
-        queryWrapper.and(qw -> qw.eq("userStatus", 0).or().isNull("userStatus"));
-        for (String keyword : normalizedKeywords) {
-            queryWrapper.and(qw -> qw.like("username", keyword)
-                    .or().like("profile", keyword));
-        }
-        queryWrapper.orderByDesc("updateTime");
-
-        Page<User> userPage = this.page(new Page<>(pageNum, pageSize), queryWrapper);
-        Page<UserSearchResultVO> resultPage = new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
-        resultPage.setRecords(userPage.getRecords()
-                .stream()
-                .map(this::getPublicUser)
-                .collect(Collectors.toList()));
-        return resultPage;
-    }
-
-    @Override
-    public UserSearchResultVO getPublicUser(User originUser) {
-        if (originUser == null) {
-            return null;
-        }
-        UserSearchResultVO userSearchResultVO = new UserSearchResultVO();
-        userSearchResultVO.setId(originUser.getId());
-        userSearchResultVO.setUsername(originUser.getUsername());
-        userSearchResultVO.setAvatarUrl(originUser.getAvatarUrl());
-        userSearchResultVO.setGender(originUser.getGender());
-        userSearchResultVO.setCity(originUser.getCity());
-        userSearchResultVO.setTagNames(tagService.toDisplayTagNames(originUser.getTagIds()));
-        userSearchResultVO.setProfile(originUser.getProfile());
-        userSearchResultVO.setCreateTime(originUser.getCreateTime());
-        userSearchResultVO.setLastActiveTime(originUser.getLastActiveTime());
-        return userSearchResultVO;
-    }
-
-    private void updateLastActiveTime(long userId, Date lastActiveTime) {
-        User updateUser = new User();
-        updateUser.setId(userId);
-        updateUser.setLastActiveTime(lastActiveTime);
-        this.updateById(updateUser);
     }
 
     @Override
@@ -360,26 +196,92 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         return updated;
     }
 
-    private void tryEnqueueProfileGeneration(long userId, String sourceText) {
-        try {
-            aiUserProfileService.onSelfIntroductionChanged(userId, sourceText);
-        } catch (Exception e) {
-            log.warn("enqueue AI profile generation failed, userId={}", userId, e);
+    /**
+     * 根据标准标签 id 搜索用户，默认命中任一标签即可。
+     */
+    @Override
+    public Page<UserSearchResultVO> searchUsersByTags(List<Long> tagIds,
+                                                      long pageNum,
+                                                      long pageSize,
+                                                      Long excludeUserId) {
+        if (CollectionUtils.isEmpty(tagIds)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
+        if (pageNum <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "pageNum must be greater than 0");
+        }
+        if (pageSize <= 0 || pageSize > 10) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "pageSize must be between 1 and 10");
+        }
+        List<Long> normalizedTagIds = tagService.validateEnabledTagIds(tagIds).stream()
+                .map(Tag::getId)
+                .toList();
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tagIds", "profile",
+                        "createTime", "lastActiveTime")
+                .eq("userStatus", 0)
+                .ne(excludeUserId != null && excludeUserId > 0, "id", excludeUserId);
+        queryWrapper.and(wrapper -> {
+            Iterator<Long> iterator = normalizedTagIds.iterator();
+            wrapper.apply("JSON_CONTAINS(tagIds, CAST({0} AS JSON))", iterator.next());
+            while (iterator.hasNext()) {
+                wrapper.or().apply("JSON_CONTAINS(tagIds, CAST({0} AS JSON))", iterator.next());
+            }
+        });
+        queryWrapper.orderByDesc("lastActiveTime").orderByDesc("id");
+        Page<User> entityPage = userMapper.selectPage(new Page<>(pageNum, pageSize), queryWrapper);
+        Page<UserSearchResultVO> resultPage =
+                new Page<>(entityPage.getCurrent(), entityPage.getSize(), entityPage.getTotal());
+        resultPage.setRecords(entityPage.getRecords().stream()
+                .map(userAssembler::toPublicUserVO)
+                .toList());
+        return resultPage;
     }
 
+
+    /**
+     * 根据输入的关键词检索，检索字段范围为 username、profile
+     */
     @Override
-    public User getLoginUser(HttpServletRequest request) {
-        if (!StpUtil.isLogin()) {
-            throw new BusinessException(ErrorCode.NOT_LOGIN);
+    public Page<UserSearchResultVO> searchUsersByKeywords(List<String> keywords, long pageNum, long pageSize, Long excludeUserId) {
+        if (pageNum <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "pageNum must be greater than 0");
         }
-        long userId = StpUtil.getLoginIdAsLong();
-        User user = this.getById(userId);
-        if (user == null) {
-            StpUtil.logout();
-            throw new BusinessException(ErrorCode.NOT_LOGIN, "登录用户不存在");
+        if (pageSize <= 0 || pageSize > 10) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "pageSize must be between 1 and 10");
         }
-        return getSafetyUser(user);
+        List<String> normalizedKeywords = Optional.ofNullable(keywords)
+                .orElse(Collections.emptyList())
+                .stream()
+                .filter(StringUtils::isNotBlank)
+                .map(String::trim)
+                .distinct()
+                .limit(5)
+                .collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(normalizedKeywords)) {
+            return new Page<>(pageNum, pageSize, 0);
+        }
+
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        queryWrapper.select("id", "username", "avatarUrl", "gender", "city", "tagIds", "profile",
+                "createTime", "lastActiveTime");
+        if (excludeUserId != null && excludeUserId > 0) {
+            queryWrapper.ne("id", excludeUserId);
+        }
+        queryWrapper.and(qw -> qw.eq("userStatus", 0).or().isNull("userStatus"));
+        for (String keyword : normalizedKeywords) {
+            queryWrapper.and(qw -> qw.like("username", keyword)
+                    .or().like("profile", keyword));
+        }
+        queryWrapper.orderByDesc("updateTime");
+
+        Page<User> userPage = this.page(new Page<>(pageNum, pageSize), queryWrapper);
+        Page<UserSearchResultVO> resultPage = new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
+        resultPage.setRecords(userPage.getRecords()
+                .stream()
+                .map(userAssembler::toPublicUserVO)
+                .collect(Collectors.toList()));
+        return resultPage;
     }
 
     /**
@@ -394,12 +296,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         return isAdmin(user);
     }
 
-    /**
-     * 是否为管理员
-     */
     @Override
     public boolean isAdmin(User loginUser) {
         return loginUser != null && loginUser.getUserRole() == UserConstant.ADMIN_ROLE;
+    }
+
+    private boolean passwordMatches(String rawPassword, String storedPassword) {
+        return StringUtils.isNotBlank(rawPassword)
+                && StringUtils.isNotBlank(storedPassword)
+                && PASSWORD_ENCODER.matches(rawPassword, storedPassword);
+    }
+
+    private void tryEnqueueProfileGeneration(long userId, String sourceText) {
+        try {
+            aiUserProfileService.onSelfIntroductionChanged(userId, sourceText);
+        } catch (Exception e) {
+            log.warn("enqueue AI profile generation failed, userId={}", userId, e);
+        }
+    }
+
+    private void updateLastActiveTime(long userId, Date lastActiveTime) {
+        User updateUser = new User();
+        updateUser.setId(userId);
+        updateUser.setLastActiveTime(lastActiveTime);
+        this.updateById(updateUser);
     }
 
 }

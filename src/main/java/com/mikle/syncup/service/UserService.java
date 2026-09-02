@@ -3,7 +3,6 @@ package com.mikle.syncup.service;
 import com.mikle.syncup.model.domain.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.mikle.syncup.model.vo.UserLoginVO;
-import com.mikle.syncup.model.vo.UserVO;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.mikle.syncup.model.vo.UserSearchResultVO;
 
@@ -17,61 +16,43 @@ public interface UserService extends IService<User> {
 
     /**
      * 用户注册
-     *
-     * @param userAccount   用户账户
-     * @param userPassword  用户密码
-     * @param checkPassword 校验密码
-     * @return 新用户 id
      */
     long userRegister(String userAccount, String userPassword, String checkPassword);
 
     /**
      * 用户登录
-     *
-     * @param userAccount  用户账户
-     * @param userPassword 用户密码
-     * @param request
-     * @return 登录结果
      */
     UserLoginVO userLogin(String userAccount, String userPassword, HttpServletRequest request);
 
     /**
-     * 用户脱敏
-     *
-     * @param originUser
-     * @return
+     * 更新用户信息
      */
-    User getSafetyUser(User originUser);
+    int updateUser(User user, User loginUser);
 
     /**
-     * 将已脱敏用户转换为面向前端的用户资料。
-     */
-    UserVO getUserVO(User originUser);
-
-    /**
-     * Convert a user entity to fields that are safe to expose to other users.
-     */
-    UserSearchResultVO getPublicUser(User originUser);
-
-    /**
-     * 用户注销
-     *
-     * @param request
-     * @return
+     * 用户退出
      */
     int userLogout(HttpServletRequest request);
 
     /**
-     * 根据标签搜索用户
-     *
-     * @param tagIds 标准标签 id，满足任一标签即可
-     * @return
+     * 获取当前登录用户信息
      */
-    List<User> searchUsersByTags(List<Long> tagIds);
+    User getLoginUser(HttpServletRequest request);
+
+    /**
+     * 根据标签搜索用户
+     * @param tagIds 标准标签 id，满足任一标签即可
+     * @param pageNum 当前页码，从 1 开始
+     * @param pageSize 每页数量
+     * @param excludeUserId 不应出现在结果中的用户 id，可为空
+     */
+    Page<UserSearchResultVO> searchUsersByTags(List<Long> tagIds,
+                                               long pageNum,
+                                               long pageSize,
+                                               Long excludeUserId);
 
     /**
      * Keyword search for public user information.
-     *
      * @param keywords      keywords split from user input
      * @param pageNum       current page number
      * @param pageSize      page size
@@ -81,31 +62,12 @@ public interface UserService extends IService<User> {
     Page<UserSearchResultVO> searchUsersByKeywords(List<String> keywords, long pageNum, long pageSize, Long excludeUserId);
 
     /**
-     * 更新用户信息
-     * @param user
-     * @return
-     */
-    int updateUser(User user, User loginUser);
-
-    /**
-     * 获取当前登录用户信息
-     * @return
-     */
-    User getLoginUser(HttpServletRequest request);
-
-    /**
      * 是否为管理员
-     *
-     * @param request
-     * @return
      */
     boolean isAdmin(HttpServletRequest request);
 
     /**
      * 是否为管理员
-     *
-     * @param loginUser
-     * @return
      */
     boolean isAdmin(User loginUser);
 

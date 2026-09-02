@@ -4,13 +4,19 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.util.Date;
 
 /** 系统维护的标准活动标签。 */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @TableName("tag")
 public class Tag implements Serializable {
 

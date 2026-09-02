@@ -1,5 +1,6 @@
 package com.mikle.syncup.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.mikle.syncup.model.domain.Tag;
 import com.mikle.syncup.model.vo.TagCategoryVO;
 
@@ -7,7 +8,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-public interface TagService {
+public interface TagService extends IService<Tag> {
 
     int MAX_USER_TAGS = 10;
 
