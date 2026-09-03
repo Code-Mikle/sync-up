@@ -20,7 +20,7 @@ public class TeamIntent extends AiIntent {
     @Schema(description = "加密队伍密码，仅在用户提供队伍密码时使用")
     private String teamPassword;
 
-    @Schema(description = "活动大类编码：1-运动健身，2-户外出行，3-游戏电竞，4-桌游剧本，5-休闲娱乐，6-美食探店，7-学习成长，8-旅行出游，9-其他")
+    @Schema(description = "活动大类编码：1-运动健身，2-户外出行，3-游戏电竞，4-桌游剧本，5-休闲娱乐，6-美食探店，7-学习成长，8-旅行出游")
     private Integer activityCategory;
 
     @Schema(description = "活动类型，例如足球、羽毛球、健身、徒步")

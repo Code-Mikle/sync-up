@@ -1,8 +1,11 @@
 package com.mikle.syncup.common;
 
+import lombok.Getter;
+
 /**
  * 错误码
  */
+@Getter
 public enum ErrorCode {
 
     SUCCESS(0, "ok", ""),
@@ -31,15 +34,4 @@ public enum ErrorCode {
         this.description = description;
     }
 
-    public int getCode() {
-        return code;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public String getDescription() {
-        return description;
-    }
 }

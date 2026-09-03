@@ -1,6 +1,5 @@
 package com.mikle.syncup.ai;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.model.schema.GeneratedEmbedding;
@@ -11,23 +10,27 @@ import com.mikle.syncup.ai.service.ProfileEmbeddingGenerator;
 import com.mikle.syncup.ai.service.ProfileEmbeddingCodec;
 import com.mikle.syncup.ai.service.TeamRetrievalTextBuilder;
 import com.mikle.syncup.ai.service.TextHashService;
-import com.mikle.syncup.mapper.UserMapper;
 import com.mikle.syncup.model.domain.Team;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.vo.TeamUserVO;
 import com.mikle.syncup.service.TeamService;
 import com.mikle.syncup.service.UserService;
 import jakarta.annotation.Resource;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -36,11 +39,9 @@ import java.util.concurrent.TimeUnit;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest(properties = {
-        "sync-up.ai.agent.enabled=false",
-        "sync-up.ai.profile-generation.fixed-delay-ms=3600000",
-        "sync-up.ai.team-embedding.initial-delay-ms=3600000"
-})
+@SpringBootTest
+@ActiveProfiles(profiles = "test")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class HybridRecommendationServiceTest {
 
     @Resource
@@ -48,9 +49,6 @@ class HybridRecommendationServiceTest {
 
     @Resource
     private UserService userService;
-
-    @Resource
-    private UserMapper userMapper;
 
     @Resource
     private TeamService teamService;
@@ -65,43 +63,45 @@ class HybridRecommendationServiceTest {
     private ProfileEmbeddingCodec embeddingCodec;
 
     @Resource
-    private ObjectMapper objectMapper;
+    private JdbcTemplate jdbcTemplate;
 
     @Resource
-    private JdbcTemplate jdbcTemplate;
+    protected DataSource dataSource;
 
     @MockitoBean
     private ProfileEmbeddingGenerator embeddingGenerator;
 
-    private final List<Long> userIds = new ArrayList<>();
-    private final List<Long> teamIds = new ArrayList<>();
+    @BeforeEach
+    protected void ensureUsingTestDatabase() throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            String databaseName = connection.getCatalog();
+
+            Assertions.assertEquals(
+                    "sync_up_test",
+                    databaseName,
+                    "当前连接的不是 sync_up_test，已停止测试，避免污染开发数据库"
+            );
+        }
+    }
 
     @BeforeEach
-    void prepareSchemaAndEmbeddingGenerator() {
-        createTeamEmbeddingTableIfMissing();
+    void prepareEmbeddingGenerator() {
         when(embeddingGenerator.isAvailable()).thenReturn(true);
-        when(embeddingGenerator.modelName()).thenReturn("test-embedding-model");
         when(embeddingGenerator.generate(anyString())).thenReturn(
                 new GeneratedEmbedding("test-embedding-model", new float[]{1F, 0F}));
     }
 
-    @AfterEach
-    void cleanup() {
-        for (Long teamId : teamIds) {
-            jdbcTemplate.update("delete from ai_team_embedding where teamId = ?", teamId);
-            jdbcTemplate.update("delete from user_team where teamId = ?", teamId);
-            jdbcTemplate.update("delete from team where id = ?", teamId);
-        }
-        for (Long userId : userIds) {
-            jdbcTemplate.update("delete from ai_user_profile_embedding where userId = ?", userId);
-            jdbcTemplate.update("delete from ai_user_profile where userId = ?", userId);
-            jdbcTemplate.update("delete from ai_profile_update_task where userId = ?", userId);
-            jdbcTemplate.update("delete from ai_user_episode where userId = ?", userId);
-            userMapper.deleteByIdPhysically(userId);
-        }
+    @AfterAll
+    void shouldNotLeaveHybridTestUsers() {
+        Long remaining = jdbcTemplate.queryForObject(
+                "select count(*) from user where left(username, 7) = 'hybrid_'",
+                Long.class
+        );
+        Assertions.assertEquals(0L, remaining, "AI recommendation tests should not leave test users");
     }
 
     @Test
+    @Transactional
     void recommendUsers_shouldHardFilterAndRankByProfileEmbedding() {
         User current = createUser("西安", "[107]");
         User best = createUser("西安", "[107]");
@@ -129,6 +129,7 @@ class HybridRecommendationServiceTest {
     }
 
     @Test
+    @Transactional
     void recommendUsers_embeddingFailure_shouldFallbackToStructuredTags() {
         User current = createUser("西安", "[403]");
         createUser("西安", "[403]");
@@ -147,6 +148,7 @@ class HybridRecommendationServiceTest {
     }
 
     @Test
+    @Transactional
     void recommendTeams_shouldRankValidCurrentTeamEmbedding() {
         User current = createUser("西安", "[107]");
         insertProfile(current.getId(), "喜欢轻松羽毛球，不追求高强度竞技", 1);
@@ -173,6 +175,7 @@ class HybridRecommendationServiceTest {
     }
 
     @Test
+    @Transactional
     void recommendTeams_staleEmbedding_shouldFallbackWithoutUsingOldVector() {
         User current = createUser("西安", "[403]");
         Team team = createTeam(current, "桌游局", "轻松桌游");
@@ -208,7 +211,6 @@ class HybridRecommendationServiceTest {
         user.setTagIds(tagIds);
         user.setLastActiveTime(new Date());
         Assertions.assertTrue(userService.save(user));
-        userIds.add(user.getId());
         return user;
     }
 
@@ -225,7 +227,6 @@ class HybridRecommendationServiceTest {
         team.setStartTime(new Date(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(3)));
         team.setExpireTime(new Date(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(4)));
         long teamId = teamService.addTeam(team, owner);
-        teamIds.add(teamId);
         return teamService.getById(teamId);
     }
 
@@ -263,25 +264,4 @@ class HybridRecommendationServiceTest {
                 vector.length, embeddingCodec.serialize(embeddingCodec.normalize(vector)));
     }
 
-    private void createTeamEmbeddingTableIfMissing() {
-        jdbcTemplate.execute("""
-                create table if not exists ai_team_embedding
-                (
-                    id bigint auto_increment primary key,
-                    teamId bigint not null,
-                    contentVersion int not null,
-                    contentHash char(64) not null,
-                    embeddingModel varchar(128) not null,
-                    dimensions int not null,
-                    vectorJson mediumtext not null,
-                    status tinyint default 1 not null,
-                    generatedAt datetime not null,
-                    createTime datetime default CURRENT_TIMESTAMP null,
-                    updateTime datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
-                    isDelete tinyint default 0 not null,
-                    unique key uk_ai_team_embedding_team_version (teamId, contentVersion),
-                    key idx_ai_team_embedding_team_status (teamId, status)
-                )
-                """);
-    }
 }

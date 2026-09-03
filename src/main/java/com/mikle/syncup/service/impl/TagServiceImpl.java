@@ -1,8 +1,8 @@
 package com.mikle.syncup.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.common.ErrorCode;
@@ -19,14 +19,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -79,26 +72,17 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
 
     @Override
     public List<Tag> validateEnabledTagIds(Collection<Long> tagIds) {
-        if (CollectionUtils.isEmpty(tagIds)) {
-            return Collections.emptyList();
-        }
         Set<Long> normalized = normalizeTagIds(tagIds);
-        List<Tag> tags = tagMapper.selectList(new QueryWrapper<Tag>()
-                .in("id", normalized)
-                .eq("status", ENABLED));
-        if (tags.size() != normalized.size()) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "标签不存在或已禁用");
-        }
-        return tags;
+        return validateNormalizedTagIds(normalized);
     }
 
     @Override
     public String serializeAndValidateTagIds(Collection<Long> tagIds) {
         Set<Long> normalized = normalizeTagIds(tagIds);
-        validateEnabledTagIds(normalized);
+        validateNormalizedTagIds(normalized);
         try {
             return objectMapper.writeValueAsString(normalized);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "标签序列化失败");
         }
     }
@@ -135,8 +119,21 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
             return Collections.emptyList();
         }
         Map<Long, String> names = getEnabledTagNameMap(tagIds);
-        List<String> displayNames = tagIds.stream().map(names::get).filter(java.util.Objects::nonNull).toList();
+        List<String> displayNames = tagIds.stream().map(names::get).filter(Objects::nonNull).toList();
         return displayNames;
+    }
+
+    private List<Tag> validateNormalizedTagIds(Set<Long> normalizedTagIds) {
+        if (normalizedTagIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Tag> tags = tagMapper.selectList(new QueryWrapper<Tag>()
+                .in("id", normalizedTagIds)
+                .eq("status", ENABLED));
+        if (tags.size() != normalizedTagIds.size()) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "标签不存在或已禁用");
+        }
+        return tags;
     }
 
     private Set<Long> normalizeTagIds(Collection<Long> tagIds) {
