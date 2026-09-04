@@ -21,6 +21,7 @@ import com.mikle.syncup.ai.model.entity.AiChatSession;
 import com.mikle.syncup.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 

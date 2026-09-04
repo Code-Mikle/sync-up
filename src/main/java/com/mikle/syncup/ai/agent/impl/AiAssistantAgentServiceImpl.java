@@ -5,7 +5,6 @@ import com.mikle.syncup.ai.agent.AiAssistantAgentService;
 import com.mikle.syncup.ai.agent.AiAssistantTools;
 import com.mikle.syncup.ai.agent.AssistantAgent;
 import com.mikle.syncup.ai.config.AiAgentProperties;
-import com.mikle.syncup.ai.exception.InvalidToolArgumentsException;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.entity.AiChatSession;
 import com.mikle.syncup.ai.model.vo.AiChatResponseVO;
@@ -13,6 +12,7 @@ import com.mikle.syncup.ai.service.WorkingMemoryService;
 import com.mikle.syncup.model.domain.User;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
+import dev.langchain4j.service.tool.ToolErrorContext;
 import dev.langchain4j.service.tool.ToolErrorHandlerResult;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -51,21 +51,10 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
         String modelMessage = workingMemoryService.buildModelContext(session, loginUser, message);
         aiAgentToolContext.start(sessionKey, loginUser, message);
         try {
-            try {
-                return Optional.of(invokeAssistant(message, sessionKey, modelMessage));
-            } catch (RuntimeException firstFailure) {
-                if (!canSafelyRetryAfterToolArgumentsFailure(firstFailure)) {
-                    logAgentFailure(firstFailure, false);
-                    return Optional.empty();
-                }
-                aiAgentToolContext.start(sessionKey, loginUser, message);
-                try {
-                    return Optional.of(invokeAssistant(message, sessionKey, modelMessage));
-                } catch (RuntimeException retryFailure) {
-                    logAgentFailure(retryFailure, true);
-                    return Optional.empty();
-                }
-            }
+            return Optional.of(invokeAssistant(message, sessionKey, modelMessage));
+        } catch (RuntimeException failure) {
+            logAgentFailure(failure);
+            return Optional.empty();
         } finally {
             aiAgentToolContext.clear();
         }
@@ -82,30 +71,6 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
         return response;
     }
 
-    private boolean canSafelyRetryAfterToolArgumentsFailure(RuntimeException failure) {
-        AiAgentToolContext.State state = aiAgentToolContext.snapshot();
-        return state.getToolResults().isEmpty()
-                && state.getDraft() == null
-                && state.getDeleteConfirmation() == null
-                && isToolArgumentsFailure(failure);
-    }
-
-    private boolean isToolArgumentsFailure(Throwable failure) {
-        Throwable current = failure;
-        while (current != null) {
-            if (current instanceof InvalidToolArgumentsException) {
-                return true;
-            }
-            String message = current.getMessage();
-            if (StringUtils.containsIgnoreCase(message, "function.arguments")
-                    && StringUtils.containsIgnoreCase(message, "JSON")) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
-    }
-
     private TeamIntent buildResponseIntent(String message, AiAgentToolContext.State state) {
         TeamIntent intent = state.getTeamIntent();
         if (intent == null) {
@@ -120,16 +85,28 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
         return AiServices.builder(AssistantAgent.class)
                 .chatModel(chatModel)
                 .tools(aiAssistantTools)
-                .toolArgumentsErrorHandler((error, context) -> ToolErrorHandlerResult.text(
-                        "工具参数格式不正确，请重新调用该工具；未提供的可选参数必须省略。"))
+                .toolArgumentsErrorHandler(this::handleToolArgumentsError)
                 .maxSequentialToolsInvocations(Math.max(1, aiAgentProperties.getMaxToolCalls()))
                 .build();
     }
 
-    private void logAgentFailure(RuntimeException failure, boolean retried) {
-        log.warn("AI agent failed, fallback to deterministic flow. provider={}, model={}, retried={}, errorType={}," +
-                        "message={}",
-                aiAgentProperties.getProvider(), aiAgentProperties.getModel(), retried,
+    private ToolErrorHandlerResult handleToolArgumentsError(Throwable error, ToolErrorContext context) {
+        String toolName = StringUtils.defaultIfBlank(context.toolExecutionRequest().name(), "unknown");
+        String reason = error == null ? null : error.getMessage();
+        reason = StringUtils.abbreviate(
+                StringUtils.defaultIfBlank(StringUtils.normalizeSpace(reason), "参数无法按照工具定义解析"),
+                300
+        );
+        return ToolErrorHandlerResult.text(
+                "工具 '%s' 的参数无效：%s。请严格按照该工具的参数定义修正后重新调用；"
+                        .formatted(toolName, reason)
+                        + "不要传入未定义字段，未提供的可选参数请省略。"
+        );
+    }
+
+    private void logAgentFailure(RuntimeException failure) {
+        log.warn("AI agent failed, fallback to deterministic flow. provider={}, model={}, errorType={}, message={}",
+                aiAgentProperties.getProvider(), aiAgentProperties.getModel(),
                 failure.getClass().getSimpleName(), failure.getMessage(), failure);
     }
 }

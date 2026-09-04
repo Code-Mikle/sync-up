@@ -15,6 +15,7 @@ import com.mikle.syncup.service.UserTeamService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -44,7 +45,8 @@ class DeleteTeamConfirmationToolTest {
         User owner = user(1001L);
         Team team = team(2001L, owner.getId());
         when(teamService.getById(team.getId())).thenReturn(team);
-        when(userTeamService.count(org.mockito.ArgumentMatchers.<Wrapper<UserTeam>>any())).thenReturn(3L);
+        when(userTeamService.count(ArgumentMatchers.<Wrapper<UserTeam>>any()))
+                .thenReturn(3L);
 
         AiToolResult result = tool.execute(intent(team.getId()), owner);
 
@@ -74,7 +76,7 @@ class DeleteTeamConfirmationToolTest {
         Assertions.assertFalse(result.isSuccess());
         Assertions.assertNull(result.getData());
         Assertions.assertTrue(result.getSummary().contains("只能删除自己创建的队伍"));
-        verify(userTeamService, never()).count(org.mockito.ArgumentMatchers.<Wrapper<UserTeam>>any());
+        verify(userTeamService, never()).count(ArgumentMatchers.<Wrapper<UserTeam>>any());
         verify(teamService, never()).deleteTeam(anyLong(), any(User.class));
     }
 

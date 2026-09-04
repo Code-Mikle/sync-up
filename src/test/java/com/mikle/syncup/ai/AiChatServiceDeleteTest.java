@@ -1,7 +1,13 @@
 package com.mikle.syncup.ai;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.mikle.syncup.ai.mapper.AiChatMessageMapper;
+import com.mikle.syncup.ai.mapper.AiChatSessionMapper;
+import com.mikle.syncup.ai.mapper.AiToolCallLogMapper;
 import com.mikle.syncup.ai.model.dto.AiTeamDetailsRequest;
+import com.mikle.syncup.ai.model.entity.AiChatMessage;
+import com.mikle.syncup.ai.model.entity.AiChatSession;
+import com.mikle.syncup.ai.model.entity.AiToolCallLog;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.service.AiChatService;
 import com.mikle.syncup.ai.service.AiMemoryPipelineService;
@@ -68,6 +74,15 @@ class AiChatServiceDeleteTest {
     private UserTeamMapper userTeamMapper;
 
     @Resource
+    private AiToolCallLogMapper aiToolCallLogMapper;
+
+    @Resource
+    private AiChatMessageMapper aiChatMessageMapper;
+
+    @Resource
+    private AiChatSessionMapper aiChatSessionMapper;
+
+    @Resource
     private JdbcTemplate jdbcTemplate;
 
     @Resource
@@ -91,6 +106,8 @@ class AiChatServiceDeleteTest {
 
     @AfterEach
     void cleanup() {
+        // 必须物理删除测试数据；这些 AI 表尚无按用户物理删除的 Mapper 方法。
+        // 工具日志使用 REQUIRES_NEW 独立提交，不能仅依赖测试事务回滚清理。
         for (Long userId : userIds) {
             jdbcTemplate.update("delete from ai_tool_call_log where userId = ?", userId);
             jdbcTemplate.update("delete from ai_episode_extraction_task where userId = ?", userId);
@@ -122,7 +139,7 @@ class AiChatServiceDeleteTest {
                 () -> Assertions.assertEquals(Boolean.TRUE, data.get("deleted")),
                 () -> Assertions.assertEquals(teamId, ((Number) data.get("teamId")).longValue()),
                 () -> Assertions.assertEquals(0L, countPhysicalTeams(teamId)),
-                () -> Assertions.assertEquals(0L, countTeamMemberships(teamId)),
+                () -> Assertions.assertEquals(0L, countPhysicalTeamMemberships(teamId)),
                 () -> Assertions.assertEquals(1L, countToolLogs(owner.getId(), teamId, "success")),
                 () -> Assertions.assertEquals(1L, countDeleteEvents(owner.getId(), sessionId, teamId))
         );
@@ -135,7 +152,7 @@ class AiChatServiceDeleteTest {
         User owner = createUser();
         User anotherUser = createUser();
         long teamId = createTeam(owner);
-        long originalMemberships = countTeamMemberships(teamId);
+        long originalMemberships = countPhysicalTeamMemberships(teamId);
         HttpServletRequest request = requestFor(anotherUser);
 
         BusinessException exception = Assertions.assertThrows(
@@ -145,7 +162,7 @@ class AiChatServiceDeleteTest {
 
         Assertions.assertEquals(ErrorCode.NO_AUTH.getCode(), exception.getCode());
         Assertions.assertEquals(1L, countPhysicalTeams(teamId));
-        Assertions.assertEquals(originalMemberships, countTeamMemberships(teamId));
+        Assertions.assertEquals(originalMemberships, countPhysicalTeamMemberships(teamId));
         Assertions.assertEquals(1L, countToolLogs(anotherUser.getId(), teamId, "failed"));
         Assertions.assertEquals(0L, countAllDeleteEvents(anotherUser.getId()));
         verify(memoryPipelineService, never()).onChatTurnCompleted(anyLong(), any(), anyLong());
@@ -166,7 +183,7 @@ class AiChatServiceDeleteTest {
 
         Assertions.assertEquals(ErrorCode.NULL_ERROR.getCode(), second.getCode());
         Assertions.assertEquals(0L, countPhysicalTeams(teamId));
-        Assertions.assertEquals(0L, countTeamMemberships(teamId));
+        Assertions.assertEquals(0L, countPhysicalTeamMemberships(teamId));
         Assertions.assertEquals(1L, countToolLogs(owner.getId(), teamId, "success"));
         Assertions.assertEquals(1L, countToolLogs(owner.getId(), teamId, "failed"));
         Assertions.assertEquals(1L, countDeleteEvents(owner.getId(), sessionId, teamId));
@@ -244,6 +261,7 @@ class AiChatServiceDeleteTest {
     }
 
     private long countPhysicalTeams(long teamId) {
+        // 不经过 @TableLogic 过滤，确保队伍确实已从数据库物理删除。
         Long count = jdbcTemplate.queryForObject(
                 "select count(*) from team where id = ?",
                 Long.class,
@@ -252,25 +270,26 @@ class AiChatServiceDeleteTest {
         return count == null ? 0 : count;
     }
 
-    private long countTeamMemberships(long teamId) {
-        return userTeamMapper.selectCount(new QueryWrapper<UserTeam>().eq("teamId", teamId));
-    }
-
-    private long countToolLogs(long userId, long teamId, String status) {
-        Long count = jdbcTemplate.queryForObject("""
-                        select count(*) from ai_tool_call_log
-                        where userId = ? and toolName = 'delete_team' and status = ?
-                          and argumentsSummary like ?
-                        """,
+    private long countPhysicalTeamMemberships(long teamId) {
+        // 成员关系同样要求物理删除，不能只统计 isDelete = 0 的记录。
+        Long count = jdbcTemplate.queryForObject(
+                "select count(*) from user_team where teamId = ?",
                 Long.class,
-                userId,
-                status,
-                "%teamId=" + teamId + "%"
+                teamId
         );
         return count == null ? 0 : count;
     }
 
+    private long countToolLogs(long userId, long teamId, String status) {
+        return aiToolCallLogMapper.selectCount(new LambdaQueryWrapper<AiToolCallLog>()
+                .eq(AiToolCallLog::getUserId, userId)
+                .eq(AiToolCallLog::getToolName, "delete_team")
+                .eq(AiToolCallLog::getStatus, status)
+                .like(AiToolCallLog::getArgumentsSummary, "teamId=" + teamId));
+    }
+
     private long countDeleteEvents(long userId, String sessionId, long teamId) {
+        // 保留跨表统计 SQL，不为测试断言新增生产 Mapper 接口。
         Long count = jdbcTemplate.queryForObject("""
                         select count(*)
                         from ai_chat_message message
@@ -287,24 +306,16 @@ class AiChatServiceDeleteTest {
     }
 
     private long countAllDeleteEvents(long userId) {
-        Long count = jdbcTemplate.queryForObject("""
-                        select count(*) from ai_chat_message
-                        where userId = ? and role = 'event' and content like '用户已确认删除队伍%'
-                        """,
-                Long.class,
-                userId
-        );
-        return count == null ? 0 : count;
+        return aiChatMessageMapper.selectCount(new LambdaQueryWrapper<AiChatMessage>()
+                .eq(AiChatMessage::getUserId, userId)
+                .eq(AiChatMessage::getRole, "event")
+                .likeRight(AiChatMessage::getContent, "用户已确认删除队伍"));
     }
 
     private long countSessions(long userId, String sessionId) {
-        Long count = jdbcTemplate.queryForObject(
-                "select count(*) from ai_chat_session where userId = ? and sessionKey = ?",
-                Long.class,
-                userId,
-                sessionId
-        );
-        return count == null ? 0 : count;
+        return aiChatSessionMapper.selectCount(new LambdaQueryWrapper<AiChatSession>()
+                .eq(AiChatSession::getUserId, userId)
+                .eq(AiChatSession::getSessionKey, sessionId));
     }
 
     private String unique(String prefix) {
