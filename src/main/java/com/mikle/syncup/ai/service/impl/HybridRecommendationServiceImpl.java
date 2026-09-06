@@ -511,14 +511,11 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
                 null, System.currentTimeMillis() - start);
     }
 
-    private record QueryVector(String model, float[] vector) {
-    }
+    private record QueryVector(String model, float[] vector) {}
 
     private record ScoredUser(User user, Double semanticScore,
-                              double tagScore, double recencyScore) {
-    }
+                              double tagScore, double recencyScore) {}
 
     private record ScoredTeam(TeamUserVO team, double totalScore, Double semanticScore,
-                              double businessScore) {
-    }
+                              double businessScore) {}
 }

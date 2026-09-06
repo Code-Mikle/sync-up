@@ -1,7 +1,5 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.agent;
 
-import com.mikle.syncup.ai.agent.AiAgentToolContext;
-import com.mikle.syncup.ai.agent.AiAssistantTools;
 import com.mikle.syncup.ai.agent.impl.AiAssistantAgentServiceImpl;
 import com.mikle.syncup.ai.config.AiAgentProperties;
 import com.mikle.syncup.ai.model.entity.AiChatSession;
@@ -27,7 +25,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;

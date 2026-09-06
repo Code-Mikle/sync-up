@@ -1,5 +1,6 @@
 package com.mikle.syncup.ai.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.mikle.syncup.ai.model.schema.GeneratedEmbedding;
 import com.mikle.syncup.ai.model.vo.TagResolutionCandidate;
 import com.mikle.syncup.ai.model.vo.TagResolutionItem;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -74,7 +76,7 @@ public class TagResolutionServiceImpl implements TagResolutionService {
         List<String> queries = tagQueries.stream()
                 .filter(StringUtils::isNotBlank)
                 .map(String::trim)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new))
+                .collect(Collectors.toCollection(LinkedHashSet::new))
                 .stream()
                 .limit(5)
                 .toList();
@@ -82,11 +84,18 @@ public class TagResolutionServiceImpl implements TagResolutionService {
             return result;
         }
         List<Tag> tags = tagService.listEnabledTags();
-        Map<Long, TagCategory> categories = tagCategoryMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<TagCategory>()
-                        .eq("status", 1)).stream()
-                .collect(java.util.stream.Collectors.toMap(TagCategory::getId, item -> item, (left, right) -> left, LinkedHashMap::new));
+        Map<Long, TagCategory> categories = tagCategoryMapper.selectList(
+                new QueryWrapper<TagCategory>().eq("status", 1)
+                ).stream()
+                .collect(Collectors.toMap(
+                        TagCategory::getId,
+                        item -> item,
+                        (left, right) -> left,
+                        LinkedHashMap::new)
+                );
         for (String query : queries) {
-            result.getItems().add(resolveOne(query, tags, categories));
+            result.getItems().add(
+                    resolveOne(query, tags, categories));
         }
         return result;
     }
@@ -119,7 +128,9 @@ public class TagResolutionServiceImpl implements TagResolutionService {
                 continue;
             }
             try {
-                double score = normalizeCosine(vectorSimilarity.cosine(queryVector, embeddingCodec.deserialize(tag.getVectorJson())));
+                double score = normalizeCosine(
+                        vectorSimilarity.cosine(queryVector, embeddingCodec.deserialize(tag.getVectorJson()))
+                );
                 candidates.add(toCandidate(tag, score));
             } catch (RuntimeException e) {
                 log.warn("skip invalid tag embedding, tagId={}", tag.getId(), e);
@@ -146,7 +157,9 @@ public class TagResolutionServiceImpl implements TagResolutionService {
 
     private List<Tag> directMatches(String query, List<Tag> tags) {
         String normalizedQuery = normalize(query);
-        List<Tag> exact = tags.stream().filter(tag -> normalize(tag.getName()).equals(normalizedQuery)).toList();
+        List<Tag> exact = tags.stream()
+                .filter(tag -> normalize(tag.getName()).equals(normalizedQuery))
+                .toList();
         if (!exact.isEmpty()) {
             return exact;
         }

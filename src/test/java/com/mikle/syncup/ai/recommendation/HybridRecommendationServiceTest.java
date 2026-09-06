@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.recommendation;
 
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.agent.UserIntent;
@@ -131,20 +131,110 @@ class HybridRecommendationServiceTest {
     @Test
     @Transactional
     void recommendUsers_embeddingFailure_shouldFallbackToStructuredTags() {
-        User current = createUser("西安", "[403]");
-        createUser("西安", "[403]");
+        User current = createUser("西安", "[403]", 0);
+        User expected = createUser("西安", "[403]", 1);
+        createUser("北京", "[403]", 1);
+        createUser("西安", "[403]", 0);
+        createUser("西安", "[107]", 1);
         when(embeddingGenerator.generate(anyString())).thenThrow(new IllegalStateException("embedding timeout"));
 
         UserIntent intent = new UserIntent();
         intent.setProfile("想找桌游搭子");
         intent.setTagIds(List.of(403L));
         intent.setCity("西安");
+        intent.setGender(1);
 
         HybridRecommendationResult<AiUserRecommendation> result =
                 recommendationService.recommendUsers(intent, current, 3);
 
         Assertions.assertTrue(result.degraded());
-        Assertions.assertFalse(result.items().isEmpty());
+        Assertions.assertEquals(1, result.candidateCount());
+        Assertions.assertEquals(List.of(expected.getId()),
+                result.items().stream().map(AiUserRecommendation::getId).toList());
+    }
+
+    @Test
+    @Transactional
+    void recommendUsers_explicitCityGenderAndTag_shouldApplyAllHardConditions() {
+        User current = createUser("西安", "[107]", 0);
+        User expected = createUser("北京", "[107]", 1);
+        createUser("西安", "[107]", 1);
+        createUser("北京", "[107]", 0);
+        createUser("北京", "[403]", 1);
+
+        UserIntent intent = new UserIntent();
+        intent.setProfile("想找北京的羽毛球搭子");
+        intent.setCity("北京");
+        intent.setGender(1);
+        intent.setTagIds(List.of(107L));
+
+        HybridRecommendationResult<AiUserRecommendation> result =
+                recommendationService.recommendUsers(intent, current, 10);
+
+        Assertions.assertEquals(1, result.candidateCount());
+        Assertions.assertEquals(List.of(expected.getId()),
+                result.items().stream().map(AiUserRecommendation::getId).toList());
+        Assertions.assertTrue(result.items().stream().noneMatch(item -> item.getId().equals(current.getId())));
+    }
+
+    @Test
+    @Transactional
+    void recommendUsers_cityNotSpecified_shouldUseCurrentUsersCity() {
+        User current = createUser("西安", "[]");
+        User local = createUser("西安", "[]");
+        createUser("北京", "[]");
+
+        UserIntent intent = new UserIntent();
+        intent.setProfile("想找周末搭子");
+
+        HybridRecommendationResult<AiUserRecommendation> result =
+                recommendationService.recommendUsers(intent, current, 10);
+
+        Assertions.assertEquals(1, result.candidateCount());
+        Assertions.assertEquals(List.of(local.getId()),
+                result.items().stream().map(AiUserRecommendation::getId).toList());
+    }
+
+    @Test
+    @Transactional
+    void recommendUsers_noCandidateMatchesExplicitCity_shouldReturnEmptyWithoutRelaxingCondition() {
+        User current = createUser("西安", "[]");
+        createUser("北京", "[]");
+        UserIntent intent = new UserIntent();
+        intent.setProfile("想找上海的活动搭子");
+        intent.setCity("上海");
+
+        HybridRecommendationResult<AiUserRecommendation> result =
+                recommendationService.recommendUsers(intent, current, 10);
+
+        Assertions.assertTrue(result.degraded());
+        Assertions.assertEquals(0, result.candidateCount());
+        Assertions.assertTrue(result.items().isEmpty());
+    }
+
+    @Test
+    @Transactional
+    void recommendUsers_profileAndEmbeddingVersionsMismatch_shouldSkipSemanticScoreAndHideInternalProfile() {
+        User current = createUser("西安", "[107]");
+        User candidate = createUser("西安", "[107]");
+        insertProfile(candidate.getId(), "INTERNAL_MATCH_PROFILE_SECRET", 2);
+        insertUserEmbedding(candidate.getId(), "INTERNAL_MATCH_PROFILE_SECRET", 1, new float[]{1F, 0F});
+
+        UserIntent intent = new UserIntent();
+        intent.setProfile("想找羽毛球搭子");
+        intent.setTagIds(List.of(107L));
+        intent.setCity("西安");
+
+        HybridRecommendationResult<AiUserRecommendation> result =
+                recommendationService.recommendUsers(intent, current, 3);
+
+        Assertions.assertTrue(result.degraded());
+        Assertions.assertEquals(1, result.items().size());
+        Assertions.assertEquals(candidate.getId(), result.items().getFirst().getId());
+        Assertions.assertEquals("公开个人简介", result.items().getFirst().getProfile());
+        Assertions.assertFalse(result.items().getFirst().getReasons().contains("活动与社交偏好较接近"));
+        Assertions.assertTrue(result.items().getFirst().getReasons().stream()
+                .noneMatch(reason -> reason.contains("INTERNAL_MATCH_PROFILE_SECRET")));
     }
 
     @Test
@@ -199,7 +289,61 @@ class HybridRecommendationServiceTest {
                 .contains("活动描述与个人偏好较接近"));
     }
 
+    @Test
+    @Transactional
+    void recommendTeams_shouldExcludePrivateExpiredFullAndInsufficientCapacityTeams() {
+        User current = createUser("西安", "[107]");
+        Team valid = createTeam(current, "可加入羽毛球局", "还有充足名额");
+        Team privateTeam = createTeam(current, "私有羽毛球局", "不应被推荐");
+        Team expired = createTeam(current, "过期羽毛球局", "不应被推荐");
+        Team full = createTeam(current, "满员羽毛球局", "不应被推荐");
+        Team insufficient = createTeam(current, "名额不足羽毛球局", "只剩一个名额");
+        jdbcTemplate.update("update team set status = 1 where id = ?", privateTeam.getId());
+        jdbcTemplate.update("update team set expireTime = ? where id = ?",
+                new Date(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)), expired.getId());
+        addMembersUntilFull(full);
+        jdbcTemplate.update("update team set maxNum = 2 where id = ?", insufficient.getId());
+
+        TeamIntent intent = new TeamIntent();
+        intent.setActivityCategory(1);
+        intent.setActivityType("羽毛球");
+        intent.setCity("西安");
+        intent.setMemberCount(2);
+
+        HybridRecommendationResult<TeamUserVO> result =
+                recommendationService.recommendTeams(intent, current, 10);
+
+        Assertions.assertEquals(1, result.candidateCount());
+        Assertions.assertEquals(List.of(valid.getId()),
+                result.items().stream().map(TeamUserVO::getId).toList());
+        Assertions.assertEquals(3, result.items().getFirst().getMaxNum()
+                - result.items().getFirst().getHasJoinNum());
+    }
+
+    @Test
+    @Transactional
+    void recommendTeams_noTeamMatchesExplicitCity_shouldReturnEmptyWithoutRelaxingCondition() {
+        User current = createUser("西安", "[107]");
+        Team beijingTeam = createTeam(current, "北京羽毛球局", "城市不符合请求");
+        jdbcTemplate.update("update team set city = '北京' where id = ?", beijingTeam.getId());
+        TeamIntent intent = new TeamIntent();
+        intent.setActivityCategory(1);
+        intent.setActivityType("羽毛球");
+        intent.setCity("西安");
+
+        HybridRecommendationResult<TeamUserVO> result =
+                recommendationService.recommendTeams(intent, current, 10);
+
+        Assertions.assertTrue(result.degraded());
+        Assertions.assertEquals(0, result.candidateCount());
+        Assertions.assertTrue(result.items().isEmpty());
+    }
+
     private User createUser(String city, String tagIds) {
+        return createUser(city, tagIds, null);
+    }
+
+    private User createUser(String city, String tagIds, Integer gender) {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
         User user = new User();
         user.setUsername("hybrid_" + suffix);
@@ -208,7 +352,9 @@ class HybridRecommendationServiceTest {
         user.setUserRole(0);
         user.setUserStatus(0);
         user.setCity(city);
+        user.setGender(gender);
         user.setTagIds(tagIds);
+        user.setProfile("公开个人简介");
         user.setLastActiveTime(new Date());
         Assertions.assertTrue(userService.save(user));
         return user;
@@ -244,6 +390,10 @@ class HybridRecommendationServiceTest {
 
     private void insertProfileAndEmbedding(long userId, String matchText, int version, float[] vector) {
         insertProfile(userId, matchText, version);
+        insertUserEmbedding(userId, matchText, version, vector);
+    }
+
+    private void insertUserEmbedding(long userId, String matchText, int version, float[] vector) {
         jdbcTemplate.update("""
                 insert into ai_user_profile_embedding
                 (userId, profileVersion, matchTextHash, embeddingModel, dimensions,
@@ -251,6 +401,17 @@ class HybridRecommendationServiceTest {
                 values (?, ?, ?, ?, ?, ?, 1, now(), 0)
                 """, userId, version, textHashService.sha256(matchText), "test-embedding-model",
                 vector.length, embeddingCodec.serialize(embeddingCodec.normalize(vector)));
+    }
+
+    private void addMembersUntilFull(Team team) {
+        int existingMembers = 1;
+        for (int index = existingMembers; index < team.getMaxNum(); index++) {
+            User member = createUser("西安", "[]");
+            jdbcTemplate.update("""
+                    insert into user_team (userId, teamId, joinTime, isDelete)
+                    values (?, ?, now(), 0)
+                    """, member.getId(), team.getId());
+        }
     }
 
     private void insertTeamEmbedding(Team team, int version, float[] vector) {

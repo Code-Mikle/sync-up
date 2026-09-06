@@ -4,12 +4,15 @@ import com.mikle.syncup.ai.config.AiMemoryProperties;
 import com.mikle.syncup.ai.model.entity.AiChatMessage;
 import com.mikle.syncup.ai.model.entity.AiChatSession;
 import com.mikle.syncup.ai.service.AiChatMessageService;
+import com.mikle.syncup.ai.service.AiChatSessionService;
 import com.mikle.syncup.ai.service.AiUserProfileService;
+import com.mikle.syncup.ai.service.SessionSummaryService;
 import com.mikle.syncup.ai.service.WorkingMemoryService;
 import com.mikle.syncup.model.domain.User;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -17,6 +20,7 @@ import java.util.List;
 import java.util.ArrayList;
 
 @Service
+@Slf4j
 public class WorkingMemoryServiceImpl implements WorkingMemoryService {
 
     private static final String NL = System.lineSeparator();
@@ -25,6 +29,12 @@ public class WorkingMemoryServiceImpl implements WorkingMemoryService {
 
     @Resource
     private AiChatMessageService chatMessageService;
+
+    @Resource
+    private AiChatSessionService chatSessionService;
+
+    @Resource
+    private SessionSummaryService sessionSummaryService;
 
     @Resource
     private AiUserProfileService userProfileService;
@@ -43,7 +53,9 @@ public class WorkingMemoryServiceImpl implements WorkingMemoryService {
                 session.getId(), safeLong(session.getLastClosedMessageId()),
                 properties.getRecentMessageCount()));
         String interactionProfile = userProfileService.getInteractionProfileText(loginUser.getId());
-        trimToBudget(recentMessages, session.getSummary(), currentMessage,
+        AiChatSession contextSession = summarizeBeforeDroppingUnsummarizedMessages(
+                session, recentMessages, currentMessage, interactionProfile, properties.getMaxContextTokens());
+        trimToBudget(recentMessages, contextSession, currentMessage,
                 interactionProfile, properties.getMaxContextTokens());
         StringBuilder builder = new StringBuilder("当前服务端时间：")
                 .append(LocalDateTime.now().format(DATE_TIME_FORMATTER));
@@ -51,8 +63,8 @@ public class WorkingMemoryServiceImpl implements WorkingMemoryService {
             builder.append(NL).append("内部交流偏好（仅用于调整表达方式，禁止向用户展示或复述）：")
                     .append(NL).append(interactionProfile);
         }
-        if (StringUtils.isNotBlank(session.getSummary())) {
-            builder.append(NL).append("当前会话摘要：").append(NL).append(session.getSummary());
+        if (StringUtils.isNotBlank(contextSession.getSummary())) {
+            builder.append(NL).append("当前会话摘要：").append(NL).append(contextSession.getSummary());
         }
         if (!recentMessages.isEmpty()) {
             builder.append(NL).append("当前会话近期原始消息：");
@@ -68,13 +80,71 @@ public class WorkingMemoryServiceImpl implements WorkingMemoryService {
         return value == null ? 0L : value;
     }
 
-    private void trimToBudget(List<AiChatMessage> messages, String summary, String currentMessage,
+    private AiChatSession summarizeBeforeDroppingUnsummarizedMessages(
+            AiChatSession session,
+            List<AiChatMessage> messages,
+            String currentMessage,
+            String interactionProfile,
+            int maxTokens) {
+        int trimCount = calculateTrimCount(
+                messages, session.getSummary(), currentMessage, interactionProfile, maxTokens);
+        long summaryCursor = safeLong(session.getLastSummaryMessageId());
+        long targetMessageId = messages.stream()
+                .limit(trimCount)
+                .map(AiChatMessage::getId)
+                .filter(id -> id != null && id > summaryCursor)
+                .mapToLong(Long::longValue)
+                .max()
+                .orElse(0L);
+        if (targetMessageId <= 0) {
+            return session;
+        }
+        try {
+            sessionSummaryService.summarizeForContextBudget(session, targetMessageId);
+        } catch (RuntimeException e) {
+            log.warn("summarize before trimming context failed, sessionId={}, targetMessageId={}, errorType={}",
+                    session.getId(), targetMessageId, e.getClass().getSimpleName());
+        }
+        AiChatSession refreshed = chatSessionService.getById(session.getId());
+        return refreshed == null ? session : refreshed;
+    }
+
+    private void trimToBudget(List<AiChatMessage> messages, AiChatSession session, String currentMessage,
                               String interactionProfile, int maxTokens) {
-        int fixedTokens = estimateTokens(summary) + estimateTokens(currentMessage) + estimateTokens(interactionProfile) + 100;
-        while (messages.size() > 1 && fixedTokens + messages.stream()
-                .mapToInt(message -> estimateTokens(message.getContent())).sum() > Math.max(500, maxTokens)) {
+        int requiredTrimCount = calculateTrimCount(
+                messages, session.getSummary(), currentMessage, interactionProfile, maxTokens);
+        long summaryCursor = safeLong(session.getLastSummaryMessageId());
+        int safeTrimCount = 0;
+        while (safeTrimCount < requiredTrimCount
+                && isCoveredBySummary(messages.get(safeTrimCount), summaryCursor)) {
+            safeTrimCount++;
+        }
+        for (int i = 0; i < safeTrimCount; i++) {
             messages.removeFirst();
         }
+        if (safeTrimCount < requiredTrimCount) {
+            log.warn("context remains over budget to preserve unsummarized messages, sessionId={}, "
+                            + "requiredTrimCount={}, safeTrimCount={}, lastSummaryMessageId={}",
+                    session.getId(), requiredTrimCount, safeTrimCount, summaryCursor);
+        }
+    }
+
+    private boolean isCoveredBySummary(AiChatMessage message, long summaryCursor) {
+        return message.getId() != null && message.getId() <= summaryCursor;
+    }
+
+    private int calculateTrimCount(List<AiChatMessage> messages, String summary, String currentMessage,
+                                   String interactionProfile, int maxTokens) {
+        int totalTokens = estimateTokens(summary) + estimateTokens(currentMessage)
+                + estimateTokens(interactionProfile) + 100
+                + messages.stream().mapToInt(message -> estimateTokens(message.getContent())).sum();
+        int budget = Math.max(500, maxTokens);
+        int trimCount = 0;
+        while (messages.size() - trimCount > 1 && totalTokens > budget) {
+            totalTokens -= estimateTokens(messages.get(trimCount).getContent());
+            trimCount++;
+        }
+        return trimCount;
     }
 
     private int estimateTokens(String text) {

@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.recommendation;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

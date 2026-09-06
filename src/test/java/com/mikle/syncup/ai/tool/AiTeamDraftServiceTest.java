@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.tool;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.mikle.syncup.ai.exception.DraftExpiredException;

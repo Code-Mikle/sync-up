@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.memory;
 
 import com.mikle.syncup.ai.config.AiMemoryProperties;
 import com.mikle.syncup.ai.mapper.AiChatSessionMapper;

@@ -1,9 +1,8 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.tool;
 
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.vo.TeamDraftVO;
-import com.mikle.syncup.ai.tool.CreateTeamDraftTool;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;

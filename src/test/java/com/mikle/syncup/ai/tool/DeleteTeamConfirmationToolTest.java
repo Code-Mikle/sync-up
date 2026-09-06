@@ -1,10 +1,9 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.tool;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.vo.AiTeamDeleteConfirmationVO;
-import com.mikle.syncup.ai.tool.DeleteTeamConfirmationTool;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.Team;

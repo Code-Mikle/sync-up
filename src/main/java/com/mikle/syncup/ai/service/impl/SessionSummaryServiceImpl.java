@@ -55,6 +55,18 @@ public class SessionSummaryServiceImpl implements SessionSummaryService {
 
     @Override
     public boolean summarizeIfNecessary(AiChatSession session) {
+        return summarize(session, null);
+    }
+
+    @Override
+    public boolean summarizeForContextBudget(AiChatSession session, long targetMessageId) {
+        if (targetMessageId <= 0) {
+            return false;
+        }
+        return summarize(session, targetMessageId);
+    }
+
+    private boolean summarize(AiChatSession session, Long requiredTargetMessageId) {
         if (session == null || session.getId() == null || !summaryGenerator.isAvailable()) {
             return false;
         }
@@ -67,21 +79,22 @@ public class SessionSummaryServiceImpl implements SessionSummaryService {
         if (closedCursor <= summaryCursor) {
             return false;
         }
+        long queryCursor = requiredTargetMessageId == null
+                ? closedCursor
+                : Math.min(requiredTargetMessageId, closedCursor);
+        if (queryCursor <= summaryCursor) {
+            return false;
+        }
         AiMemoryProperties.WorkingMemory properties = memoryProperties.getWorkingMemory();
         int queryLimit = Math.min(200, properties.getRecentMessageCount()
                 + properties.getSummaryBatchSize() + 100);
         List<AiChatMessage> unsummarized = chatMessageService.listClosedMessages(
-                current.getId(), summaryCursor, closedCursor, queryLimit);
+                current.getId(), summaryCursor, queryCursor, queryLimit);
         if (unsummarized.isEmpty()) {
             return false;
         }
-        int estimatedTokens = estimateTokens(unsummarized) + estimateTokens(current.getSummary());
-        int minimumCount = properties.getRecentMessageCount() + properties.getSummaryBatchSize();
-        if (unsummarized.size() < minimumCount && estimatedTokens <= properties.getMaxContextTokens()) {
-            return false;
-        }
-        int keepCount = Math.min(properties.getRecentMessageCount(), Math.max(0, unsummarized.size() - 1));
-        int summarizable = unsummarized.size() - keepCount;
+        int summarizable = determineSummarizableCount(
+                unsummarized, current.getSummary(), properties, requiredTargetMessageId != null);
         if (summarizable <= 0) {
             return false;
         }
@@ -97,6 +110,22 @@ public class SessionSummaryServiceImpl implements SessionSummaryService {
         return chatSessionMapper.updateSummaryCas(
                 current.getId(), summaryCursor, targetCursor, summary,
                 summaryGenerator.modelName(), summaryGenerator.promptVersion(), new Date()) > 0;
+    }
+
+    private int determineSummarizableCount(List<AiChatMessage> unsummarized,
+                                           String currentSummary,
+                                           AiMemoryProperties.WorkingMemory properties,
+                                           boolean contextBudgetRequired) {
+        if (contextBudgetRequired) {
+            return unsummarized.size();
+        }
+        int estimatedTokens = estimateTokens(unsummarized) + estimateTokens(currentSummary);
+        int minimumCount = properties.getRecentMessageCount() + properties.getSummaryBatchSize();
+        if (unsummarized.size() < minimumCount && estimatedTokens <= properties.getMaxContextTokens()) {
+            return 0;
+        }
+        int keepCount = Math.min(properties.getRecentMessageCount(), Math.max(0, unsummarized.size() - 1));
+        return unsummarized.size() - keepCount;
     }
 
     @Override

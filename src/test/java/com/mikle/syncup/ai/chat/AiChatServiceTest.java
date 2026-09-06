@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.chat;
 
 import com.mikle.syncup.ai.agent.AiAssistantAgentService;
 import com.mikle.syncup.ai.model.dto.AiChatRequest;

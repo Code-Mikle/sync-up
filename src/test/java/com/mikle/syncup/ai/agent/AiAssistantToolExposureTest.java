@@ -1,6 +1,5 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.agent;
 
-import com.mikle.syncup.ai.agent.AiAssistantTools;
 import com.mikle.syncup.ai.tool.CreateTeamDraftTool;
 import com.mikle.syncup.ai.tool.DeleteTeamConfirmationTool;
 import com.mikle.syncup.ai.tool.ResolveTagsTool;

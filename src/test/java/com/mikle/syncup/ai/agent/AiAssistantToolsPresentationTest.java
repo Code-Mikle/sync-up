@@ -1,8 +1,6 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mikle.syncup.ai.agent.AiAgentToolContext;
-import com.mikle.syncup.ai.agent.AiAssistantTools;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.vo.AiUiBlockVO;

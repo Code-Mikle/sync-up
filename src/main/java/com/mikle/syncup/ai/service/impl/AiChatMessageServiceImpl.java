@@ -36,10 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.temporal.ChronoUnit;
-import java.util.Date;
-import java.util.List;
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.util.*;
 
 @Service
 public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, AiChatMessage>
@@ -148,8 +145,8 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
                 .eq("chatSessionId", chatSessionId)
                 .le("id", lastClosedMessageId)
                 .orderByDesc("id")
-                .last("limit " + Math.max(1, Math.min(limit, 200))));
-        java.util.Collections.reverse(messages);
+                .last("limit " + Math.clamp(limit, 1, 200)));
+        Collections.reverse(messages);
         return messages;
     }
 
@@ -168,7 +165,10 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
         List<AiChatMessage> messages = list(new QueryWrapper<AiChatMessage>()
                 .eq("chatSessionId", latest.getId())
                 .orderByAsc("id"));
-        history.setMessages(messages.stream().map(message -> toVO(message, latest.getSessionKey())).toList());
+        history.setMessages(messages.stream()
+                .map(message -> toVO(message, latest.getSessionKey()))
+                .toList()
+        );
         return history;
     }
 

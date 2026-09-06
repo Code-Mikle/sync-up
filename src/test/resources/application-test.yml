@@ -19,9 +19,9 @@ sync-up:
 
   ai:
     agent:
-      enabled: false
+      enabled: true
     embedding:
-      enabled: false
+      enabled: true
     memory:
       episode:
-        extraction-enabled: false
+        extraction-enabled: true

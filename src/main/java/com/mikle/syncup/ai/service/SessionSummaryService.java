@@ -8,5 +8,7 @@ public interface SessionSummaryService {
 
     boolean summarizeIfNecessary(AiChatSession session);
 
+    boolean summarizeForContextBudget(AiChatSession session, long targetMessageId);
+
     int processPendingSummaries();
 }

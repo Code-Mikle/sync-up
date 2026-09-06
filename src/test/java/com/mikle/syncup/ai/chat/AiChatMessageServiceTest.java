@@ -1,4 +1,4 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.chat;
 
 import com.mikle.syncup.ai.mapper.AiChatMessageMapper;
 import com.mikle.syncup.ai.mapper.AiChatSessionMapper;

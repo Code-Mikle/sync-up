@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class EpisodeExtractorImpl implements EpisodeExtractor {
 
-    private static final String PROMPT_VERSION = "episode-extraction-v1";
+    private static final String PROMPT_VERSION = "episode-extraction-v2";
 
     @Resource
     private AiAgentProperties aiAgentProperties;

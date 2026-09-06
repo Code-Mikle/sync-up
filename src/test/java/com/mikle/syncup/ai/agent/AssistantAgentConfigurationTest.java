@@ -1,6 +1,5 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.agent;
 
-import com.mikle.syncup.ai.agent.AssistantAgent;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
 import org.junit.jupiter.api.Test;

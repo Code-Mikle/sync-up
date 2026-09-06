@@ -1,16 +1,15 @@
-package com.mikle.syncup.ai;
+package com.mikle.syncup.ai.tool;
 
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
-import com.mikle.syncup.ai.tool.AiTool;
-import com.mikle.syncup.ai.tool.AiToolRegistry;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -59,7 +58,7 @@ class AiToolRegistryTest {
         );
 
         assertEquals(ErrorCode.NO_AUTH.getCode(), exception.getCode());
-        verify(teamTool, never()).execute(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(teamTool, never()).execute(ArgumentMatchers.any(), ArgumentMatchers.any());
     }
 
     @Test
@@ -72,7 +71,7 @@ class AiToolRegistryTest {
         );
 
         assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
-        verify(teamTool, never()).execute(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(teamTool, never()).execute(ArgumentMatchers.any(), ArgumentMatchers.any());
     }
 
     private User user(long id) {
