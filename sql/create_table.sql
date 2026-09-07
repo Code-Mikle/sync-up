@@ -5,16 +5,6 @@ use sync_up_test;
 
 use sync_up_db;
 
-TRUNCATE TABLE user;
-TRUNCATE TABLE team;
-TRUNCATE TABLE user_team;
-# TRUNCATE TABLE ai_tool_call_log;
-# TRUNCATE TABLE ai_team_embedding;
-TRUNCATE TABLE ai_team_draft;
-
-TRUNCATE TABLE tag;
-
-
 -- 用户表
 create table user
 (

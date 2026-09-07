@@ -1,0 +1,11 @@
+.git
+.idea
+.vscode
+.m2
+.env*
+target
+docs
+data
+imgs
+syncup-frontend
+*.log

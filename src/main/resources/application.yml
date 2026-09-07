@@ -111,7 +111,7 @@ springdoc:
   group-configs:
     - group: "default"
       paths-to-match: "/**"
-      packages-to-scan: com.mikle.syncup.controller
+      packages-to-scan: com.mikle.syncup
 
 
 mybatis-plus:

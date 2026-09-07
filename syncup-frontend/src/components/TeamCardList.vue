@@ -6,7 +6,7 @@
 
     <article class="team-card" v-else v-for="team in props.teamList" :key="team.id">
       <div class="team-card__cover">
-        <img :src="ikun" alt="队伍封面"/>
+        <img :src="logo" alt="队伍封面"/>
       </div>
 
       <div class="team-card__body">
@@ -105,7 +105,7 @@
 <script setup lang="ts">
 import {TeamType} from "../models/team";
 import {getTeamActivityCategoryName, teamStatusEnum} from "../constants/team";
-import ikun from "../assets/ikun.png";
+import logo from "../assets/logo.png";
 import myAxios from "../plugins/myAxios";
 import {showConfirmDialog, showFailToast, showSuccessToast} from "vant";
 import {onMounted, ref} from "vue";
