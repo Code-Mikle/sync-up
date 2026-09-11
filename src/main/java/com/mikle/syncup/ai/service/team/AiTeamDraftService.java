@@ -8,7 +8,7 @@ import com.mikle.syncup.model.domain.User;
 
 public interface AiTeamDraftService extends IService<AiTeamDraft> {
 
-    TeamDraftVO saveDraft(TeamDraftVO draft, User loginUser, String sessionId);
+    TeamDraftVO saveDraft(TeamDraftVO draft, User loginUser, String conversationId);
 
     AiTeamDraftConfirmResponse confirmDraft(String draftId, User loginUser);
 }

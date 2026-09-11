@@ -102,7 +102,7 @@ public class WorkingMemoryServiceImpl implements WorkingMemoryService {
         try {
             sessionSummaryService.summarizeForContextBudget(session, targetMessageId);
         } catch (RuntimeException e) {
-            log.warn("summarize before trimming context failed, sessionId={}, targetMessageId={}, errorType={}",
+            log.warn("summarize before trimming context failed, chatSessionId={}, targetMessageId={}, errorType={}",
                     session.getId(), targetMessageId, e.getClass().getSimpleName());
         }
         AiChatSession refreshed = chatSessionService.getById(session.getId());
@@ -123,7 +123,7 @@ public class WorkingMemoryServiceImpl implements WorkingMemoryService {
             messages.removeFirst();
         }
         if (safeTrimCount < requiredTrimCount) {
-            log.warn("context remains over budget to preserve unsummarized messages, sessionId={}, "
+            log.warn("context remains over budget to preserve unsummarized messages, chatSessionId={}, "
                             + "requiredTrimCount={}, safeTrimCount={}, lastSummaryMessageId={}",
                     session.getId(), requiredTrimCount, safeTrimCount, summaryCursor);
         }

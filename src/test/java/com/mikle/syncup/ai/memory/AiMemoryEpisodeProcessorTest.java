@@ -97,7 +97,7 @@ class AiMemoryEpisodeProcessorTest {
         int processed = processor.processEpisodeExtractionTasks();
 
         AiEpisodeExtractionTask task = taskMapper.selectById(fixture.taskId());
-        AiChatSession session = sessionMapper.selectById(fixture.sessionId());
+        AiChatSession session = sessionMapper.selectById(fixture.chatSessionId());
         AiUserEpisode saved = oneEpisode(fixture.userId());
         assertAll(
                 () -> assertEquals(1, processed),
@@ -113,7 +113,7 @@ class AiMemoryEpisodeProcessorTest {
                 fixture.userId(), ProfileType.ACTIVITY_PREFERENCE,
                 ProfileUpdateTriggerType.COUNT, false);
         verify(memoryPipelineService).createNextChatExtractionTaskIfNecessary(
-                fixture.userId(), fixture.sessionId());
+                fixture.userId(), fixture.chatSessionId());
     }
 
     @Test
@@ -127,7 +127,7 @@ class AiMemoryEpisodeProcessorTest {
                 () -> assertEquals(MemoryTaskStatus.SUCCESS.name(),
                         taskMapper.selectById(fixture.taskId()).getStatus()),
                 () -> assertEquals(fixture.lastMessageId(),
-                        sessionMapper.selectById(fixture.sessionId()).getLastEpisodeExtractedMessageId()),
+                        sessionMapper.selectById(fixture.chatSessionId()).getLastEpisodeExtractedMessageId()),
                 () -> assertEquals(0L, episodeMapper.selectCount(
                         new QueryWrapper<AiUserEpisode>().eq("userId", fixture.userId())))
         );
@@ -151,7 +151,7 @@ class AiMemoryEpisodeProcessorTest {
                 () -> assertEquals(1, task.getRetryCount()),
                 () -> assertTrue(task.getLastError().contains("source messages")),
                 () -> assertEquals(0L,
-                        sessionMapper.selectById(fixture.sessionId()).getLastEpisodeExtractedMessageId()),
+                        sessionMapper.selectById(fixture.chatSessionId()).getLastEpisodeExtractedMessageId()),
                 () -> assertEquals(0L, episodeMapper.selectCount(
                         new QueryWrapper<AiUserEpisode>().eq("userId", fixture.userId())))
         );
@@ -178,7 +178,7 @@ class AiMemoryEpisodeProcessorTest {
     @Test
     void process_staleSessionCursor_shouldSupersedeTaskWithoutPersistingResult() {
         ChatFixture fixture = createChatFixture();
-        AiChatSession session = sessionMapper.selectById(fixture.sessionId());
+        AiChatSession session = sessionMapper.selectById(fixture.chatSessionId());
         session.setLastEpisodeExtractedMessageId(fixture.userMessageId());
         sessionMapper.updateById(session);
         when(episodeExtractor.extract(anyString())).thenReturn(extraction(
@@ -211,7 +211,7 @@ class AiMemoryEpisodeProcessorTest {
                 () -> assertEquals(2, task.getRetryCount()),
                 () -> assertEquals("model timeout", task.getLastError()),
                 () -> assertEquals(0L,
-                        sessionMapper.selectById(fixture.sessionId()).getLastEpisodeExtractedMessageId())
+                        sessionMapper.selectById(fixture.chatSessionId()).getLastEpisodeExtractedMessageId())
         );
     }
 
@@ -230,7 +230,7 @@ class AiMemoryEpisodeProcessorTest {
                 () -> assertEquals(MemoryTaskStatus.SUCCESS.name(),
                         taskMapper.selectById(fixture.taskId()).getStatus()),
                 () -> assertEquals(fixture.lastMessageId(),
-                        sessionMapper.selectById(fixture.sessionId()).getLastEpisodeExtractedMessageId())
+                        sessionMapper.selectById(fixture.chatSessionId()).getLastEpisodeExtractedMessageId())
         );
     }
 
@@ -238,9 +238,8 @@ class AiMemoryEpisodeProcessorTest {
         long userId = uniquePositiveLong();
         AiChatSession session = new AiChatSession();
         session.setUserId(userId);
-        session.setSessionKey("episode-test-" + UUID.randomUUID());
+        session.setConversationId("episode-test-" + UUID.randomUUID());
         session.setLastSummaryMessageId(0L);
-        session.setSummaryVersion(0);
         session.setLastClosedMessageId(0L);
         session.setLastEpisodeExtractedMessageId(0L);
         sessionMapper.insert(session);
@@ -266,10 +265,10 @@ class AiMemoryEpisodeProcessorTest {
         return new ChatFixture(userId, session.getId(), userMessage.getId(), assistantMessage.getId(), task.getId());
     }
 
-    private AiChatMessage message(long userId, long sessionId, String role, String content) {
+    private AiChatMessage message(long userId, long chatSessionId, String role, String content) {
         AiChatMessage message = new AiChatMessage();
         message.setUserId(userId);
-        message.setChatSessionId(sessionId);
+        message.setChatSessionId(chatSessionId);
         message.setRole(role);
         message.setContent(content);
         message.setVisible(1);
@@ -330,6 +329,6 @@ class AiMemoryEpisodeProcessorTest {
         return userId;
     }
 
-    private record ChatFixture(long userId, long sessionId, long userMessageId,
+    private record ChatFixture(long userId, long chatSessionId, long userMessageId,
                                long lastMessageId, long taskId) { }
 }

@@ -90,7 +90,7 @@ class AiAssistantAgentServiceTest {
         Assertions.assertTrue(result.isPresent());
         AiChatResponseVO value = result.orElseThrow();
         Assertions.assertEquals("找到两个合适的搭子。", value.getReply());
-        Assertions.assertEquals(session.getSessionKey(), value.getSessionId());
+        Assertions.assertEquals(session.getConversationId(), value.getConversationId());
         Assertions.assertEquals("找羽毛球搭子", value.getIntent().getSourceText());
         Assertions.assertFalse(value.getIntent().isTeamRelated());
         verify(chatModel).chat(any(ChatRequest.class));
@@ -156,7 +156,7 @@ class AiAssistantAgentServiceTest {
     private AiChatSession session() {
         AiChatSession session = new AiChatSession();
         session.setId(2001L);
-        session.setSessionKey("session-1");
+        session.setConversationId("conversation-1");
         return session;
     }
 

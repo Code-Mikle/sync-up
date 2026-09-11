@@ -17,7 +17,7 @@ public class AiToolCallLog implements Serializable {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String sessionId;
+    private String conversationId;
 
     private Long userId;
 

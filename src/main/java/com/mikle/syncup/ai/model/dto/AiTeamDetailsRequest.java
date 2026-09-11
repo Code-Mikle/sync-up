@@ -7,7 +7,7 @@ import java.io.Serializable;
 @Data
 public class AiTeamDetailsRequest implements Serializable {
 
-    private String sessionId;
+    private String conversationId;
 
     private static final long serialVersionUID = 1L;
 }

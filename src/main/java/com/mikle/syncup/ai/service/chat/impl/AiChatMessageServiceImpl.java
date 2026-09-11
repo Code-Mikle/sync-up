@@ -80,11 +80,13 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
     private ObjectMapper objectMapper;
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public AiChatMessage saveUserMessage(User loginUser, AiChatSession session, String content) {
         return saveMessage(loginUser, session, ROLE_USER, content, null, VISIBLE);
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public AiChatMessage saveAssistantMessage(User loginUser,
                                                AiChatSession session,
                                                String content,
@@ -93,6 +95,7 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public AiChatMessage saveTeamDraftConfirmedEvent(User loginUser, AiChatSession session, String draftId, Long teamId) {
         if (session == null) {
             return null;
@@ -106,6 +109,7 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public AiChatMessage saveTeamDeletedEvent(User loginUser, AiChatSession session, Long teamId) {
         if (session == null) {
             return null;
@@ -156,17 +160,18 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
         AiChatHistoryVO history = new AiChatHistoryVO();
         AiChatSession latest = aiChatSessionMapper.selectOne(new QueryWrapper<AiChatSession>()
                 .eq("userId", loginUser.getId())
-                .orderByDesc("updateTime")
+                .orderByDesc("lastMessageAt")
+                .orderByDesc("id")
                 .last("limit 1"));
         if (latest == null) {
             return history;
         }
-        history.setSessionId(latest.getSessionKey());
+        history.setConversationId(latest.getConversationId());
         List<AiChatMessage> messages = list(new QueryWrapper<AiChatMessage>()
                 .eq("chatSessionId", latest.getId())
                 .orderByAsc("id"));
         history.setMessages(messages.stream()
-                .map(message -> toVO(message, latest.getSessionKey()))
+                .map(message -> toVO(message, latest.getConversationId()))
                 .toList()
         );
         return history;
@@ -239,6 +244,16 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
         if (!save(message)) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "save AI chat message failed");
         }
+        Date messageTime = message.getCreateTime() == null ? new Date() : message.getCreateTime();
+        int updated = aiChatSessionMapper.update(null,
+                new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<AiChatSession>()
+                        .set("lastMessageAt", messageTime)
+                        .eq("id", session.getId())
+                        .eq("userId", loginUser.getId()));
+        if (updated != 1) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "update AI chat session activity failed");
+        }
+        session.setLastMessageAt(messageTime);
         return message;
     }
 
@@ -269,10 +284,10 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
         }
     }
 
-    private AiChatMessageVO toVO(AiChatMessage message, String sessionKey) {
+    private AiChatMessageVO toVO(AiChatMessage message, String conversationId) {
         AiChatMessageVO vo = new AiChatMessageVO();
         vo.setId(message.getId());
-        vo.setSessionId(sessionKey);
+        vo.setConversationId(conversationId);
         vo.setRole(message.getRole());
         vo.setContent(message.getContent());
         vo.setVisible(message.getVisible());

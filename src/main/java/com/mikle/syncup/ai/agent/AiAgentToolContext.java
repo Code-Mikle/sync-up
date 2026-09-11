@@ -23,13 +23,13 @@ public class AiAgentToolContext {
 
     private final ThreadLocal<State> current = new ThreadLocal<>();
 
-    public void start(String sessionId, User loginUser) {
-        start(sessionId, loginUser, null);
+    public void start(String conversationId, User loginUser) {
+        start(conversationId, loginUser, null);
     }
 
-    public void start(String sessionId, User loginUser, String sourceText) {
+    public void start(String conversationId, User loginUser, String sourceText) {
         State state = new State();
-        state.setSessionId(sessionId);
+        state.setConversationId(conversationId);
         state.setLoginUser(loginUser);
         state.setSourceText(sourceText);
         current.set(state);
@@ -46,7 +46,7 @@ public class AiAgentToolContext {
     public State snapshot() {
         State state = getRequired();
         State snapshot = new State();
-        snapshot.setSessionId(state.getSessionId());
+        snapshot.setConversationId(state.getConversationId());
         snapshot.setLoginUser(state.getLoginUser());
         snapshot.setSourceText(state.getSourceText());
         snapshot.getToolResults().addAll(state.getToolResults());
@@ -65,7 +65,7 @@ public class AiAgentToolContext {
     @Data
     public static class State {
 
-        private String sessionId;
+        private String conversationId;
 
         private User loginUser;
 

@@ -19,7 +19,7 @@ public class AiToolCallLogServiceImpl extends ServiceImpl<AiToolCallLogMapper, A
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordToolCall(String sessionId,
+    public void recordToolCall(String conversationId,
                                User loginUser,
                                String toolName,
                                String status,
@@ -28,7 +28,7 @@ public class AiToolCallLogServiceImpl extends ServiceImpl<AiToolCallLogMapper, A
                                String errorMessage,
                                long durationMs) {
         AiToolCallLog record = new AiToolCallLog();
-        record.setSessionId(sessionId);
+        record.setConversationId(conversationId);
         record.setUserId(loginUser == null ? null : loginUser.getId());
         record.setActionType("tool");
         record.setToolName(toolName);
@@ -42,7 +42,7 @@ public class AiToolCallLogServiceImpl extends ServiceImpl<AiToolCallLogMapper, A
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void recordDraftConfirm(String sessionId,
+    public void recordDraftConfirm(String conversationId,
                                    User loginUser,
                                    String draftId,
                                    Long teamId,
@@ -51,7 +51,7 @@ public class AiToolCallLogServiceImpl extends ServiceImpl<AiToolCallLogMapper, A
                                    String errorMessage,
                                    long durationMs) {
         AiToolCallLog record = new AiToolCallLog();
-        record.setSessionId(sessionId);
+        record.setConversationId(conversationId);
         record.setUserId(loginUser == null ? null : loginUser.getId());
         record.setActionType("confirmDraft");
         record.setToolName("confirmTeamDraft");

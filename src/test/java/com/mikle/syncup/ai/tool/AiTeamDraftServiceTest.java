@@ -112,16 +112,16 @@ class AiTeamDraftServiceTest {
     @Test
     void saveDraft_validDraft_shouldPersistPendingDraftWithoutCreatingTeam() {
         User owner = createUser();
-        String sessionId = unique("session");
-        TeamDraftVO source = validDraft(sessionId, owner);
+        String conversationId = unique("conversation");
+        TeamDraftVO source = validDraft(conversationId, owner);
 
-        TeamDraftVO saved = aiTeamDraftService.saveDraft(source, owner, sessionId);
+        TeamDraftVO saved = aiTeamDraftService.saveDraft(source, owner, conversationId);
 
         AiTeamDraft entity = findDraft(saved.getDraftId());
         Assertions.assertAll(
                 () -> Assertions.assertNotNull(entity),
                 () -> Assertions.assertEquals(owner.getId(), entity.getUserId()),
-                () -> Assertions.assertEquals(sessionId, entity.getSessionId()),
+                () -> Assertions.assertEquals(conversationId, entity.getConversationId()),
                 () -> Assertions.assertEquals(0, entity.getStatus()),
                 () -> Assertions.assertNull(entity.getConfirmedTeamId()),
                 () -> Assertions.assertEquals(0L, countTeams(owner.getId())),
@@ -132,8 +132,8 @@ class AiTeamDraftServiceTest {
     @Test
     void confirmDraft_ownedPendingDraft_shouldCreateOneTeamAndMarkDraftConfirmed() {
         User owner = createUser();
-        String sessionId = unique("session");
-        TeamDraftVO draft = saveValidDraft(owner, sessionId);
+        String conversationId = unique("conversation");
+        TeamDraftVO draft = saveValidDraft(owner, conversationId);
 
         AiTeamDraftConfirmResponse response = aiTeamDraftService.confirmDraft(draft.getDraftId(), owner);
 
@@ -153,7 +153,7 @@ class AiTeamDraftServiceTest {
                 () -> Assertions.assertNotNull(confirmed.getConfirmedAt()),
                 () -> Assertions.assertEquals(1L, countTeamMemberships(response.getTeamId())),
                 () -> Assertions.assertEquals(1L, countAuditLogs(draft.getDraftId(), "success")),
-                () -> Assertions.assertEquals(1L, countEvents(owner.getId(), sessionId))
+                () -> Assertions.assertEquals(1L, countEvents(owner.getId(), conversationId))
         );
         verify(memoryPipelineService).onChatTurnCompleted(
                 org.mockito.ArgumentMatchers.eq(owner.getId()), any(), anyLong());
@@ -182,7 +182,7 @@ class AiTeamDraftServiceTest {
         User owner = createUser();
         TeamDraftVO draft = validDraft(unique("session"), owner);
         draft.setExpiresAt(new Date(System.currentTimeMillis() - 60_000));
-        aiTeamDraftService.saveDraft(draft, owner, draft.getSessionId());
+        aiTeamDraftService.saveDraft(draft, owner, draft.getConversationId());
 
         Assertions.assertThrows(
                 DraftExpiredException.class,
@@ -308,16 +308,16 @@ class AiTeamDraftServiceTest {
         return user;
     }
 
-    private TeamDraftVO saveValidDraft(User owner, String sessionId) {
-        TeamDraftVO draft = validDraft(sessionId, owner);
-        return aiTeamDraftService.saveDraft(draft, owner, sessionId);
+    private TeamDraftVO saveValidDraft(User owner, String conversationId) {
+        TeamDraftVO draft = validDraft(conversationId, owner);
+        return aiTeamDraftService.saveDraft(draft, owner, conversationId);
     }
 
-    private TeamDraftVO validDraft(String sessionId, User owner) {
+    private TeamDraftVO validDraft(String conversationId, User owner) {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6);
         TeamDraftVO draft = new TeamDraftVO();
         draft.setDraftId("draft-" + suffix + "-" + owner.getId());
-        draft.setSessionId(sessionId);
+        draft.setConversationId(conversationId);
         draft.setName("AI羽毛球" + suffix);
         draft.setDescription("新手友好的周末活动");
         draft.setMaxNum(4);
@@ -364,16 +364,16 @@ class AiTeamDraftServiceTest {
         return count == null ? 0 : count;
     }
 
-    private long countEvents(long userId, String sessionId) {
+    private long countEvents(long userId, String conversationId) {
         Long count = jdbcTemplate.queryForObject("""
                         select count(*)
                         from ai_chat_message message
                         inner join ai_chat_session session on session.id = message.chatSessionId
-                        where message.userId = ? and session.sessionKey = ? and message.role = 'event'
+                        where message.userId = ? and session.conversationId = ? and message.role = 'event'
                         """,
                 Long.class,
                 userId,
-                sessionId
+                conversationId
         );
         return count == null ? 0 : count;
     }

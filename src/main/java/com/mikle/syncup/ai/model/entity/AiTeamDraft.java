@@ -20,7 +20,7 @@ public class AiTeamDraft implements Serializable {
 
     private String draftId;
 
-    private String sessionId;
+    private String conversationId;
 
     private Long userId;
 

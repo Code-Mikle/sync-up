@@ -183,10 +183,10 @@ class AiMemorySourceLifecycleTest {
         return task;
     }
 
-    private AiEpisodeExtractionTask insertChatExtractionTask(long userId, long sessionId, long toMessageId) {
+    private AiEpisodeExtractionTask insertChatExtractionTask(long userId, long chatSessionId, long toMessageId) {
         AiEpisodeExtractionTask task = new AiEpisodeExtractionTask();
         task.setUserId(userId);
-        task.setChatSessionId(sessionId);
+        task.setChatSessionId(chatSessionId);
         task.setSourceType(MemorySourceType.CHAT_MESSAGE.name());
         task.setFromMessageIdExclusive(0L);
         task.setToMessageIdInclusive(toMessageId);
@@ -222,10 +222,9 @@ class AiMemorySourceLifecycleTest {
     private AiChatSession insertSession(long userId) {
         AiChatSession session = new AiChatSession();
         session.setUserId(userId);
-        session.setSessionKey("lifecycle-test-" + UUID.randomUUID());
+        session.setConversationId("lifecycle-test-" + UUID.randomUUID());
         session.setSummary("旧会话摘要");
         session.setLastSummaryMessageId(100L);
-        session.setSummaryVersion(1);
         session.setSummaryUpdatedAt(new Date());
         session.setSummaryModel("summary-model");
         session.setSummaryPromptVersion("summary-prompt-v1");
@@ -235,10 +234,10 @@ class AiMemorySourceLifecycleTest {
         return session;
     }
 
-    private AiChatMessage insertMessage(long userId, long sessionId, Date retentionExpireAt) {
+    private AiChatMessage insertMessage(long userId, long chatSessionId, Date retentionExpireAt) {
         AiChatMessage message = new AiChatMessage();
         message.setUserId(userId);
-        message.setChatSessionId(sessionId);
+        message.setChatSessionId(chatSessionId);
         message.setRole("user");
         message.setContent("聊天消息");
         message.setVisible(1);
@@ -257,9 +256,7 @@ class AiMemorySourceLifecycleTest {
         profile.setAiInteractionPreferenceText("交互偏好");
         profile.setProfileText("完整画像");
         profile.setMatchProfileText("匹配画像");
-        profile.setInteractionProfileText("交互画像");
         profile.setProfileVersion(1);
-        profile.setEvidenceDigest("a".repeat(64));
         profile.setModel("profile-model");
         profile.setPromptVersion("profile-prompt-v1");
         profile.setStatus(ProfileStatus.ACTIVE.name());

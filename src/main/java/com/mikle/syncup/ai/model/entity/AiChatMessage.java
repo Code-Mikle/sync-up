@@ -45,8 +45,6 @@ public class AiChatMessage implements Serializable {
 
     private Date createTime;
 
-    private Date updateTime;
-
     @TableLogic
     private Integer isDelete;
 

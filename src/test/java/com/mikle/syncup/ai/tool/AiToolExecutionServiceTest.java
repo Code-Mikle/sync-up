@@ -57,13 +57,13 @@ class AiToolExecutionServiceTest {
         AiToolResult expected = AiToolResult.success("search_teams", "read", "找到队伍", List.of());
         when(registry.execute("search_teams", intent, loginUser)).thenReturn(expected);
 
-        AiToolResult actual = service.execute("search_teams", intent, loginUser, "session-1");
+        AiToolResult actual = service.execute("search_teams", intent, loginUser, "conversation-1");
 
         assertSame(expected, actual);
         InOrder order = inOrder(registry, logService);
         order.verify(registry).execute("search_teams", intent, loginUser);
         order.verify(logService).recordToolCall(
-                eq("session-1"), eq(loginUser), eq("search_teams"), eq("success"),
+                eq("conversation-1"), eq(loginUser), eq("search_teams"), eq("success"),
                 contains("city=西安"), contains("success=true"), isNull(), anyLong()
         );
     }
@@ -74,11 +74,11 @@ class AiToolExecutionServiceTest {
         AiToolResult expected = AiToolResult.failure("search_teams", "read", "筛选条件不完整");
         when(registry.execute("search_teams", intent, loginUser)).thenReturn(expected);
 
-        AiToolResult actual = service.execute("search_teams", intent, loginUser, "session-2");
+        AiToolResult actual = service.execute("search_teams", intent, loginUser, "conversation-2");
 
         assertSame(expected, actual);
         verify(logService).recordToolCall(
-                eq("session-2"), eq(loginUser), eq("search_teams"), eq("failed"),
+                eq("conversation-2"), eq(loginUser), eq("search_teams"), eq("failed"),
                 contains("createTeamRequested=false"), contains("success=false"),
                 eq("筛选条件不完整"), anyLong()
         );
@@ -92,12 +92,12 @@ class AiToolExecutionServiceTest {
 
         RuntimeException actual = assertThrows(
                 RuntimeException.class,
-                () -> service.execute("search_teams", intent, loginUser, "session-3")
+                () -> service.execute("search_teams", intent, loginUser, "conversation-3")
         );
 
         assertSame(failure, actual);
         verify(logService).recordToolCall(
-                eq("session-3"), eq(loginUser), eq("search_teams"), eq("failed"),
+                eq("conversation-3"), eq(loginUser), eq("search_teams"), eq("failed"),
                 contains("createTeamRequested=false"), isNull(), eq("tool unavailable"), anyLong()
         );
     }
@@ -111,10 +111,10 @@ class AiToolExecutionServiceTest {
         when(registry.execute("team_details", intent, loginUser)).thenReturn(result);
         ArgumentCaptor<String> argumentsSummary = ArgumentCaptor.forClass(String.class);
 
-        service.execute("team_details", intent, loginUser, "session-4");
+        service.execute("team_details", intent, loginUser, "conversation-4");
 
         verify(logService).recordToolCall(
-                eq("session-4"), eq(loginUser), eq("team_details"), eq("success"),
+                eq("conversation-4"), eq(loginUser), eq("team_details"), eq("success"),
                 argumentsSummary.capture(), contains("success=true"), isNull(), anyLong()
         );
         assertTrue(argumentsSummary.getValue().contains("hasTeamPassword=true"));

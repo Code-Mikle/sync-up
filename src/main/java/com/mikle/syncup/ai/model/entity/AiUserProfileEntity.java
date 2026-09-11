@@ -33,11 +33,7 @@ public class AiUserProfileEntity implements Serializable {
 
     private String matchProfileText;
 
-    private String interactionProfileText;
-
     private Integer profileVersion;
-
-    private String evidenceDigest;
 
     private String model;
 

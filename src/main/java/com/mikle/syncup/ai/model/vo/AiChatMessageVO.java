@@ -10,7 +10,7 @@ public class AiChatMessageVO implements Serializable {
 
     private Long id;
 
-    private String sessionId;
+    private String conversationId;
 
     private String role;
 

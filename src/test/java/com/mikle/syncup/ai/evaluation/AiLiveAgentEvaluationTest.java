@@ -184,13 +184,13 @@ class AiLiveAgentEvaluationTest {
         String id = testCase.path("id").asText();
         User loginUser = usersByAccount.get(testCase.path("loginUserAccount").asText());
         if (loginUser == null) throw new IllegalStateException("missing seeded login user for " + id);
-        String sessionKey = "eval-agent-" + id.substring(id.length() - 3) + "-"
+        String conversationId = "eval-agent-" + id.substring(id.length() - 3) + "-"
                 + UUID.randomUUID().toString().substring(0, 8);
         Map<String, Long> before = snapshotTrackedTables();
         AiChatSession session = null;
         try {
             clearInvocations(toolExecutionService);
-            session = chatSessionService.getOrCreate(loginUser.getId(), sessionKey);
+            session = chatSessionService.getOrCreate(loginUser.getId(), conversationId);
             List<AiChatResponseVO> responses = new ArrayList<>();
             List<List<String>> toolsByTurn = new ArrayList<>();
             int invocationCursor = 0;
@@ -209,20 +209,20 @@ class AiLiveAgentEvaluationTest {
                 chatSessionService.markClosedMessage(session.getId(), assistantMessage.getId());
                 session = chatSessionService.getById(session.getId());
 
-                List<CapturedCall> calls = capturedCalls(sessionKey);
+                List<CapturedCall> calls = capturedCalls(conversationId);
                 toolsByTurn.add(calls.subList(invocationCursor, calls.size()).stream()
                         .map(CapturedCall::toolName).toList());
                 invocationCursor = calls.size();
             }
 
-            List<CapturedCall> calls = capturedCalls(sessionKey);
-            List<AiToolCallLog> logs = toolLogs(sessionKey);
+            List<CapturedCall> calls = capturedCalls(conversationId);
+            List<AiToolCallLog> logs = toolLogs(conversationId);
             Map<String, Long> after = snapshotTrackedTables();
             return evaluateCase(testCase, responses, toolsByTurn, calls, logs,
                     before, after, teamIdsByCode, teamCodesById, userAccountsById);
         } finally {
-            cleanupCase(sessionKey, session == null ? null : session.getId());
-            assertCaseCleaned(sessionKey, session == null ? null : session.getId());
+            cleanupCase(conversationId, session == null ? null : session.getId());
+            assertCaseCleaned(conversationId, session == null ? null : session.getId());
             clearInvocations(toolExecutionService);
         }
     }
@@ -523,20 +523,20 @@ class AiLiveAgentEvaluationTest {
         return true;
     }
 
-    private List<CapturedCall> capturedCalls(String sessionKey) {
+    private List<CapturedCall> capturedCalls(String conversationId) {
         List<CapturedCall> result = new ArrayList<>();
         for (Invocation invocation : mockingDetails(toolExecutionService).getInvocations()) {
             if (!"execute".equals(invocation.getMethod().getName())) continue;
             Object[] arguments = invocation.getArguments();
-            if (arguments.length != 4 || !sessionKey.equals(arguments[3])) continue;
+            if (arguments.length != 4 || !conversationId.equals(arguments[3])) continue;
             result.add(new CapturedCall((String) arguments[0], (AiIntent) arguments[1]));
         }
         return result;
     }
 
-    private List<AiToolCallLog> toolLogs(String sessionKey) {
+    private List<AiToolCallLog> toolLogs(String conversationId) {
         return toolCallLogMapper.selectList(new QueryWrapper<AiToolCallLog>()
-                .eq("sessionId", sessionKey).orderByAsc("id"));
+                .eq("conversationId", conversationId).orderByAsc("id"));
     }
 
     private CapturedCall firstCall(List<CapturedCall> calls, String toolName) {
@@ -553,22 +553,22 @@ class AiLiveAgentEvaluationTest {
         return result;
     }
 
-    private void cleanupCase(String sessionKey, Long chatSessionId) {
+    private void cleanupCase(String conversationId, Long chatSessionId) {
         if (chatSessionId != null) {
             jdbcTemplate.update("DELETE FROM ai_chat_message WHERE chatSessionId = ?", chatSessionId);
         }
-        jdbcTemplate.update("DELETE FROM ai_team_draft WHERE sessionId = ?", sessionKey);
-        jdbcTemplate.update("DELETE FROM ai_tool_call_log WHERE sessionId = ?", sessionKey);
+        jdbcTemplate.update("DELETE FROM ai_team_draft WHERE conversationId = ?", conversationId);
+        jdbcTemplate.update("DELETE FROM ai_tool_call_log WHERE conversationId = ?", conversationId);
         if (chatSessionId != null) {
             jdbcTemplate.update("DELETE FROM ai_chat_session WHERE id = ?", chatSessionId);
         }
     }
 
-    private void assertCaseCleaned(String sessionKey, Long chatSessionId) {
+    private void assertCaseCleaned(String conversationId, Long chatSessionId) {
         Long logs = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM ai_tool_call_log WHERE sessionId = ?", Long.class, sessionKey);
+                "SELECT COUNT(*) FROM ai_tool_call_log WHERE conversationId = ?", Long.class, conversationId);
         Long drafts = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM ai_team_draft WHERE sessionId = ?", Long.class, sessionKey);
+                "SELECT COUNT(*) FROM ai_team_draft WHERE conversationId = ?", Long.class, conversationId);
         assertEquals(0L, logs == null ? 0L : logs, "当前 Agent 评测工具日志清理不完整");
         assertEquals(0L, drafts == null ? 0L : drafts, "当前 Agent 评测草稿清理不完整");
         if (chatSessionId != null) {
@@ -683,11 +683,11 @@ class AiLiveAgentEvaluationTest {
 
     private void assertNoHarnessResidue() {
         Long sessions = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM ai_chat_session WHERE sessionKey LIKE 'eval-agent-%'", Long.class);
+                "SELECT COUNT(*) FROM ai_chat_session WHERE conversationId LIKE 'eval-agent-%'", Long.class);
         Long logs = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM ai_tool_call_log WHERE sessionId LIKE 'eval-agent-%'", Long.class);
+                "SELECT COUNT(*) FROM ai_tool_call_log WHERE conversationId LIKE 'eval-agent-%'", Long.class);
         Long drafts = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM ai_team_draft WHERE sessionId LIKE 'eval-agent-%'", Long.class);
+                "SELECT COUNT(*) FROM ai_team_draft WHERE conversationId LIKE 'eval-agent-%'", Long.class);
         assertEquals(0L, sessions == null ? 0L : sessions, "Agent 评测会话清理不完整");
         assertEquals(0L, logs == null ? 0L : logs, "Agent 评测工具日志清理不完整");
         assertEquals(0L, drafts == null ? 0L : drafts, "Agent 评测草稿清理不完整");

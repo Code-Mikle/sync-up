@@ -37,7 +37,7 @@ export type TeamIntent = {
 
 export type TeamDraft = {
     draftId: string;
-    sessionId?: string;
+    conversationId?: string;
     name?: string;
     description?: string;
     maxNum?: number;
@@ -104,7 +104,7 @@ export type AiUiBlock = {
 };
 
 export type AiChatResponse = {
-    sessionId: string;
+    conversationId: string;
     reply: string;
     intent?: TeamIntent;
     uiBlocks?: AiUiBlock[];
@@ -114,7 +114,7 @@ export type AiChatResponse = {
 
 export type AiChatMessage = {
     id?: number;
-    sessionId?: string;
+    conversationId?: string;
     role: "user" | "assistant" | "event";
     content?: string;
     response?: AiChatResponse;
@@ -126,7 +126,7 @@ export type AiChatMessage = {
 };
 
 export type AiChatHistory = {
-    sessionId?: string;
+    conversationId?: string;
     messages?: AiChatMessage[];
 };
 

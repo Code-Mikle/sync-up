@@ -47,11 +47,11 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
                 || message.length() > aiAgentProperties.getMaxInputLength()) {
             return Optional.empty();
         }
-        String sessionKey = session == null ? "stateless" : session.getSessionKey();
+        String conversationId = session == null ? "stateless" : session.getConversationId();
         String modelMessage = workingMemoryService.buildModelContext(session, loginUser, message);
-        aiAgentToolContext.start(sessionKey, loginUser, message);
+        aiAgentToolContext.start(conversationId, loginUser, message);
         try {
-            return Optional.of(invokeAssistant(message, sessionKey, modelMessage));
+            return Optional.of(invokeAssistant(message, conversationId, modelMessage));
         } catch (RuntimeException failure) {
             logAgentFailure(failure);
             return Optional.empty();
@@ -60,11 +60,11 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
         }
     }
 
-    private AiChatResponseVO invokeAssistant(String originalMessage, String sessionKey, String modelMessage) {
+    private AiChatResponseVO invokeAssistant(String originalMessage, String conversationId, String modelMessage) {
         String reply = buildAssistant().chat(modelMessage);
         AiAgentToolContext.State state = aiAgentToolContext.snapshot();
         AiChatResponseVO response = new AiChatResponseVO();
-        response.setSessionId(sessionKey);
+        response.setConversationId(conversationId);
         response.setReply(reply);
         response.getUiBlocks().addAll(state.getUiBlocks());
         response.setIntent(buildResponseIntent(originalMessage, state));

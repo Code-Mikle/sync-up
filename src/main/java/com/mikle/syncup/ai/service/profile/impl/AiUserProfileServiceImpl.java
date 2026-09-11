@@ -9,6 +9,7 @@ import com.mikle.syncup.ai.model.entity.AiUserProfileEntity;
 import com.mikle.syncup.ai.model.enums.ProfileStatus;
 import com.mikle.syncup.ai.service.memory.AiMemoryPipelineService;
 import com.mikle.syncup.ai.service.profile.AiUserProfileService;
+import com.mikle.syncup.ai.service.profile.UserProfileTextAssembler;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import jakarta.annotation.Resource;
@@ -24,6 +25,9 @@ public class AiUserProfileServiceImpl extends ServiceImpl<AiUserProfileMapper, A
 
     @Resource
     private AiUserProfileEmbeddingMapper embeddingMapper;
+
+    @Resource
+    private UserProfileTextAssembler profileTextAssembler;
 
     @Override
     public void onSelfIntroductionChanged(long userId, String sourceText) {
@@ -58,7 +62,10 @@ public class AiUserProfileServiceImpl extends ServiceImpl<AiUserProfileMapper, A
     @Override
     public String getInteractionProfileText(long userId) {
         AiUserProfileEntity profile = getInternalProfile(userId);
-        return profile == null ? null : profile.getInteractionProfileText();
+        if (profile == null || StringUtils.isBlank(profile.getAiInteractionPreferenceText())) {
+            return null;
+        }
+        return profileTextAssembler.renderInteraction(profile.getAiInteractionPreferenceText());
     }
 
     private String sanitize(String sourceText) {

@@ -22,12 +22,12 @@ public class AiToolExecutionServiceImpl implements AiToolExecutionService {
     private AiToolCallLogService aiToolCallLogService;
 
     @Override
-    public AiToolResult execute(String toolName, AiIntent intent, User loginUser, String sessionId) {
+    public AiToolResult execute(String toolName, AiIntent intent, User loginUser, String conversationId) {
         long start = System.currentTimeMillis();
         try {
             AiToolResult result = aiToolRegistry.execute(toolName, intent, loginUser);
             aiToolCallLogService.recordToolCall(
-                    sessionId,
+                    conversationId,
                     loginUser,
                     toolName,
                     result.isSuccess() ? "success" : "failed",
@@ -39,7 +39,7 @@ public class AiToolExecutionServiceImpl implements AiToolExecutionService {
             return result;
         } catch (RuntimeException e) {
             aiToolCallLogService.recordToolCall(
-                    sessionId,
+                    conversationId,
                     loginUser,
                     toolName,
                     "failed",

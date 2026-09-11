@@ -147,11 +147,14 @@ Spring Boot 会通过 `spring.config.import` 自动读取项目根目录的 `.en
 ### 2. 初始化数据库
 
 ```bash
-mysql -u root -p < sql/create_table.sql
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS sync_up_db; CREATE DATABASE IF NOT EXISTS sync_up_test;"
+mysql -u root -p sync_up_db < sql/create_table.sql
+mysql -u root -p sync_up_test < sql/create_table.sql
 mysql -u root -p sync_up_db < sql/controlled_tag_seed.sql
+mysql -u root -p sync_up_test < sql/controlled_tag_seed.sql
 ```
 
-`create_table.sql` 用于首次创建 `sync_up_db`、`sync_up_test` 和项目表；请在空数据库环境执行。受控标签 ID 是业务稳定数据，不应在不同环境随意修改。
+`create_table.sql` 是不绑定数据库的纯表结构脚本，请分别在空的 `sync_up_db` 和 `sync_up_test` 中执行。受控标签 ID 是业务稳定数据，两个库都需要初始化，且不应在不同环境随意修改。
 
 ### 3. 启动后端
 

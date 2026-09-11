@@ -6,7 +6,7 @@ import com.mikle.syncup.model.domain.User;
 
 public interface AiToolCallLogService extends IService<AiToolCallLog> {
 
-    void recordToolCall(String sessionId,
+    void recordToolCall(String conversationId,
                         User loginUser,
                         String toolName,
                         String status,
@@ -15,7 +15,7 @@ public interface AiToolCallLogService extends IService<AiToolCallLog> {
                         String errorMessage,
                         long durationMs);
 
-    void recordDraftConfirm(String sessionId,
+    void recordDraftConfirm(String conversationId,
                             User loginUser,
                             String draftId,
                             Long teamId,

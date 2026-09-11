@@ -10,7 +10,7 @@ import java.util.List;
 @Data
 public class AiChatResponseVO implements Serializable {
 
-    private String sessionId;
+    private String conversationId;
 
     private String reply;
 

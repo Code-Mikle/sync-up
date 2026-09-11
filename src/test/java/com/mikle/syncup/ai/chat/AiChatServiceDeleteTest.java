@@ -128,10 +128,10 @@ class AiChatServiceDeleteTest {
         User member = createUser();
         long teamId = createTeam(owner);
         createMembership(member.getId(), teamId);
-        String sessionId = unique("delete-session");
+        String conversationId = unique("delete-conversation");
         HttpServletRequest request = requestFor(owner);
 
-        AiToolResult result = aiChatService.deleteTeam(teamId, details(sessionId), request);
+        AiToolResult result = aiChatService.deleteTeam(teamId, details(conversationId), request);
 
         Map<?, ?> data = Assertions.assertInstanceOf(Map.class, result.getData());
         Assertions.assertAll(
@@ -141,7 +141,7 @@ class AiChatServiceDeleteTest {
                 () -> Assertions.assertEquals(0L, countPhysicalTeams(teamId)),
                 () -> Assertions.assertEquals(0L, countPhysicalTeamMemberships(teamId)),
                 () -> Assertions.assertEquals(1L, countToolLogs(owner.getId(), teamId, "success")),
-                () -> Assertions.assertEquals(1L, countDeleteEvents(owner.getId(), sessionId, teamId))
+                () -> Assertions.assertEquals(1L, countDeleteEvents(owner.getId(), conversationId, teamId))
         );
         verify(memoryPipelineService).onChatTurnCompleted(
                 org.mockito.ArgumentMatchers.eq(owner.getId()), any(), anyLong());
@@ -172,13 +172,13 @@ class AiChatServiceDeleteTest {
     void deleteTeam_confirmedTwice_shouldRecordOneEventAndRejectSecondRequest() {
         User owner = createUser();
         long teamId = createTeam(owner);
-        String sessionId = unique("delete-session");
+        String conversationId = unique("delete-conversation");
         HttpServletRequest request = requestFor(owner);
 
-        aiChatService.deleteTeam(teamId, details(sessionId), request);
+        aiChatService.deleteTeam(teamId, details(conversationId), request);
         BusinessException second = Assertions.assertThrows(
                 BusinessException.class,
-                () -> aiChatService.deleteTeam(teamId, details(sessionId), request)
+                () -> aiChatService.deleteTeam(teamId, details(conversationId), request)
         );
 
         Assertions.assertEquals(ErrorCode.NULL_ERROR.getCode(), second.getCode());
@@ -186,7 +186,7 @@ class AiChatServiceDeleteTest {
         Assertions.assertEquals(0L, countPhysicalTeamMemberships(teamId));
         Assertions.assertEquals(1L, countToolLogs(owner.getId(), teamId, "success"));
         Assertions.assertEquals(1L, countToolLogs(owner.getId(), teamId, "failed"));
-        Assertions.assertEquals(1L, countDeleteEvents(owner.getId(), sessionId, teamId));
+        Assertions.assertEquals(1L, countDeleteEvents(owner.getId(), conversationId, teamId));
         verify(memoryPipelineService).onChatTurnCompleted(
                 org.mockito.ArgumentMatchers.eq(owner.getId()), any(), anyLong());
     }
@@ -194,17 +194,17 @@ class AiChatServiceDeleteTest {
     @Test
     void deleteTeam_invalidTeamId_shouldRejectWithoutCreatingSessionOrEvent() {
         User owner = createUser();
-        String sessionId = unique("delete-session");
+        String conversationId = unique("delete-conversation");
         HttpServletRequest request = requestFor(owner);
 
         BusinessException exception = Assertions.assertThrows(
                 BusinessException.class,
-                () -> aiChatService.deleteTeam(0L, details(sessionId), request)
+                () -> aiChatService.deleteTeam(0L, details(conversationId), request)
         );
 
         Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
         Assertions.assertEquals(1L, countToolLogs(owner.getId(), 0L, "failed"));
-        Assertions.assertEquals(0L, countSessions(owner.getId(), sessionId));
+        Assertions.assertEquals(0L, countSessions(owner.getId(), conversationId));
         Assertions.assertEquals(0L, countAllDeleteEvents(owner.getId()));
         verify(memoryPipelineService, never()).onChatTurnCompleted(anyLong(), any(), anyLong());
     }
@@ -254,9 +254,9 @@ class AiChatServiceDeleteTest {
         return request;
     }
 
-    private AiTeamDetailsRequest details(String sessionId) {
+    private AiTeamDetailsRequest details(String conversationId) {
         AiTeamDetailsRequest details = new AiTeamDetailsRequest();
-        details.setSessionId(sessionId);
+        details.setConversationId(conversationId);
         return details;
     }
 
@@ -288,18 +288,18 @@ class AiChatServiceDeleteTest {
                 .like(AiToolCallLog::getArgumentsSummary, "teamId=" + teamId));
     }
 
-    private long countDeleteEvents(long userId, String sessionId, long teamId) {
+    private long countDeleteEvents(long userId, String conversationId, long teamId) {
         // 保留跨表统计 SQL，不为测试断言新增生产 Mapper 接口。
         Long count = jdbcTemplate.queryForObject("""
                         select count(*)
                         from ai_chat_message message
                         inner join ai_chat_session session on session.id = message.chatSessionId
-                        where message.userId = ? and session.sessionKey = ? and message.role = 'event'
+                        where message.userId = ? and session.conversationId = ? and message.role = 'event'
                           and message.content like ?
                         """,
                 Long.class,
                 userId,
-                sessionId,
+                conversationId,
                 "%teamId=" + teamId + "%"
         );
         return count == null ? 0 : count;
@@ -312,10 +312,10 @@ class AiChatServiceDeleteTest {
                 .likeRight(AiChatMessage::getContent, "用户已确认删除队伍"));
     }
 
-    private long countSessions(long userId, String sessionId) {
+    private long countSessions(long userId, String conversationId) {
         return aiChatSessionMapper.selectCount(new LambdaQueryWrapper<AiChatSession>()
                 .eq(AiChatSession::getUserId, userId)
-                .eq(AiChatSession::getSessionKey, sessionId));
+                .eq(AiChatSession::getConversationId, conversationId));
     }
 
     private String unique(String prefix) {

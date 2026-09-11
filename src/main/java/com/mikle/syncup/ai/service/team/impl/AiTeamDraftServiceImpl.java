@@ -52,13 +52,13 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
     private AiMemoryPipelineService memoryPipelineService;
 
     @Override
-    public TeamDraftVO saveDraft(TeamDraftVO draft, User loginUser, String sessionId) {
+    public TeamDraftVO saveDraft(TeamDraftVO draft, User loginUser, String conversationId) {
         if (draft == null || loginUser == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         AiTeamDraft entity = new AiTeamDraft();
         BeanUtils.copyProperties(draft, entity);
-        entity.setSessionId(sessionId);
+        entity.setConversationId(conversationId);
         entity.setUserId(loginUser.getId());
         entity.setStatus(STATUS_PENDING);
         boolean saved = this.save(entity);
@@ -78,7 +78,7 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
             AiTeamDraftConfirmResponse response = doConfirmDraft(normalizedDraftId, loginUser);
             AiTeamDraft confirmedDraft = findDraftByDraftId(response.getDraftId());
             aiToolCallLogService.recordDraftConfirm(
-                    confirmedDraft == null ? null : confirmedDraft.getSessionId(),
+                    confirmedDraft == null ? null : confirmedDraft.getConversationId(),
                     loginUser,
                     response.getDraftId(),
                     response.getTeamId(),
@@ -88,7 +88,8 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
                     System.currentTimeMillis() - start
             );
             if (confirmedDraft != null) {
-                var chatSession = aiChatSessionService.getOrCreate(loginUser.getId(), confirmedDraft.getSessionId());
+                var chatSession = aiChatSessionService.getOrCreate(
+                        loginUser.getId(), confirmedDraft.getConversationId());
                 var event = aiChatMessageService.saveTeamDraftConfirmedEvent(
                         loginUser, chatSession,
                         response.getDraftId(),
@@ -102,7 +103,7 @@ public class AiTeamDraftServiceImpl extends ServiceImpl<AiTeamDraftMapper, AiTea
                 draft = findDraftByDraftId(normalizedDraftId);
             }
             aiToolCallLogService.recordDraftConfirm(
-                    draft == null ? null : draft.getSessionId(),
+                    draft == null ? null : draft.getConversationId(),
                     loginUser,
                     normalizedDraftId,
                     null,

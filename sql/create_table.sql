@@ -1,9 +1,5 @@
-create database if not exists sync_up_db;
-
-create database if not exists sync_up_test;
-use sync_up_test;
-
-use sync_up_db;
+-- 纯表结构脚本，请在目标数据库中执行。
+-- 开发环境需要分别对 sync_up_db 和 sync_up_test 执行本脚本。
 
 -- 用户表
 create table user
@@ -73,7 +69,7 @@ create table ai_team_draft
 (
     id              bigint auto_increment comment 'id' primary key,
     draftId         varchar(64) not null comment 'AI 草稿公开 id',
-    sessionId       varchar(64) null comment 'AI 对话会话 id',
+    conversationId  varchar(64) null comment 'AI 对话公开标识',
     userId          bigint not null comment '草稿所属用户 id',
     name            varchar(256) not null comment '队伍名称',
     description     varchar(1024) null comment '描述',
@@ -101,7 +97,7 @@ create table ai_team_draft
 create table ai_tool_call_log
 (
     id               bigint auto_increment comment 'id' primary key,
-    sessionId        varchar(64) null comment 'AI 对话会话 id',
+    conversationId   varchar(64) null comment 'AI 对话公开标识',
     userId           bigint null comment '用户 id',
     actionType       varchar(64) not null comment '动作类型',
     toolName         varchar(64) not null comment '工具名称',
@@ -116,7 +112,7 @@ create table ai_tool_call_log
     updateTime       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     isDelete         tinyint default 0 not null comment '是否删除',
     key idx_ai_tool_call_log_user_time (userId, createTime),
-    key idx_ai_tool_call_log_session (sessionId),
+    key idx_ai_tool_call_log_conversation (conversationId),
     key idx_ai_tool_call_log_action_status (actionType, status)
 ) comment 'AI 工具调用审计';
 
@@ -132,9 +128,7 @@ create table ai_user_profile
     aiInteractionPreferenceText text not null comment 'AI 交互偏好',
     profileText                 text not null comment '完整五段式内部画像',
     matchProfileText            text not null comment '用于匹配的前四段画像',
-    interactionProfileText      text not null comment '仅用于 AI 交流方式的第五段画像',
     profileVersion              int not null comment '画像版本号',
-    evidenceDigest              char(64) not null comment '画像证据 SHA-256',
     model                       varchar(128) not null comment '生成模型',
     promptVersion               varchar(64) not null comment '画像 Prompt 版本',
     status                      varchar(32) not null comment 'ACTIVE / REBUILD_REQUIRED',
@@ -189,20 +183,20 @@ create table ai_chat_session
 (
     id                             bigint auto_increment comment 'id' primary key,
     userId                         bigint not null comment '用户 id',
-    sessionKey                     varchar(64) not null comment 'API 会话标识',
+    conversationId                 varchar(64) not null comment '对话公开标识，由服务端生成并由客户端后续请求携带',
     summary                        text null comment '滚动会话摘要',
     lastSummaryMessageId           bigint default 0 not null comment '摘要已覆盖的消息 ID',
-    summaryVersion                 int default 0 not null comment '摘要 CAS 版本',
     summaryUpdatedAt               datetime null comment '摘要更新时间',
     summaryModel                   varchar(128) null comment '摘要模型',
     summaryPromptVersion           varchar(64) null comment '摘要 Prompt 版本',
     lastClosedMessageId            bigint default 0 not null comment '已完成对话轮次的最后一条消息 id',
     lastEpisodeExtractedMessageId  bigint default 0 not null comment '已提取为 Episode 的消息 ID',
+    lastMessageAt                  datetime default CURRENT_TIMESTAMP not null comment '最近一条消息写入时间',
     createTime                     datetime default CURRENT_TIMESTAMP null comment '创建时间',
     updateTime                     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     isDelete                       tinyint default 0 not null comment '是否删除',
-    unique key uk_ai_chat_session_user_key (userId, sessionKey),
-    key idx_ai_chat_session_user_time (userId, updateTime)
+    unique key uk_ai_chat_session_user_conversation (userId, conversationId),
+    key idx_ai_chat_session_user_message_time (userId, lastMessageAt)
 ) comment 'AI 聊天会话和滚动摘要';
 
 -- AI 原始聊天消息表（唯一的对话事实来源）
@@ -214,10 +208,9 @@ create table ai_chat_message
     role                varchar(16) not null comment 'user / assistant / event',
     content             varchar(2048) null comment '展示文本或事件文本，最小化脱敏',
     responseJson        mediumtext null comment 'AI 响应或事件载荷 JSON',
-    visible             tinyint default 1 not null comment '是否在聊天页展示',
+    visible             tinyint default 1 not null comment '是否展示为聊天消息：0-隐藏业务事件，1-展示',
     retentionExpireAt   datetime null comment '长期保留过期时间',
     createTime          datetime default CURRENT_TIMESTAMP null comment '创建时间',
-    updateTime          datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     isDelete            tinyint default 0 not null comment '是否删除',
     key idx_ai_chat_message_session_id (chatSessionId, id),
     key idx_ai_chat_message_user_time (userId, createTime),

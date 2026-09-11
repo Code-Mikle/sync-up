@@ -62,20 +62,20 @@ public class AiChatServiceImpl implements AiChatService {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "message is too long");
         }
         User loginUser = userService.getLoginUser(request);
-        String sessionId = resolveSessionId(aiChatRequest.getSessionId());
-        AiChatSession session = aiChatSessionService.getOrCreate(loginUser.getId(), sessionId);
+        String conversationId = resolveConversationId(aiChatRequest.getConversationId());
+        AiChatSession session = aiChatSessionService.getOrCreate(loginUser.getId(), conversationId);
         aiChatMessageService.saveUserMessage(loginUser, session, message);
         Optional<AiChatResponseVO> agentResponse = aiAssistantAgentService.chat(message, session, loginUser);
         if (agentResponse.isPresent()) {
             AiChatResponseVO response = agentResponse.get();
-            response.setSessionId(sessionId);
+            response.setConversationId(conversationId);
             var assistantMessage = aiChatMessageService.saveAssistantMessage(loginUser, session, response.getReply(), response);
             memoryPipelineService.onChatTurnCompleted(loginUser.getId(), session, assistantMessage.getId());
             return response;
         }
 
         AiChatResponseVO response = new AiChatResponseVO();
-        response.setSessionId(sessionId);
+        response.setConversationId(conversationId);
         response.setReply(AI_UNAVAILABLE_REPLY);
         response.setNeedClarification(false);
         var assistantMessage = aiChatMessageService.saveAssistantMessage(loginUser, session, response.getReply(), response);
@@ -96,8 +96,9 @@ public class AiChatServiceImpl implements AiChatService {
         User loginUser = userService.getLoginUser(request);
         TeamIntent intent = new TeamIntent();
         intent.setTeamId(teamId);
-        String sessionId = resolveSessionId(aiTeamDetailsRequest == null ? null : aiTeamDetailsRequest.getSessionId());
-        return executeToolWithAudit(GetTeamDetailsTool.TOOL_NAME, intent, loginUser, sessionId);
+        String conversationId = resolveConversationId(
+                aiTeamDetailsRequest == null ? null : aiTeamDetailsRequest.getConversationId());
+        return executeToolWithAudit(GetTeamDetailsTool.TOOL_NAME, intent, loginUser, conversationId);
     }
 
     @Override
@@ -107,28 +108,30 @@ public class AiChatServiceImpl implements AiChatService {
         User loginUser = userService.getLoginUser(request);
         TeamIntent intent = new TeamIntent();
         intent.setTeamId(teamId);
-        String sessionId = resolveSessionId(aiTeamDetailsRequest == null ? null : aiTeamDetailsRequest.getSessionId());
-        AiToolResult result = executeToolWithAudit(DeleteTeamTool.TOOL_NAME, intent, loginUser, sessionId);
+        String conversationId = resolveConversationId(
+                aiTeamDetailsRequest == null ? null : aiTeamDetailsRequest.getConversationId());
+        AiToolResult result = executeToolWithAudit(DeleteTeamTool.TOOL_NAME, intent, loginUser, conversationId);
         if (result.isSuccess()) {
-            AiChatSession session = aiChatSessionService.getOrCreate(loginUser.getId(), sessionId);
+            AiChatSession session = aiChatSessionService.getOrCreate(loginUser.getId(), conversationId);
             var event = aiChatMessageService.saveTeamDeletedEvent(loginUser, session, teamId);
             if (event != null) memoryPipelineService.onChatTurnCompleted(loginUser.getId(), session, event.getId());
         }
         return result;
     }
 
-    private String resolveSessionId(String sessionId) {
-        if (StringUtils.isNotBlank(sessionId)) {
-            String normalizedSessionId = sessionId.trim();
-            if (normalizedSessionId.length() > 64) {
-                throw new BusinessException(ErrorCode.PARAMS_ERROR, "sessionId is too long");
+    private String resolveConversationId(String conversationId) {
+        if (StringUtils.isNotBlank(conversationId)) {
+            String normalizedConversationId = conversationId.trim();
+            if (normalizedConversationId.length() > 64) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "conversationId is too long");
             }
-            return normalizedSessionId;
+            return normalizedConversationId;
         }
         return UUID.randomUUID().toString();
     }
 
-    private AiToolResult executeToolWithAudit(String toolName, TeamIntent intent, User loginUser, String sessionId) {
-        return aiToolExecutionService.execute(toolName, intent, loginUser, sessionId);
+    private AiToolResult executeToolWithAudit(String toolName, TeamIntent intent, User loginUser,
+                                              String conversationId) {
+        return aiToolExecutionService.execute(toolName, intent, loginUser, conversationId);
     }
 }

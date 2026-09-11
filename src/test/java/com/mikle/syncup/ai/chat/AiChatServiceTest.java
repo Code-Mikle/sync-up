@@ -64,24 +64,24 @@ class AiChatServiceTest {
     @Test
     void chat_agentReturnsResponse_shouldSaveBothMessagesAndCloseTurnInOrder() {
         User user = user(1001L);
-        AiChatSession session = session(2001L, "session-1");
+        AiChatSession session = session(2001L, "conversation-1");
         AiChatMessage assistantMessage = message(3001L);
         AiChatResponseVO agentResponse = new AiChatResponseVO();
         agentResponse.setReply("找到两个合适的队伍。");
         when(userService.getLoginUser(httpRequest)).thenReturn(user);
-        when(sessionService.getOrCreate(user.getId(), "session-1")).thenReturn(session);
+        when(sessionService.getOrCreate(user.getId(), "conversation-1")).thenReturn(session);
         when(agentService.chat("找羽毛球搭子", session, user))
                 .thenReturn(Optional.of(agentResponse));
         when(messageService.saveAssistantMessage(user, session, agentResponse.getReply(), agentResponse))
                 .thenReturn(assistantMessage);
 
-        AiChatResponseVO response = chatService.chat(request("找羽毛球搭子", "  session-1  "), httpRequest);
+        AiChatResponseVO response = chatService.chat(request("找羽毛球搭子", "  conversation-1  "), httpRequest);
 
         Assertions.assertSame(agentResponse, response);
-        Assertions.assertEquals("session-1", response.getSessionId());
+        Assertions.assertEquals("conversation-1", response.getConversationId());
         InOrder order = inOrder(userService, sessionService, messageService, agentService, memoryPipelineService);
         order.verify(userService).getLoginUser(httpRequest);
-        order.verify(sessionService).getOrCreate(user.getId(), "session-1");
+        order.verify(sessionService).getOrCreate(user.getId(), "conversation-1");
         order.verify(messageService).saveUserMessage(user, session, "找羽毛球搭子");
         order.verify(agentService).chat("找羽毛球搭子", session, user);
         order.verify(messageService).saveAssistantMessage(user, session, agentResponse.getReply(), agentResponse);
@@ -89,13 +89,13 @@ class AiChatServiceTest {
     }
 
     @Test
-    void chat_withoutSessionId_shouldGenerateOneConsistentUuid() {
+    void chat_withoutConversationId_shouldGenerateOneConsistentUuid() {
         User user = user(1001L);
         AiChatMessage assistantMessage = message(3001L);
         when(userService.getLoginUser(httpRequest)).thenReturn(user);
         when(sessionService.getOrCreate(eq(user.getId()), anyString())).thenAnswer(invocation -> {
-            String generatedSessionId = invocation.getArgument(1);
-            return session(2001L, generatedSessionId);
+            String generatedConversationId = invocation.getArgument(1);
+            return session(2001L, generatedConversationId);
         });
         when(agentService.chat(eq("你好"), any(AiChatSession.class), eq(user))).thenReturn(Optional.empty());
         when(messageService.saveAssistantMessage(eq(user), any(AiChatSession.class), anyString(), any()))
@@ -103,11 +103,11 @@ class AiChatServiceTest {
 
         AiChatResponseVO response = chatService.chat(request("你好", null), httpRequest);
 
-        Assertions.assertDoesNotThrow(() -> UUID.fromString(response.getSessionId()));
-        verify(sessionService).getOrCreate(user.getId(), response.getSessionId());
+        Assertions.assertDoesNotThrow(() -> UUID.fromString(response.getConversationId()));
+        verify(sessionService).getOrCreate(user.getId(), response.getConversationId());
         verify(messageService).saveUserMessage(
                 eq(user),
-                ArgumentMatchers.argThat(value -> response.getSessionId().equals(value.getSessionKey())),
+                ArgumentMatchers.argThat(value -> response.getConversationId().equals(value.getConversationId())),
                 eq("你好")
         );
     }
@@ -115,15 +115,15 @@ class AiChatServiceTest {
     @Test
     void chat_agentUnavailable_shouldSaveFallbackAssistantMessageAndCloseTurn() {
         User user = user(1001L);
-        AiChatSession session = session(2001L, "session-1");
+        AiChatSession session = session(2001L, "conversation-1");
         AiChatMessage assistantMessage = message(3001L);
         when(userService.getLoginUser(httpRequest)).thenReturn(user);
-        when(sessionService.getOrCreate(user.getId(), "session-1")).thenReturn(session);
+        when(sessionService.getOrCreate(user.getId(), "conversation-1")).thenReturn(session);
         when(agentService.chat("你好", session, user)).thenReturn(Optional.empty());
         when(messageService.saveAssistantMessage(eq(user), eq(session), anyString(), any()))
                 .thenReturn(assistantMessage);
 
-        AiChatResponseVO response = chatService.chat(request("你好", "session-1"), httpRequest);
+        AiChatResponseVO response = chatService.chat(request("你好", "conversation-1"), httpRequest);
 
         Assertions.assertEquals("AI 助手暂时不可用，请稍后再试。", response.getReply());
         Assertions.assertFalse(response.isNeedClarification());
@@ -140,7 +140,7 @@ class AiChatServiceTest {
         );
         BusinessException blankMessage = Assertions.assertThrows(
                 BusinessException.class,
-                () -> chatService.chat(request("   ", "session-1"), httpRequest)
+                () -> chatService.chat(request("   ", "conversation-1"), httpRequest)
         );
 
         Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), nullRequest.getCode());
@@ -152,7 +152,7 @@ class AiChatServiceTest {
     void chat_messageOverLimit_shouldRejectBeforeLoginAndPersistence() {
         BusinessException exception = Assertions.assertThrows(
                 BusinessException.class,
-                () -> chatService.chat(request("a".repeat(501), "session-1"), httpRequest)
+                () -> chatService.chat(request("a".repeat(501), "conversation-1"), httpRequest)
         );
 
         Assertions.assertEquals(ErrorCode.PARAMS_ERROR.getCode(), exception.getCode());
@@ -160,10 +160,10 @@ class AiChatServiceTest {
         verifyNoInteractions(sessionService, messageService, agentService, memoryPipelineService);
     }
 
-    private AiChatRequest request(String message, String sessionId) {
+    private AiChatRequest request(String message, String conversationId) {
         AiChatRequest request = new AiChatRequest();
         request.setMessage(message);
-        request.setSessionId(sessionId);
+        request.setConversationId(conversationId);
         return request;
     }
 
@@ -173,10 +173,10 @@ class AiChatServiceTest {
         return user;
     }
 
-    private AiChatSession session(long id, String sessionKey) {
+    private AiChatSession session(long id, String conversationId) {
         AiChatSession session = new AiChatSession();
         session.setId(id);
-        session.setSessionKey(sessionKey);
+        session.setConversationId(conversationId);
         return session;
     }
 

@@ -19,13 +19,11 @@ public class AiChatSession implements Serializable {
 
     private Long userId;
 
-    private String sessionKey;
+    private String conversationId;
 
     private String summary;
 
     private Long lastSummaryMessageId;
-
-    private Integer summaryVersion;
 
     private Date summaryUpdatedAt;
 
@@ -36,6 +34,8 @@ public class AiChatSession implements Serializable {
     private Long lastClosedMessageId;
 
     private Long lastEpisodeExtractedMessageId;
+
+    private Date lastMessageAt;
 
     private Date createTime;
 

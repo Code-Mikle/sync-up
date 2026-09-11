@@ -167,7 +167,6 @@ class AiEvaluationDataInitializerTest {
             GeneratedUserProfile generated = generatedProfile(seed);
             String fullText = profileTextAssembler.renderFull(generated);
             String matchText = profileTextAssembler.renderMatch(generated);
-            String interactionText = profileTextAssembler.renderInteraction(generated);
 
             AiUserProfileEntity profile = new AiUserProfileEntity();
             profile.setUserId(requiredId(userIdsByAccount, seed.userAccount()));
@@ -178,9 +177,7 @@ class AiEvaluationDataInitializerTest {
             profile.setAiInteractionPreferenceText(seed.aiInteractionPreferenceText());
             profile.setProfileText(fullText);
             profile.setMatchProfileText(matchText);
-            profile.setInteractionProfileText(interactionText);
             profile.setProfileVersion(1);
-            profile.setEvidenceDigest(textHashService.sha256(DATASET_PROMPT_VERSION + "|" + seed.userAccount()));
             profile.setModel(DATASET_MODEL);
             profile.setPromptVersion(DATASET_PROMPT_VERSION);
             profile.setStatus(ProfileStatus.ACTIVE.name());

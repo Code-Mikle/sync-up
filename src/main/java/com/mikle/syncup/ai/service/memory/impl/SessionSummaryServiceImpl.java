@@ -48,7 +48,7 @@ public class SessionSummaryServiceImpl implements SessionSummaryService {
         try {
             summarizeIfNecessary(session);
         } catch (RuntimeException e) {
-            log.warn("summarize chat session failed, sessionId={}, errorType={}",
+            log.warn("summarize chat session failed, chatSessionId={}, errorType={}",
                     chatSessionId, e.getClass().getSimpleName());
         }
     }
@@ -140,7 +140,7 @@ public class SessionSummaryServiceImpl implements SessionSummaryService {
                     updated++;
                 }
             } catch (RuntimeException e) {
-                log.warn("scheduled session summary failed, sessionId={}, errorType={}",
+                log.warn("scheduled session summary failed, chatSessionId={}, errorType={}",
                         session.getId(), e.getClass().getSimpleName());
             }
         }

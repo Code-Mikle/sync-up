@@ -116,7 +116,7 @@ public class AiAssistantTools {
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
         attachSourceText(intent, state);
         AiToolResult result = aiToolExecutionService.execute(
-                ResolveTagsTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
+                ResolveTagsTool.TOOL_NAME, intent, state.getLoginUser(), state.getConversationId());
         state.getToolResults().add(result);
         return toJson(result);
     }
@@ -150,7 +150,8 @@ public class AiAssistantTools {
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
         attachSourceText(intent, state);
         state.setTeamIntent(mergeIntent(state.getTeamIntent(), intent));
-        AiToolResult result = aiToolExecutionService.execute(DeleteTeamConfirmationTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
+        AiToolResult result = aiToolExecutionService.execute(
+                DeleteTeamConfirmationTool.TOOL_NAME, intent, state.getLoginUser(), state.getConversationId());
         if (result.getData() instanceof AiTeamDeleteConfirmationVO confirmation) {
             state.setDeleteConfirmation(confirmation);
             state.getUiBlocks().add(AiUiBlockVO.of(AiUiBlockVO.TEAM_DELETE_CONFIRMATION, confirmation));
@@ -217,9 +218,11 @@ public class AiAssistantTools {
         intent.setTeamName(teamName);
         intent.setDescription(description);
         state.setTeamIntent(mergeIntent(state.getTeamIntent(), intent));
-        AiToolResult result = aiToolExecutionService.execute(CreateTeamDraftTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
+        AiToolResult result = aiToolExecutionService.execute(
+                CreateTeamDraftTool.TOOL_NAME, intent, state.getLoginUser(), state.getConversationId());
         if (result.getData() instanceof TeamDraftVO draft) {
-            TeamDraftVO savedDraft = aiTeamDraftService.saveDraft(draft, state.getLoginUser(), state.getSessionId());
+            TeamDraftVO savedDraft = aiTeamDraftService.saveDraft(
+                    draft, state.getLoginUser(), state.getConversationId());
             result.setData(savedDraft);
             state.setDraft(savedDraft);
             state.getUiBlocks().add(AiUiBlockVO.of(AiUiBlockVO.TEAM_DRAFT_CONFIRMATION, savedDraft));
@@ -292,7 +295,8 @@ public class AiAssistantTools {
         AiAgentToolContext.State state = aiAgentToolContext.getRequired();
         attachSourceText(intent, state);
         state.setTeamIntent(mergeIntent(state.getTeamIntent(), intent));
-        AiToolResult result = aiToolExecutionService.execute(toolName, intent, state.getLoginUser(), state.getSessionId());
+        AiToolResult result = aiToolExecutionService.execute(
+                toolName, intent, state.getLoginUser(), state.getConversationId());
         state.getToolResults().add(result);
         if (result.isSuccess() && uiBlockType != null) {
             replaceUiBlock(state, AiUiBlockVO.of(uiBlockType, uiBlockVariant, result.getData()));
@@ -360,7 +364,7 @@ public class AiAssistantTools {
         attachSourceText(intent, state);
         state.setUserIntent(intent);
         AiToolResult result = aiToolExecutionService.execute(
-                SearchUsersTool.TOOL_NAME, intent, state.getLoginUser(), state.getSessionId());
+                SearchUsersTool.TOOL_NAME, intent, state.getLoginUser(), state.getConversationId());
         state.getToolResults().add(result);
         if (result.isSuccess()) {
             replaceUiBlock(state, AiUiBlockVO.of(AiUiBlockVO.USER_RECOMMENDATIONS, result.getData()));

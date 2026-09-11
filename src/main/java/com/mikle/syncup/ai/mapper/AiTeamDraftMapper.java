@@ -7,7 +7,7 @@ import org.apache.ibatis.annotations.Select;
 
 public interface AiTeamDraftMapper extends BaseMapper<AiTeamDraft> {
 
-    @Select("SELECT id, draftId, sessionId, userId, name, description, maxNum, activityCategory, activityType, city, district, " +
+    @Select("SELECT id, draftId, conversationId, userId, name, description, maxNum, activityCategory, activityType, city, district, " +
             "startTime, durationMinutes, budgetPerPerson, skillLevel, status, confirmedTeamId, confirmedAt, " +
             "expiresAt, createTime, updateTime, isDelete FROM ai_team_draft " +
             "WHERE draftId = #{draftId} AND isDelete = 0 FOR UPDATE")

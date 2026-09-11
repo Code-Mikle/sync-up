@@ -7,7 +7,7 @@ import java.io.Serializable;
 @Data
 public class AiChatRequest implements Serializable {
 
-    private String sessionId;
+    private String conversationId;
 
     private String message;
 

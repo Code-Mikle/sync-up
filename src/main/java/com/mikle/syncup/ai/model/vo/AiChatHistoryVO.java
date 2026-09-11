@@ -9,7 +9,7 @@ import java.util.List;
 @Data
 public class AiChatHistoryVO implements Serializable {
 
-    private String sessionId;
+    private String conversationId;
 
     private List<AiChatMessageVO> messages = new ArrayList<>();
 

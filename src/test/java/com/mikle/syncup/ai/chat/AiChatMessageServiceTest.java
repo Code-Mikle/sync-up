@@ -111,6 +111,19 @@ class AiChatMessageServiceTest {
     }
 
     @Test
+    void saveUserMessage_shouldAdvanceSessionLastMessageAt() {
+        User user = createUser();
+        AiChatSession session = sessionService.getOrCreate(user.getId(), unique("session"));
+        Date oldMessageTime = new Date(System.currentTimeMillis() - 120_000);
+        setLastMessageAt(session, oldMessageTime);
+
+        messageService.saveUserMessage(user, session, "推进会话时间");
+
+        AiChatSession refreshed = sessionService.getById(session.getId());
+        Assertions.assertTrue(refreshed.getLastMessageAt().after(oldMessageTime));
+    }
+
+    @Test
     void getLatestHistory_shouldReturnOnlyCurrentUsersLatestSession() {
         User currentUser = createUser();
         User otherUser = createUser();
@@ -120,13 +133,13 @@ class AiChatMessageServiceTest {
         messageService.saveUserMessage(currentUser, older, "旧会话消息");
         messageService.saveUserMessage(currentUser, latest, "当前会话消息");
         messageService.saveUserMessage(otherUser, other, "其他用户消息");
-        setUpdateTime(older, new Date(System.currentTimeMillis() - 120_000));
-        setUpdateTime(latest, new Date(System.currentTimeMillis() + 120_000));
-        setUpdateTime(other, new Date(System.currentTimeMillis() + 240_000));
+        setLastMessageAt(older, new Date(System.currentTimeMillis() - 120_000));
+        setLastMessageAt(latest, new Date(System.currentTimeMillis() + 120_000));
+        setLastMessageAt(other, new Date(System.currentTimeMillis() + 240_000));
 
         AiChatHistoryVO history = messageService.getLatestHistory(currentUser);
 
-        Assertions.assertEquals(latest.getSessionKey(), history.getSessionId());
+        Assertions.assertEquals(latest.getConversationId(), history.getConversationId());
         Assertions.assertEquals(1, history.getMessages().size());
         Assertions.assertEquals("当前会话消息", history.getMessages().getFirst().getContent());
     }
@@ -136,7 +149,7 @@ class AiChatMessageServiceTest {
         User user = createUser();
         AiChatSession session = sessionService.getOrCreate(user.getId(), unique("session"));
         AiChatResponseVO response = new AiChatResponseVO();
-        response.setSessionId(session.getSessionKey());
+        response.setConversationId(session.getConversationId());
         response.setReply("找到一个合适的队伍");
         response.setUiBlocks(java.util.List.of(
                 AiUiBlockVO.of(AiUiBlockVO.TEAM_LIST, Map.of("count", 1))
@@ -176,7 +189,7 @@ class AiChatMessageServiceTest {
 
         AiChatHistoryVO history = messageService.getLatestHistory(user);
 
-        Assertions.assertNull(history.getSessionId());
+        Assertions.assertNull(history.getConversationId());
         Assertions.assertTrue(history.getMessages().isEmpty());
     }
 
@@ -192,15 +205,15 @@ class AiChatMessageServiceTest {
         return user;
     }
 
-    private long countMessages(long sessionId) {
+    private long countMessages(long chatSessionId) {
         return messageMapper.selectCount(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AiChatMessage>()
-                        .eq(AiChatMessage::getChatSessionId, sessionId)
+                        .eq(AiChatMessage::getChatSessionId, chatSessionId)
         );
     }
 
-    private void setUpdateTime(AiChatSession session, Date updateTime) {
-        session.setUpdateTime(updateTime);
+    private void setLastMessageAt(AiChatSession session, Date lastMessageAt) {
+        session.setLastMessageAt(lastMessageAt);
         Assertions.assertEquals(1, sessionMapper.updateById(session));
     }
 

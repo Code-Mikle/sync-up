@@ -219,10 +219,9 @@ public class AiMemoryTaskProcessorServiceImpl implements AiMemoryTaskProcessorSe
         GeneratedUserProfile generated = mergeDimension(existing, type, newDimension);
         String fullText = profileAssembler.renderFull(generated);
         String matchText = profileAssembler.renderMatch(generated);
-        String interactionText = profileAssembler.renderInteraction(generated);
         PreparedEmbedding embedding = prepareEmbedding(task.getUserId(), matchText);
         return new PreparedProfile(taskId, task.getUserId(), type, currentVersion, oldDimension, newDimension,
-                generated, fullText, matchText, interactionText, pendingIds,
+                generated, fullText, matchText, pendingIds,
                 evidence.stream().map(AiUserEpisode::getId).toList(), supersededIds, embedding);
     }
 
@@ -308,9 +307,7 @@ public class AiMemoryTaskProcessorServiceImpl implements AiMemoryTaskProcessorSe
         profile.setAiInteractionPreferenceText(generated.getAiInteractionPreference());
         profile.setProfileText(prepared.fullText());
         profile.setMatchProfileText(prepared.matchText());
-        profile.setInteractionProfileText(prepared.interactionText());
         profile.setProfileVersion(version);
-        profile.setEvidenceDigest(textHashService.sha256(prepared.evidenceEpisodeIds().toString()));
         profile.setModel(dimensionGenerator.modelName());
         profile.setPromptVersion(dimensionGenerator.promptVersion());
         profile.setStatus(rebuildPending ? ProfileStatus.REBUILD_REQUIRED.name() : ProfileStatus.ACTIVE.name());
@@ -626,7 +623,7 @@ public class AiMemoryTaskProcessorServiceImpl implements AiMemoryTaskProcessorSe
     private record PreparedEmbedding(String matchTextHash, String model, int dimensions, String vectorJson) { }
     private record PreparedProfile(long taskId, long userId, ProfileType profileType, int expectedVersion,
                                     String oldDimension, String newDimension, GeneratedUserProfile generated,
-                                    String fullText, String matchText, String interactionText,
+                                    String fullText, String matchText,
                                     List<Long> pendingEpisodeIds, List<Long> evidenceEpisodeIds,
                                     List<Long> supersededEpisodeIds,
                                     PreparedEmbedding embedding) { }

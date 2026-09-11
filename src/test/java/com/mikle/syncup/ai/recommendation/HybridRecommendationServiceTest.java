@@ -381,11 +381,10 @@ class HybridRecommendationServiceTest {
                 insert into ai_user_profile
                 (userId, activityPreferenceText, socialPersonalityText, partnerPreferenceText,
                  activityConstraintHabitText, aiInteractionPreferenceText, profileText, matchProfileText,
-                 interactionProfileText, profileVersion, evidenceDigest, model, promptVersion, status, generatedAt, isDelete)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', now(), 0)
+                 profileVersion, model, promptVersion, status, generatedAt, isDelete)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', now(), 0)
                 """, userId, matchText, "偏好小范围交流", "偏好轻松搭子", "暂未观察到明确限制", "简洁直接",
-                matchText + "\nAI 交互偏好：简洁", matchText, "简洁直接", version,
-                "0".repeat(64), "test-model", "test-prompt-v1");
+                matchText + "\nAI 交互偏好：简洁", matchText, version, "test-model", "test-prompt-v1");
     }
 
     private void insertProfileAndEmbedding(long userId, String matchText, int version, float[] vector) {

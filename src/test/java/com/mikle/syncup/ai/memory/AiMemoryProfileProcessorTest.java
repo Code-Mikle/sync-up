@@ -23,6 +23,7 @@ import com.mikle.syncup.ai.model.enums.ProfileUpdateTriggerType;
 import com.mikle.syncup.ai.model.schema.GeneratedEmbedding;
 import com.mikle.syncup.ai.service.memory.AiMemoryTaskProcessorService;
 import com.mikle.syncup.ai.service.profile.AiProfileUpdateTaskService;
+import com.mikle.syncup.ai.service.profile.AiUserProfileService;
 import com.mikle.syncup.ai.service.profile.ProfileDimensionGenerator;
 import com.mikle.syncup.ai.service.embedding.ProfileEmbeddingGenerator;
 import jakarta.annotation.Resource;
@@ -70,6 +71,7 @@ class AiMemoryProfileProcessorTest {
     @Resource private AiProfileUpdateTaskMapper taskMapper;
     @Resource private AiUserEpisodeMapper episodeMapper;
     @Resource private AiUserProfileMapper profileMapper;
+    @Resource private AiUserProfileService profileService;
     @Resource private AiUserProfileEmbeddingMapper embeddingMapper;
     @Resource private JdbcTemplate jdbcTemplate;
     @Resource private DataSource dataSource;
@@ -122,6 +124,8 @@ class AiMemoryProfileProcessorTest {
                 () -> assertEquals(original.getPartnerPreferenceText(), updated.getPartnerPreferenceText()),
                 () -> assertEquals(original.getActivityConstraintHabitText(), updated.getActivityConstraintHabitText()),
                 () -> assertEquals(original.getAiInteractionPreferenceText(), updated.getAiInteractionPreferenceText()),
+                () -> assertEquals("【AI 交互偏好】\n原交互偏好",
+                        profileService.getInteractionProfileText(userId)),
                 () -> assertEquals(ProfileStatus.ACTIVE.name(), updated.getStatus()),
                 () -> assertEquals(EpisodeStatus.CONSOLIDATED.name(), consolidated.getStatus()),
                 () -> assertEquals(4, consolidated.getConsolidatedProfileVersion()),
@@ -254,9 +258,7 @@ class AiMemoryProfileProcessorTest {
         profile.setAiInteractionPreferenceText("原交互偏好");
         profile.setProfileText("原完整画像");
         profile.setMatchProfileText("原匹配画像");
-        profile.setInteractionProfileText("原交互画像");
         profile.setProfileVersion(version);
-        profile.setEvidenceDigest("a".repeat(64));
         profile.setModel("old-model");
         profile.setPromptVersion("old-prompt");
         profile.setStatus(ProfileStatus.ACTIVE.name());

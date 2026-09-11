@@ -6,5 +6,5 @@ import com.mikle.syncup.model.domain.User;
 
 public interface AiToolExecutionService {
 
-    AiToolResult execute(String toolName, AiIntent intent, User loginUser, String sessionId);
+    AiToolResult execute(String toolName, AiIntent intent, User loginUser, String conversationId);
 }

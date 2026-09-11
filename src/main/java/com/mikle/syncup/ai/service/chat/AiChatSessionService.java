@@ -7,11 +7,11 @@ import java.util.List;
 
 public interface AiChatSessionService extends IService<AiChatSession> {
 
-    AiChatSession getOrCreate(long userId, String sessionKey);
+    AiChatSession getOrCreate(long userId, String conversationId);
 
-    AiChatSession getByUserAndKey(long userId, String sessionKey);
+    AiChatSession getByUserAndConversationId(long userId, String conversationId);
 
-    void markClosedMessage(long sessionId, long messageId);
+    void markClosedMessage(long chatSessionId, long messageId);
 
     List<AiChatSession> listSessionsNeedingSummary(int limit);
 }

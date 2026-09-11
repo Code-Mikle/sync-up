@@ -11,7 +11,7 @@ public class TeamDraftVO implements Serializable {
 
     private String draftId;
 
-    private String sessionId;
+    private String conversationId;
 
     private String name;
 

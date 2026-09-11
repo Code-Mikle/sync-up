@@ -349,7 +349,7 @@ const streamRef = ref<HTMLElement | null>(null);
 const composerRef = ref<HTMLElement | null>(null);
 const inputRef = ref<HTMLTextAreaElement | null>(null);
 const inputText = ref('');
-const sessionId = ref<string>();
+const conversationId = ref<string>();
 const loading = ref(false);
 const composerHeight = ref(76);
 const confirmingDraftId = ref<string>();
@@ -416,7 +416,7 @@ const loadChatHistory = async () => {
       return;
     }
     const history = response.data;
-    sessionId.value = history.sessionId || sessionId.value;
+    conversationId.value = history.conversationId || conversationId.value;
     restoreConfirmedDraftTeams(history.messages ?? []);
     restoreDeletedTeams(history.messages ?? []);
     const visibleMessages = (history.messages ?? [])
@@ -517,14 +517,14 @@ const sendMessage = async () => {
   await scrollToBottom();
   try {
     const response = await myAxios.post<AiChatResponse>('/ai/chat', {
-      sessionId: sessionId.value,
+      conversationId: conversationId.value,
       message: content,
     });
     if (response?.code !== 0 || !response.data) {
       showFailToast(response?.description || response?.message || 'AI 助手暂时不可用');
       return;
     }
-    sessionId.value = response.data.sessionId;
+    conversationId.value = response.data.conversationId;
     messages.value.push({
       id: Date.now() + 1,
       role: 'assistant',
@@ -598,7 +598,7 @@ const confirmDeleteTeam = async (teamId?: number) => {
   deletingTeamId.value = teamId;
   try {
     const response = await myAxios.post<AiToolResult>(`/ai/team/${teamId}/delete/confirm`, {
-      sessionId: sessionId.value,
+      conversationId: conversationId.value,
     });
     if (response?.code !== 0 || !response.data?.success) {
       showFailToast(response?.description || response?.message || response.data?.summary || '删除队伍失败');
@@ -639,7 +639,7 @@ const loadTeamDetails = async (teamId?: number) => {
   loadingTeamDetailsId.value = teamId;
   try {
     const response = await myAxios.post<AiToolResult>(`/ai/team/${teamId}/details`, {
-      sessionId: sessionId.value,
+      conversationId: conversationId.value,
     });
     if (response?.code !== 0 || !response.data?.success) {
       showFailToast(response?.description || response?.message || response.data?.summary || '队伍详情获取失败');

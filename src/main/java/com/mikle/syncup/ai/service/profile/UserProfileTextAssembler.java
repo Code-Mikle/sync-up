@@ -70,7 +70,11 @@ public class UserProfileTextAssembler {
 
     public String renderInteraction(GeneratedUserProfile profile) {
         validate(profile);
-        return block(INTERACTION_HEADER, profile.getAiInteractionPreference());
+        return renderInteraction(profile.getAiInteractionPreference());
+    }
+
+    public String renderInteraction(String interactionPreference) {
+        return block(INTERACTION_HEADER, normalizeSection(interactionPreference));
     }
 
     private String section(String text, int[] positions, int index) {
