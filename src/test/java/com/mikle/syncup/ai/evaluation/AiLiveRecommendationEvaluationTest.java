@@ -6,7 +6,7 @@ import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
 import com.mikle.syncup.ai.model.vo.HybridRecommendationResult;
-import com.mikle.syncup.ai.service.HybridRecommendationService;
+import com.mikle.syncup.ai.service.recommendation.HybridRecommendationService;
 import com.mikle.syncup.mapper.TagMapper;
 import com.mikle.syncup.mapper.TeamMapper;
 import com.mikle.syncup.mapper.UserMapper;

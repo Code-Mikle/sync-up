@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.vo.AiUiBlockVO;
-import com.mikle.syncup.ai.service.AiToolExecutionService;
+import com.mikle.syncup.ai.service.tool.AiToolExecutionService;
 import com.mikle.syncup.ai.tool.GetMyProfileTool;
 import com.mikle.syncup.model.domain.User;
 import org.junit.jupiter.api.AfterEach;

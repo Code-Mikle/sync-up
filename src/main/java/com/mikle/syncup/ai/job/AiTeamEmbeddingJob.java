@@ -1,6 +1,6 @@
 package com.mikle.syncup.ai.job;
 
-import com.mikle.syncup.ai.service.AiTeamEmbeddingService;
+import com.mikle.syncup.ai.service.recommendation.AiTeamEmbeddingService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;

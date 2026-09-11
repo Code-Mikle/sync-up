@@ -3,7 +3,7 @@ package com.mikle.syncup.ai.memory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mikle.syncup.ai.model.schema.GeneratedUserProfile;
-import com.mikle.syncup.ai.service.UserProfileTextAssembler;
+import com.mikle.syncup.ai.service.profile.UserProfileTextAssembler;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

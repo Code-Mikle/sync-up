@@ -8,7 +8,7 @@ import com.mikle.syncup.ai.config.AiAgentProperties;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.entity.AiChatSession;
 import com.mikle.syncup.ai.model.vo.AiChatResponseVO;
-import com.mikle.syncup.ai.service.WorkingMemoryService;
+import com.mikle.syncup.ai.service.memory.WorkingMemoryService;
 import com.mikle.syncup.model.domain.User;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;

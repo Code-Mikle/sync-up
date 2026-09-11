@@ -3,7 +3,7 @@ package com.mikle.syncup.ai.tool;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.vo.HybridRecommendationResult;
-import com.mikle.syncup.ai.service.HybridRecommendationService;
+import com.mikle.syncup.ai.service.recommendation.HybridRecommendationService;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;

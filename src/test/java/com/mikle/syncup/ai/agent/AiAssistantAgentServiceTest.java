@@ -4,7 +4,7 @@ import com.mikle.syncup.ai.agent.impl.AiAssistantAgentServiceImpl;
 import com.mikle.syncup.ai.config.AiAgentProperties;
 import com.mikle.syncup.ai.model.entity.AiChatSession;
 import com.mikle.syncup.ai.model.vo.AiChatResponseVO;
-import com.mikle.syncup.ai.service.WorkingMemoryService;
+import com.mikle.syncup.ai.service.memory.WorkingMemoryService;
 import com.mikle.syncup.model.domain.User;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;

@@ -8,7 +8,7 @@ import com.mikle.syncup.assembler.UserAssembler;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.constant.UserConstant;
 import com.mikle.syncup.exception.BusinessException;
-import com.mikle.syncup.ai.service.AiUserProfileService;
+import com.mikle.syncup.ai.service.profile.AiUserProfileService;
 import com.mikle.syncup.model.domain.Tag;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.vo.UserLoginVO;

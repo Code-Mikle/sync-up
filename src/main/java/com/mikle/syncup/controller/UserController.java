@@ -10,7 +10,7 @@ import com.mikle.syncup.common.ResultUtils;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.ai.model.agent.UserIntent;
 import com.mikle.syncup.ai.model.vo.AiUserRecommendation;
-import com.mikle.syncup.ai.service.HybridRecommendationService;
+import com.mikle.syncup.ai.service.recommendation.HybridRecommendationService;
 import com.mikle.syncup.model.domain.User;
 import com.mikle.syncup.model.request.UserLoginRequest;
 import com.mikle.syncup.model.request.UserRegisterRequest;

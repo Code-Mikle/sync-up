@@ -2,8 +2,8 @@ package com.mikle.syncup.ai.tool;
 
 import com.mikle.syncup.ai.model.agent.TeamIntent;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
-import com.mikle.syncup.ai.service.AiToolCallLogService;
-import com.mikle.syncup.ai.service.impl.AiToolExecutionServiceImpl;
+import com.mikle.syncup.ai.service.tool.AiToolCallLogService;
+import com.mikle.syncup.ai.service.tool.impl.AiToolExecutionServiceImpl;
 import com.mikle.syncup.model.domain.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

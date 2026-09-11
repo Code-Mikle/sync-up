@@ -2,8 +2,8 @@ package com.mikle.syncup.ai.recommendation;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mikle.syncup.ai.service.ProfileEmbeddingCodec;
-import com.mikle.syncup.ai.service.VectorSimilarity;
+import com.mikle.syncup.ai.service.embedding.ProfileEmbeddingCodec;
+import com.mikle.syncup.ai.service.embedding.VectorSimilarity;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

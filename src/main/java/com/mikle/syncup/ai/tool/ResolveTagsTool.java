@@ -3,7 +3,7 @@ package com.mikle.syncup.ai.tool;
 import com.mikle.syncup.ai.model.agent.TagResolutionIntent;
 import com.mikle.syncup.ai.model.tool.AiToolResult;
 import com.mikle.syncup.ai.model.vo.TagResolutionResult;
-import com.mikle.syncup.ai.service.TagResolutionService;
+import com.mikle.syncup.ai.service.tag.TagResolutionService;
 import com.mikle.syncup.common.ErrorCode;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.model.domain.User;

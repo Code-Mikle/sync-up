@@ -3,7 +3,7 @@ package com.mikle.syncup.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mikle.syncup.common.ErrorCode;
-import com.mikle.syncup.ai.service.AiTeamEmbeddingService;
+import com.mikle.syncup.ai.service.recommendation.AiTeamEmbeddingService;
 import com.mikle.syncup.exception.BusinessException;
 import com.mikle.syncup.mapper.TeamMapper;
 import com.mikle.syncup.mapper.UserMapper;

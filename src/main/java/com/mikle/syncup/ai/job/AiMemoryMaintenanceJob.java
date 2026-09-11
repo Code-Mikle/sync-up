@@ -1,8 +1,8 @@
 package com.mikle.syncup.ai.job;
 
-import com.mikle.syncup.ai.service.AiChatMessageService;
-import com.mikle.syncup.ai.service.AiMemoryTaskProcessorService;
-import com.mikle.syncup.ai.service.SessionSummaryService;
+import com.mikle.syncup.ai.service.chat.AiChatMessageService;
+import com.mikle.syncup.ai.service.memory.AiMemoryTaskProcessorService;
+import com.mikle.syncup.ai.service.memory.SessionSummaryService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
