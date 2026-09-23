@@ -117,6 +117,34 @@ class AiMemoryEpisodeProcessorTest {
     }
 
     @Test
+    void process_strongSignals_shouldForceImmediatePriority() {
+        ChatFixture fixture = createChatFixture();
+        GeneratedEpisode correction = episode(
+                "已经不再参加跑步活动", fixture.userMessageId(), EpisodeSignalType.CORRECTION);
+        GeneratedEpisode interactionPreference = episode(
+                "希望回答简洁并先给结论", fixture.userMessageId(), EpisodeSignalType.EXPLICIT);
+        interactionPreference.setProfileType(ProfileType.AI_INTERACTION_PREFERENCE.name());
+        when(episodeExtractor.extract(anyString())).thenReturn(
+                extraction(correction, interactionPreference));
+
+        processor.processEpisodeExtractionTasks();
+
+        List<AiUserEpisode> saved = episodeMapper.selectList(
+                new QueryWrapper<AiUserEpisode>().eq("userId", fixture.userId()));
+        assertAll(
+                () -> assertEquals(2, saved.size()),
+                () -> assertTrue(saved.stream().allMatch(
+                        episode -> EpisodePriority.IMMEDIATE.name().equals(episode.getPriority())))
+        );
+        verify(profileTaskService).enqueueIfNecessary(
+                fixture.userId(), ProfileType.ACTIVITY_PREFERENCE,
+                ProfileUpdateTriggerType.IMMEDIATE, true);
+        verify(profileTaskService).enqueueIfNecessary(
+                fixture.userId(), ProfileType.AI_INTERACTION_PREFERENCE,
+                ProfileUpdateTriggerType.IMMEDIATE, true);
+    }
+
+    @Test
     void process_emptyExtraction_shouldStillCompleteTaskAndAdvanceCursor() {
         ChatFixture fixture = createChatFixture();
         when(episodeExtractor.extract(anyString())).thenReturn(new GeneratedEpisodeExtraction());

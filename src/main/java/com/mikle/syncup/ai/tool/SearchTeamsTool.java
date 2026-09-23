@@ -49,6 +49,9 @@ public class SearchTeamsTool implements AiTool<TeamIntent> {
         List<TeamUserVO> teams = result.items();
         return AiToolResult.success(name(), type(),
                 "found " + teams.size() + " teams from " + result.candidateCount()
-                        + " candidates, degraded=" + result.degraded(), teams);
+                        + " candidates, degraded=" + result.degraded()
+                        + ", semanticUsed=" + result.semanticUsed()
+                        + ", partialDegraded=" + result.partialDegraded()
+                        + ", degradedCandidates=" + result.degradedCandidateCount(), teams);
     }
 }

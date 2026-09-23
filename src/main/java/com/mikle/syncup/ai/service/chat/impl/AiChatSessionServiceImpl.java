@@ -36,12 +36,12 @@ public class AiChatSessionServiceImpl extends ServiceImpl<AiChatSessionMapper, A
         try {
             save(session);
             return session;
-        } catch (DuplicateKeyException ignored) {
+        } catch (DuplicateKeyException duplicateKeyException) {
             AiChatSession concurrent = getByUserAndConversationId(userId, conversationId);
             if (concurrent != null) {
                 return concurrent;
             }
-            throw ignored;
+            throw duplicateKeyException;
         }
     }
 

@@ -162,6 +162,30 @@ class AiMemoryProfileProcessorTest {
     }
 
     @Test
+    void process_fullRebuildDimension_shouldEnqueueNextDimensionAfterCommit() {
+        long userId = uniquePositiveLong();
+        AiUserProfileEntity original = insertProfile(userId, 2);
+        insertEpisode(userId, ProfileType.ACTIVITY_PREFERENCE,
+                EpisodeSignalType.EXPLICIT, EpisodeStatus.PENDING, "喜欢周末徒步", "[]");
+        insertTask(userId, ProfileType.ACTIVITY_PREFERENCE, 2,
+                ProfileUpdateTriggerType.SELF_INTRODUCTION_CHANGED);
+        when(dimensionGenerator.generate(eq(ProfileType.ACTIVITY_PREFERENCE),
+                eq(original.getActivityPreferenceText()), anyList()))
+                .thenReturn("偏好周末参加徒步活动");
+
+        processor.processProfileUpdateTasks();
+
+        AiUserProfileEntity updated = profileFor(userId);
+        assertAll(
+                () -> assertEquals(3, updated.getProfileVersion()),
+                () -> assertEquals(ProfileStatus.REBUILD_REQUIRED.name(), updated.getStatus())
+        );
+        verify(profileTaskService).enqueueIfNecessary(
+                userId, ProfileType.SOCIAL_PERSONALITY,
+                ProfileUpdateTriggerType.SELF_INTRODUCTION_CHANGED, true);
+    }
+
+    @Test
     void process_staleExpectedVersion_shouldSupersedeTaskAndRequestRebuild() {
         long userId = uniquePositiveLong();
         insertProfile(userId, 2);

@@ -22,6 +22,10 @@ import java.util.List;
 public class SessionSummaryServiceImpl implements SessionSummaryService {
 
     private static final String NL = System.lineSeparator();
+    /**
+     * 单次数据库查询上限，避免会话积累几千条未摘要消息时一次全部加载到内存
+     */
+    private static final int SUMMARY_QUERY_LIMIT = 200;
 
     @Resource
     private AiChatSessionService chatSessionService;
@@ -86,10 +90,8 @@ public class SessionSummaryServiceImpl implements SessionSummaryService {
             return false;
         }
         AiMemoryProperties.WorkingMemory properties = memoryProperties.getWorkingMemory();
-        int queryLimit = Math.min(200, properties.getRecentMessageCount()
-                + properties.getSummaryBatchSize() + 100);
         List<AiChatMessage> unsummarized = chatMessageService.listClosedMessages(
-                current.getId(), summaryCursor, queryCursor, queryLimit);
+                current.getId(), summaryCursor, queryCursor, SUMMARY_QUERY_LIMIT);
         if (unsummarized.isEmpty()) {
             return false;
         }
@@ -112,19 +114,31 @@ public class SessionSummaryServiceImpl implements SessionSummaryService {
                 summaryGenerator.modelName(), summaryGenerator.promptVersion(), new Date()) > 0;
     }
 
+    /**
+     * 当前查到的未摘要消息中，最多允许拿多少条去生成摘要。
+     * @param unsummarized 未摘要消息数组
+     * @param currentSummary 当前的摘要
+     * @param properties 工作记忆的配置
+     * @param contextBudgetRequired 是否上下文预算超出摘要
+     * @return 需要摘要的消息数量
+     */
     private int determineSummarizableCount(List<AiChatMessage> unsummarized,
                                            String currentSummary,
                                            AiMemoryProperties.WorkingMemory properties,
                                            boolean contextBudgetRequired) {
+        // 上下文超预算，强制摘要
         if (contextBudgetRequired) {
             return unsummarized.size();
         }
+        // 普通后台摘要
         int estimatedTokens = estimateTokens(unsummarized) + estimateTokens(currentSummary);
-        int minimumCount = properties.getRecentMessageCount() + properties.getSummaryBatchSize();
+        int minimumCount = properties.getRecentMessageCount() + properties.getSummaryTriggerMessageCount();
+        // 如果未摘要消息还没有达到触发数量 且 总Token也没有超过上下文预算，则不需要生成摘要
         if (unsummarized.size() < minimumCount && estimatedTokens <= properties.getMaxContextTokens()) {
             return 0;
         }
-        int keepCount = Math.min(properties.getRecentMessageCount(), Math.max(0, unsummarized.size() - 1));
+        // 计算保留多少近期原文
+        int keepCount = Math.clamp(unsummarized.size() - 1, 0, properties.getRecentMessageCount());
         return unsummarized.size() - keepCount;
     }
 
@@ -147,6 +161,14 @@ public class SessionSummaryServiceImpl implements SessionSummaryService {
         return updated;
     }
 
+    /**
+     * 根据 summaryInputMaxTokens，决定本次实际送给大模型多少条。
+     * @param messages 未摘要的消息数量
+     * @param summarizable 需要摘要的消息数量
+     * @param oldSummary 原先的摘要
+     * @param maxInputTokens 最大输入摘要模型的Token数上限
+     * @return 实际可以摘要的数量
+     */
     private int chooseBatchCount(List<AiChatMessage> messages,
                                  int summarizable,
                                  String oldSummary,
@@ -183,7 +205,7 @@ public class SessionSummaryServiceImpl implements SessionSummaryService {
                 .replaceAll("(?i)(token|api[_-]?key|password|密码)\\s*[:：=]\\s*\\S+", "$1=***")
                 .replaceAll("\\b[\\w.%+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b", "***@***")
                 .replaceAll("1[3-9]\\d{9}", "1**********");
-        return sanitized.substring(0, Math.min(Math.max(1, maxChars), sanitized.length()));
+        return sanitized.substring(0, Math.clamp(maxChars, 1, sanitized.length()));
     }
 
     private int estimateTokens(List<AiChatMessage> messages) {

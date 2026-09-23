@@ -146,8 +146,13 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
                         .thenComparing(Comparator.comparingDouble(ScoredUser::recencyScore).reversed())
                         .thenComparing(scoredUser -> scoredUser.user().getId()))
                 .toList();
-        boolean degraded = semanticMatches.isEmpty();
-        List<ScoredUser> selectedUsers = degraded
+        int degradedCandidateCount = Math.toIntExact(scored.stream()
+                .filter(item -> item.semanticScore() == null)
+                .count());
+        boolean semanticUsed = !semanticMatches.isEmpty();
+        boolean partialDegraded = semanticUsed && degradedCandidateCount > 0;
+        boolean degraded = !semanticUsed || partialDegraded;
+        List<ScoredUser> selectedUsers = !semanticUsed
                 ? scored.stream()
                 .sorted(Comparator.comparingDouble(ScoredUser::tagScore).reversed()
                         .thenComparing(Comparator.comparingDouble(ScoredUser::recencyScore).reversed())
@@ -157,12 +162,16 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
         List<AiUserRecommendation> items = selectedUsers.stream()
                 .limit(limit)
                 .map(scoredUser -> toRecommendation(
-                        scoredUser, effectiveCity, requestedTagIds, degraded, !degraded))
+                        scoredUser, effectiveCity, requestedTagIds,
+                        !semanticUsed || scoredUser.semanticScore() == null, semanticUsed))
                 .toList();
         long duration = System.currentTimeMillis() - start;
-        log.info("hybrid user recommendation completed, userId={}, candidates={}, results={}, degraded={}, durationMs={}",
-                currentUser.getId(), candidates.size(), items.size(), degraded, duration);
-        return new HybridRecommendationResult<>(items, candidates.size(), degraded,
+        log.info("hybrid user recommendation completed, userId={}, candidates={}, results={}, semanticUsed={}, "
+                        + "partialDegraded={}, degradedCandidates={}, durationMs={}",
+                currentUser.getId(), candidates.size(), items.size(), semanticUsed,
+                partialDegraded, degradedCandidateCount, duration);
+        return new HybridRecommendationResult<>(items, candidates.size(), degraded, semanticUsed,
+                partialDegraded, degradedCandidateCount,
                 queryVector == null ? null : queryVector.model(), duration);
     }
 
@@ -203,17 +212,25 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
                     : 0.80D * semanticScore + 0.20D * businessScore;
             scored.add(new ScoredTeam(candidate, totalScore, semanticScore, businessScore));
         }
-        boolean degraded = !usedSemantic || scored.stream().anyMatch(item -> item.semanticScore() == null);
+        int degradedCandidateCount = Math.toIntExact(scored.stream()
+                .filter(item -> item.semanticScore() == null)
+                .count());
+        boolean partialDegraded = usedSemantic && degradedCandidateCount > 0;
+        boolean degraded = !usedSemantic || partialDegraded;
         List<TeamUserVO> items = scored.stream()
-                .sorted(Comparator.comparingDouble(ScoredTeam::totalScore).reversed()
+                .sorted(Comparator.comparing((ScoredTeam item) -> item.semanticScore() != null).reversed()
+                        .thenComparing(Comparator.comparingDouble(ScoredTeam::totalScore).reversed())
                         .thenComparing(scoredTeam -> scoredTeam.team().getId()))
                 .limit(limit)
-                .map(scoredTeam -> addTeamReasons(scoredTeam, intent, degraded))
+                .map(scoredTeam -> addTeamReasons(scoredTeam, intent, scoredTeam.semanticScore() == null))
                 .toList();
         long duration = System.currentTimeMillis() - start;
-        log.info("hybrid team recommendation completed, userId={}, candidates={}, results={}, degraded={}, durationMs={}",
-                currentUser.getId(), candidates.size(), items.size(), degraded, duration);
-        return new HybridRecommendationResult<>(items, candidates.size(), degraded,
+        log.info("hybrid team recommendation completed, userId={}, candidates={}, results={}, semanticUsed={}, "
+                        + "partialDegraded={}, degradedCandidates={}, durationMs={}",
+                currentUser.getId(), candidates.size(), items.size(), usedSemantic,
+                partialDegraded, degradedCandidateCount, duration);
+        return new HybridRecommendationResult<>(items, candidates.size(), degraded, usedSemantic,
+                partialDegraded, degradedCandidateCount,
                 queryVector == null ? null : queryVector.model(), duration);
     }
 
@@ -508,6 +525,7 @@ public class HybridRecommendationServiceImpl implements HybridRecommendationServ
 
     private <T> HybridRecommendationResult<T> emptyResult(long start) {
         return new HybridRecommendationResult<>(Collections.emptyList(), 0, true,
+                false, false, 0,
                 null, System.currentTimeMillis() - start);
     }
 

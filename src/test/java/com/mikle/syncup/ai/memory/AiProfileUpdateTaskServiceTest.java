@@ -7,6 +7,7 @@ import com.mikle.syncup.ai.mapper.AiUserProfileMapper;
 import com.mikle.syncup.ai.model.entity.AiProfileUpdateTask;
 import com.mikle.syncup.ai.model.entity.AiUserEpisode;
 import com.mikle.syncup.ai.model.entity.AiUserProfileEntity;
+import com.mikle.syncup.ai.model.enums.EpisodePriority;
 import com.mikle.syncup.ai.model.enums.ProfileType;
 import com.mikle.syncup.ai.model.enums.ProfileUpdateTriggerType;
 import com.mikle.syncup.ai.service.embedding.TextHashService;
@@ -93,6 +94,33 @@ class AiProfileUpdateTaskServiceTest {
         assertNotEquals(captor.getAllValues().get(0).getTargetEvidenceDigest(),
                 captor.getAllValues().get(1).getTargetEvidenceDigest());
         assertEquals(2, captor.getAllValues().get(1).getExpectedProfileVersion());
+    }
+
+    @Test
+    void pendingImmediateEvidence_shouldBypassCountThreshold() {
+        AiUserEpisode immediate = episode(1L, "message:100");
+        immediate.setPriority(EpisodePriority.IMMEDIATE.name());
+        when(episodeMapper.selectList(any())).thenReturn(List.of(immediate));
+
+        service.enqueueIfNecessary(7L, ProfileType.AI_INTERACTION_PREFERENCE,
+                ProfileUpdateTriggerType.COUNT, false);
+
+        ArgumentCaptor<AiProfileUpdateTask> captor = ArgumentCaptor.forClass(AiProfileUpdateTask.class);
+        verify(taskMapper).insert(captor.capture());
+        assertEquals(ProfileUpdateTriggerType.IMMEDIATE.name(), captor.getValue().getTriggerType());
+    }
+
+    @Test
+    void enqueueRebuildAll_shouldStartOnlyFirstDimension() {
+        when(episodeMapper.selectList(any())).thenReturn(List.of());
+
+        service.enqueueRebuildAll(7L, ProfileUpdateTriggerType.SELF_INTRODUCTION_CHANGED);
+
+        ArgumentCaptor<AiProfileUpdateTask> captor = ArgumentCaptor.forClass(AiProfileUpdateTask.class);
+        verify(taskMapper).insert(captor.capture());
+        assertEquals(ProfileType.ACTIVITY_PREFERENCE.name(), captor.getValue().getProfileType());
+        assertEquals(ProfileUpdateTriggerType.SELF_INTRODUCTION_CHANGED.name(),
+                captor.getValue().getTriggerType());
     }
 
     private AiUserEpisode episode(long id, String group) {

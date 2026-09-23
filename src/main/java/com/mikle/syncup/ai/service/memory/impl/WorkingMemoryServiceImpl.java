@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Objects;
 
 @Service
 @Slf4j
@@ -44,10 +45,8 @@ public class WorkingMemoryServiceImpl implements WorkingMemoryService {
 
     @Override
     public String buildModelContext(AiChatSession session, User loginUser, String currentMessage) {
-        if (session == null || session.getId() == null) {
-            return "当前服务端时间：" + LocalDateTime.now().format(DATE_TIME_FORMATTER)
-                    + NL + "当前用户原始需求：" + currentMessage;
-        }
+        Objects.requireNonNull(session, "session must not be null");
+        Objects.requireNonNull(session.getId(), "session.id must not be null");
         AiMemoryProperties.WorkingMemory properties = memoryProperties.getWorkingMemory();
         List<AiChatMessage> recentMessages = new ArrayList<>(chatMessageService.listLatestClosedMessages(
                 session.getId(), safeLong(session.getLastClosedMessageId()),
@@ -88,15 +87,12 @@ public class WorkingMemoryServiceImpl implements WorkingMemoryService {
             int maxTokens) {
         int trimCount = calculateTrimCount(
                 messages, session.getSummary(), currentMessage, interactionProfile, maxTokens);
+        if (trimCount == 0) {
+            return session;
+        }
         long summaryCursor = safeLong(session.getLastSummaryMessageId());
-        long targetMessageId = messages.stream()
-                .limit(trimCount)
-                .map(AiChatMessage::getId)
-                .filter(id -> id != null && id > summaryCursor)
-                .mapToLong(Long::longValue)
-                .max()
-                .orElse(0L);
-        if (targetMessageId <= 0) {
+        long targetMessageId = messages.get(trimCount - 1).getId();
+        if (targetMessageId <= summaryCursor) {
             return session;
         }
         try {
@@ -133,6 +129,9 @@ public class WorkingMemoryServiceImpl implements WorkingMemoryService {
         return message.getId() != null && message.getId() <= summaryCursor;
     }
 
+    /**
+     * 计算从消息列表 messages 头部裁掉多少条消息，才能让总 token 数降到预算内
+     */
     private int calculateTrimCount(List<AiChatMessage> messages, String summary, String currentMessage,
                                    String interactionProfile, int maxTokens) {
         int totalTokens = estimateTokens(summary) + estimateTokens(currentMessage)

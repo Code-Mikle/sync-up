@@ -78,6 +78,20 @@ class AiAssistantAgentServiceTest {
     }
 
     @Test
+    void chat_withoutPersistedSession_shouldFailFast() {
+        NullPointerException missingSession = Assertions.assertThrows(NullPointerException.class,
+                () -> agentService.chat("你好", null, user()));
+        AiChatSession transientSession = new AiChatSession();
+        NullPointerException missingSessionId = Assertions.assertThrows(NullPointerException.class,
+                () -> agentService.chat("你好", transientSession, user()));
+
+        Assertions.assertEquals("session must not be null", missingSession.getMessage());
+        Assertions.assertEquals("session.id must not be null", missingSessionId.getMessage());
+        verifyNoInteractions(workingMemoryService, chatModel);
+        assertContextCleared();
+    }
+
+    @Test
     void chat_modelReturnsText_shouldReturnResponseAndClearContext() {
         AiChatSession session = session();
         User user = user();

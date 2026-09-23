@@ -37,6 +37,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
@@ -121,11 +122,15 @@ class HybridRecommendationServiceTest {
                 recommendationService.recommendUsers(intent, current, 3);
 
         Assertions.assertFalse(result.degraded());
+        Assertions.assertTrue(result.semanticUsed());
+        Assertions.assertFalse(result.partialDegraded());
+        Assertions.assertEquals(0, result.degradedCandidateCount());
         Assertions.assertEquals(2, result.candidateCount());
         Assertions.assertEquals(1, result.items().size());
         Assertions.assertEquals(best.getId(), result.items().getFirst().getId());
         Assertions.assertTrue(result.items().getFirst().getReasons().contains("活动与社交偏好较接近"));
         Assertions.assertTrue(result.items().stream().noneMatch(item -> item.getId().equals(wrongCity.getId())));
+        verify(embeddingGenerator).generate("本次搭子需求：这个周末想打羽毛球，想找轻松一点的搭子");
     }
 
     @Test
@@ -148,6 +153,9 @@ class HybridRecommendationServiceTest {
                 recommendationService.recommendUsers(intent, current, 3);
 
         Assertions.assertTrue(result.degraded());
+        Assertions.assertFalse(result.semanticUsed());
+        Assertions.assertFalse(result.partialDegraded());
+        Assertions.assertEquals(1, result.degradedCandidateCount());
         Assertions.assertEquals(1, result.candidateCount());
         Assertions.assertEquals(List.of(expected.getId()),
                 result.items().stream().map(AiUserRecommendation::getId).toList());
@@ -239,6 +247,31 @@ class HybridRecommendationServiceTest {
 
     @Test
     @Transactional
+    void recommendUsers_partialEmbedding_shouldExposePartialDegradation() {
+        String city = "局部降级城_" + UUID.randomUUID().toString().substring(0, 8);
+        User current = createUser(city, "[]");
+        User semanticCandidate = createUser(city, "[]");
+        createUser(city, "[]");
+        insertProfileAndEmbedding(semanticCandidate.getId(), "喜欢轻松活动", 1, new float[]{1F, 0F});
+
+        UserIntent intent = new UserIntent();
+        intent.setProfile("想找轻松活动搭子");
+        intent.setCity(city);
+
+        HybridRecommendationResult<AiUserRecommendation> result =
+                recommendationService.recommendUsers(intent, current, 3);
+
+        Assertions.assertTrue(result.degraded());
+        Assertions.assertTrue(result.semanticUsed());
+        Assertions.assertTrue(result.partialDegraded());
+        Assertions.assertEquals(1, result.degradedCandidateCount());
+        Assertions.assertEquals(List.of(semanticCandidate.getId()),
+                result.items().stream().map(AiUserRecommendation::getId).toList());
+        Assertions.assertFalse(result.items().getFirst().getDegraded());
+    }
+
+    @Test
+    @Transactional
     void recommendTeams_shouldRankValidCurrentTeamEmbedding() {
         User current = createUser("西安", "[107]");
         insertProfile(current.getId(), "喜欢轻松羽毛球，不追求高强度竞技", 1);
@@ -258,10 +291,42 @@ class HybridRecommendationServiceTest {
                 recommendationService.recommendTeams(intent, current, 3);
 
         Assertions.assertFalse(result.degraded());
+        Assertions.assertTrue(result.semanticUsed());
+        Assertions.assertFalse(result.partialDegraded());
+        Assertions.assertEquals(0, result.degradedCandidateCount());
         Assertions.assertEquals(2, result.candidateCount());
         Assertions.assertEquals(best.getId(), result.items().getFirst().getId());
         Assertions.assertTrue(result.items().getFirst().getRecommendationReasons()
                 .contains("活动描述与个人偏好较接近"));
+    }
+
+    @Test
+    @Transactional
+    void recommendTeams_missingEmbedding_shouldNotOutrankSemanticCandidate() {
+        String city = "混排城_" + UUID.randomUUID().toString().substring(0, 8);
+        User current = createUser(city, "[]");
+        Team semanticCandidate = createTeam(current, "有语义向量的活动", "有效语义候选");
+        Team degradedCandidate = createTeam(current, "缺少语义向量的活动", "降级候选");
+        jdbcTemplate.update("update team set city = ? where id in (?, ?)",
+                city, semanticCandidate.getId(), degradedCandidate.getId());
+        semanticCandidate = teamService.getById(semanticCandidate.getId());
+        insertTeamEmbedding(semanticCandidate, 1, new float[]{-1F, 0F});
+
+        TeamIntent intent = new TeamIntent();
+        intent.setSourceText("寻找同城活动");
+        intent.setCity(city);
+
+        HybridRecommendationResult<TeamUserVO> result =
+                recommendationService.recommendTeams(intent, current, 2);
+
+        Assertions.assertTrue(result.degraded());
+        Assertions.assertTrue(result.semanticUsed());
+        Assertions.assertTrue(result.partialDegraded());
+        Assertions.assertEquals(1, result.degradedCandidateCount());
+        Assertions.assertEquals(List.of(semanticCandidate.getId(), degradedCandidate.getId()),
+                result.items().stream().map(TeamUserVO::getId).toList());
+        Assertions.assertFalse(result.items().get(0).getRecommendationDegraded());
+        Assertions.assertTrue(result.items().get(1).getRecommendationDegraded());
     }
 
     @Test

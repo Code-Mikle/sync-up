@@ -252,7 +252,7 @@ create table ai_user_episode
     sourceSessionId             bigint null comment '来源 AI 聊天会话 id，仅聊天消息来源使用',
     sourceMessageIds            json null comment '支撑该证据的用户消息 id JSON 数组',
     sourceReferenceId           varchar(128) null comment '非聊天来源的业务引用标识，比如自我介绍等，没有消息 ID，使用该字段标识来源',
-    signalType                  varchar(16) not null comment 'INFERRED（用户直接表达） / EXPLICIT（从多句中归纳） / CORRECTION（用户明确纠正）',
+    signalType                  varchar(16) not null comment 'EXPLICIT（用户直接表达） / INFERRED（从多句中归纳） / CORRECTION（用户明确纠正）',
     priority                    varchar(16) not null comment 'NORMAL / IMMEDIATE',
     evidenceGroupKey            varchar(128) not null comment '同一原始证据的分组键，用于独立证据计数',
     dedupeHash                  char(64) not null comment '画像维度与证据内容的 SHA-256 去重值',

@@ -20,10 +20,19 @@ public class AiMemoryProperties {
     @Data
     public static class WorkingMemory {
 
+        /**
+         * 保留多少条近期原文
+         */
         private int recentMessageCount = 20;
 
-        private int summaryBatchSize = 10;
+        /**
+         * 触发摘要所需的新增消息数量
+         */
+        private int summaryTriggerMessageCount = 10;
 
+        /**
+         * 单次摘要模型输入上限
+         */
         private int summaryInputMaxTokens = 4000;
 
         private int maxContextTokens = 6000;

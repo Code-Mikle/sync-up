@@ -50,7 +50,10 @@ public class SearchUsersTool implements AiTool<UserIntent> {
                 name(),
                 type(),
                 "searched " + users.size() + " users from " + result.candidateCount()
-                        + " candidates, degraded=" + result.degraded(),
+                        + " candidates, degraded=" + result.degraded()
+                        + ", semanticUsed=" + result.semanticUsed()
+                        + ", partialDegraded=" + result.partialDegraded()
+                        + ", degradedCandidates=" + result.degradedCandidateCount(),
                 users
         );
     }

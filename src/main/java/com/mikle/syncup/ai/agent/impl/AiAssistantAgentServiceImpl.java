@@ -20,6 +20,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -42,12 +43,14 @@ public class AiAssistantAgentServiceImpl implements AiAssistantAgentService {
 
     @Override
     public Optional<AiChatResponseVO> chat(String message, AiChatSession session, User loginUser) {
+        Objects.requireNonNull(session, "session must not be null");
+        Objects.requireNonNull(session.getId(), "session.id must not be null");
         if (!aiAgentProperties.available()
                 || StringUtils.isBlank(message)
                 || message.length() > aiAgentProperties.getMaxInputLength()) {
             return Optional.empty();
         }
-        String conversationId = session == null ? "stateless" : session.getConversationId();
+        String conversationId = session.getConversationId();
         String modelMessage = workingMemoryService.buildModelContext(session, loginUser, message);
         aiAgentToolContext.start(conversationId, loginUser, message);
         try {

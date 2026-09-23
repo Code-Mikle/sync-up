@@ -1,6 +1,7 @@
 package com.mikle.syncup.ai.service.chat.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -135,7 +136,7 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
                 .gt("id", afterMessageId)
                 .le("id", lastClosedMessageId)
                 .orderByAsc("id")
-                .last("limit " + Math.max(1, Math.min(limit, 200))));
+                .last("limit " + Math.clamp(limit, 1, 200)));
     }
 
     @Override
@@ -246,7 +247,7 @@ public class AiChatMessageServiceImpl extends ServiceImpl<AiChatMessageMapper, A
         }
         Date messageTime = message.getCreateTime() == null ? new Date() : message.getCreateTime();
         int updated = aiChatSessionMapper.update(null,
-                new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<AiChatSession>()
+                new UpdateWrapper<AiChatSession>()
                         .set("lastMessageAt", messageTime)
                         .eq("id", session.getId())
                         .eq("userId", loginUser.getId()));

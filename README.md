@@ -227,24 +227,6 @@ npm.cmd run build
 
 测试分层、测试数据库要求和数据隔离规则见 [测试指南](docs/testing.md)。
 
-## 项目文档
-
-| 文档 | 内容 |
-| --- | --- |
-| [架构说明](docs/architecture.md) | 模块边界、Agent 安全、事务、记忆与推荐设计 |
-| [记忆机制设计](docs/design/memory.md) | Summary、Episode、画像、版本和异步任务详细设计 |
-| [开发指南](docs/development.md) | 环境配置、启动、数据库初始化和常见问题 |
-| [测试指南](docs/testing.md) | 测试分层、执行方式、数据库隔离和真实评测入口 |
-| [AI 评测方案](docs/ai-evaluation.md) | 数据集、指标、模型版本、运行器与第一版基线 |
-| [后续路线](docs/roadmap.md) | 当前边界和后续可选演进方向 |
-
-## 当前边界
-
-- 当前按照中小型项目规模设计，采用模块化单体和本地事务。
-- 向量排序在应用内对有限候选集计算，不依赖独立向量数据库。
-- 真实模型评测需要手动开启，不放入普通 CI 或默认测试流程。
-- 当前没有公开部署的在线演示环境。
-
 ## License
 
 本项目基于 [Apache License 2.0](LICENSE) 开源。

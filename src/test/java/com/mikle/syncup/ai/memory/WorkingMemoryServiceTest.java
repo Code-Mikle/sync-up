@@ -20,6 +20,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -65,15 +66,16 @@ class WorkingMemoryServiceTest {
     }
 
     @Test
-    void buildModelContext_withoutSession_shouldContainTimeAndCurrentQuestionWithoutDependencies() {
-        String currentQuestion = "这个周末想找羽毛球搭子";
+    void buildModelContext_withoutPersistedSession_shouldFailFast() {
+        NullPointerException missingSession = assertThrows(NullPointerException.class,
+                () -> service.buildModelContext(null, loginUser, "当前问题"));
+        AiChatSession transientSession = new AiChatSession();
+        NullPointerException missingSessionId = assertThrows(NullPointerException.class,
+                () -> service.buildModelContext(transientSession, loginUser, "当前问题"));
 
-        String context = service.buildModelContext(null, loginUser, currentQuestion);
-
-        assertTrue(context.contains("当前服务端时间："));
-        assertTrue(context.contains("当前用户原始需求：" + currentQuestion));
-        assertEquals(context.indexOf(currentQuestion), context.lastIndexOf(currentQuestion));
-        verifyNoInteractions(chatMessageService, userProfileService);
+        assertEquals("session must not be null", missingSession.getMessage());
+        assertEquals("session.id must not be null", missingSessionId.getMessage());
+        verifyNoInteractions(chatMessageService, chatSessionService, sessionSummaryService, userProfileService);
     }
 
     @Test

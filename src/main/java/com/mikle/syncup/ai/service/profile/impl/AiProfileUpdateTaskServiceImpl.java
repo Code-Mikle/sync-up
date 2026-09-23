@@ -9,6 +9,7 @@ import com.mikle.syncup.ai.mapper.AiUserProfileMapper;
 import com.mikle.syncup.ai.model.entity.AiProfileUpdateTask;
 import com.mikle.syncup.ai.model.entity.AiUserEpisode;
 import com.mikle.syncup.ai.model.entity.AiUserProfileEntity;
+import com.mikle.syncup.ai.model.enums.EpisodePriority;
 import com.mikle.syncup.ai.model.enums.EpisodeStatus;
 import com.mikle.syncup.ai.model.enums.MemoryTaskStatus;
 import com.mikle.syncup.ai.model.enums.ProfileType;
@@ -40,16 +41,21 @@ public class AiProfileUpdateTaskServiceImpl implements AiProfileUpdateTaskServic
     public void enqueueIfNecessary(long userId, ProfileType profileType,
                                    ProfileUpdateTriggerType triggerType, boolean force) {
         if (userId <= 0 || profileType == null || triggerType == null) return;
+        List<AiUserEpisode> pending = episodeMapper.selectList(new QueryWrapper<AiUserEpisode>()
+                .eq("userId", userId).eq("profileType", profileType.name())
+                .eq("status", EpisodeStatus.PENDING.name()).orderByAsc("id").last("limit 500"));
+        boolean hasImmediateEvidence = pending.stream()
+                .anyMatch(episode -> EpisodePriority.IMMEDIATE.name().equals(episode.getPriority()));
+        ProfileUpdateTriggerType effectiveTriggerType = resolveTriggerType(triggerType, hasImmediateEvidence);
+        boolean effectiveForce = force || hasImmediateEvidence;
+
         long active = taskMapper.selectCount(new QueryWrapper<AiProfileUpdateTask>()
                 .eq("userId", userId).eq("profileType", profileType.name())
                 .in("status", MemoryTaskStatus.PENDING.name(), MemoryTaskStatus.PROCESSING.name()));
         if (active > 0) return;
 
-        List<AiUserEpisode> pending = episodeMapper.selectList(new QueryWrapper<AiUserEpisode>()
-                .eq("userId", userId).eq("profileType", profileType.name())
-                .eq("status", EpisodeStatus.PENDING.name()).orderByAsc("id").last("limit 500"));
         long evidenceGroups = pending.stream().map(AiUserEpisode::getEvidenceGroupKey).distinct().count();
-        if (!force && evidenceGroups < properties.getProfileUpdate().getDefaultEvidenceThreshold()) return;
+        if (!effectiveForce && evidenceGroups < properties.getProfileUpdate().getDefaultEvidenceThreshold()) return;
 
         AiUserProfileEntity profile = profileMapper.selectOne(new QueryWrapper<AiUserProfileEntity>()
                 .eq("userId", userId).last("limit 1"));
@@ -58,12 +64,12 @@ public class AiProfileUpdateTaskServiceImpl implements AiProfileUpdateTaskServic
                 .map(episode -> episode.getId() + ":" + episode.getDedupeHash())
                 .reduce((left, right) -> left + "|" + right)
                 .orElse("none");
-        String snapshot = "version:" + expectedVersion + "|trigger:" + triggerType.name()
+        String snapshot = "version:" + expectedVersion + "|trigger:" + effectiveTriggerType.name()
                 + "|evidence:" + evidenceSnapshot;
         AiProfileUpdateTask task = new AiProfileUpdateTask();
         task.setUserId(userId);
         task.setProfileType(profileType.name());
-        task.setTriggerType(triggerType.name());
+        task.setTriggerType(effectiveTriggerType.name());
         task.setTargetEvidenceDigest(textHashService.sha256(snapshot));
         task.setExpectedProfileVersion(expectedVersion);
         task.setStatus(MemoryTaskStatus.PENDING.name());
@@ -84,7 +90,7 @@ public class AiProfileUpdateTaskServiceImpl implements AiProfileUpdateTaskServic
 
     @Override
     public void enqueueRebuildAll(long userId, ProfileUpdateTriggerType triggerType) {
-        for (ProfileType type : ProfileType.values()) enqueueIfNecessary(userId, type, triggerType, true);
+        enqueueIfNecessary(userId, ProfileType.ACTIVITY_PREFERENCE, triggerType, true);
     }
 
     @Override
@@ -109,5 +115,18 @@ public class AiProfileUpdateTaskServiceImpl implements AiProfileUpdateTaskServic
         taskMapper.update(null, new UpdateWrapper<AiProfileUpdateTask>()
                 .set("status", MemoryTaskStatus.SUPERSEDED.name()).eq("userId", userId)
                 .in("status", MemoryTaskStatus.PENDING.name(), MemoryTaskStatus.PROCESSING.name()));
+    }
+
+    private ProfileUpdateTriggerType resolveTriggerType(ProfileUpdateTriggerType requested,
+                                                         boolean hasImmediateEvidence) {
+        if (!hasImmediateEvidence || isFullRebuildTrigger(requested)) {
+            return requested;
+        }
+        return ProfileUpdateTriggerType.IMMEDIATE;
+    }
+
+    private boolean isFullRebuildTrigger(ProfileUpdateTriggerType triggerType) {
+        return triggerType == ProfileUpdateTriggerType.SELF_INTRODUCTION_CHANGED
+                || triggerType == ProfileUpdateTriggerType.SOURCE_DELETED;
     }
 }

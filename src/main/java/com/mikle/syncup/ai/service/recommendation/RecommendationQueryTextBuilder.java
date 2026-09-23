@@ -39,6 +39,7 @@ public class RecommendationQueryTextBuilder {
     }
 
     public String build(UserIntent intent, AiUserProfileEntity profile) {
+        // 本次明确需求具有最高优先级，不与可能已经过期或冲突的长期画像直接拼接。
         if (intent != null && StringUtils.isNotBlank(intent.getProfile())) {
             return "本次搭子需求：" + intent.getProfile().trim();
         }

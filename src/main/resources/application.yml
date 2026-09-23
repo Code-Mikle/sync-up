@@ -50,7 +50,7 @@ sync-up:
       chat-history-retention-days: ${SYNC_UP_AI_MEMORY_CHAT_HISTORY_RETENTION_DAYS:365}
       working-memory:
         recent-message-count: ${SYNC_UP_AI_MEMORY_RECENT_MESSAGE_COUNT:20}
-        summary-batch-size: ${SYNC_UP_AI_MEMORY_SUMMARY_BATCH_SIZE:10}
+        summary-trigger-message-count: ${SYNC_UP_AI_MEMORY_SUMMARY_TRIGGER_MESSAGE_COUNT:10}
         summary-input-max-tokens: ${SYNC_UP_AI_MEMORY_SUMMARY_INPUT_MAX_TOKENS:4000}
         max-context-tokens: ${SYNC_UP_AI_MEMORY_MAX_CONTEXT_TOKENS:6000}
         summary-max-chars: ${SYNC_UP_AI_MEMORY_SUMMARY_MAX_CHARS:1500}

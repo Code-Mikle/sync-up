@@ -242,7 +242,8 @@ public class AiMemoryTaskProcessorServiceImpl implements AiMemoryTaskProcessorSe
 
         int nextVersion = prepared.expectedVersion() + 1;
         AiUserProfileEntity profile = current == null ? new AiUserProfileEntity() : current;
-        boolean rebuildPending = shouldRemainRebuildRequired(task);
+        ProfileType nextRebuildDimension = nextFullRebuildDimension(task);
+        boolean rebuildPending = nextRebuildDimension != null || shouldRemainRebuildRequired(task);
         applyGeneratedProfile(profile, prepared, nextVersion, rebuildPending);
         if (current == null) {
             profileMapper.insert(profile);
@@ -268,6 +269,10 @@ public class AiMemoryTaskProcessorServiceImpl implements AiMemoryTaskProcessorSe
                 .set("status", MemoryTaskStatus.SUPERSEDED.name())
                 .eq("userId", prepared.userId()).eq("profileType", prepared.profileType().name())
                 .eq("status", MemoryTaskStatus.PENDING.name()).ne("id", task.getId()));
+        if (nextRebuildDimension != null) {
+            profileTaskService.enqueueIfNecessary(prepared.userId(), nextRebuildDimension,
+                    ProfileUpdateTriggerType.valueOf(task.getTriggerType()), true);
+        }
     }
 
     private void validateEvidenceSnapshot(PreparedProfile prepared) {
@@ -463,6 +468,7 @@ public class AiMemoryTaskProcessorServiceImpl implements AiMemoryTaskProcessorSe
         List<GeneratedEpisode> generated = extraction == null || extraction.getEpisodes() == null
                 ? List.of() : extraction.getEpisodes();
         for (GeneratedEpisode candidate : generated) {
+            applyDeterministicPriority(candidate);
             validateEpisode(candidate, userMessageIds, correctionCandidatesById, task.getSourceType());
             AiUserEpisode episode = new AiUserEpisode();
             episode.setUserId(task.getUserId());
@@ -486,6 +492,34 @@ public class AiMemoryTaskProcessorServiceImpl implements AiMemoryTaskProcessorSe
             try { episodeMapper.insert(episode); saved.add(episode); } catch (DuplicateKeyException ignored) { }
         }
         return saved;
+    }
+
+    private void applyDeterministicPriority(GeneratedEpisode episode) {
+        if (episode == null) return;
+        boolean correction = EpisodeSignalType.CORRECTION.name().equals(episode.getSignalType());
+        boolean explicitInteractionPreference = ProfileType.AI_INTERACTION_PREFERENCE.name()
+                .equals(episode.getProfileType())
+                && EpisodeSignalType.EXPLICIT.name().equals(episode.getSignalType());
+        if (correction || explicitInteractionPreference) {
+            episode.setPriority(EpisodePriority.IMMEDIATE.name());
+        }
+    }
+
+    private ProfileType nextFullRebuildDimension(AiProfileUpdateTask task) {
+        if (task == null || !isFullRebuildTrigger(task.getTriggerType())) return null;
+        ProfileType current = ProfileType.valueOf(task.getProfileType());
+        return switch (current) {
+            case ACTIVITY_PREFERENCE -> ProfileType.SOCIAL_PERSONALITY;
+            case SOCIAL_PERSONALITY -> ProfileType.PARTNER_PREFERENCE;
+            case PARTNER_PREFERENCE -> ProfileType.ACTIVITY_CONSTRAINT_HABIT;
+            case ACTIVITY_CONSTRAINT_HABIT -> ProfileType.AI_INTERACTION_PREFERENCE;
+            case AI_INTERACTION_PREFERENCE -> null;
+        };
+    }
+
+    private boolean isFullRebuildTrigger(String triggerType) {
+        return ProfileUpdateTriggerType.SELF_INTRODUCTION_CHANGED.name().equals(triggerType)
+                || ProfileUpdateTriggerType.SOURCE_DELETED.name().equals(triggerType);
     }
 
     private Date observedAt(List<AiChatMessage> messages) {

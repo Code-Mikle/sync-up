@@ -55,7 +55,7 @@ class SessionSummaryServiceTest {
     void setUp() {
         properties = new AiMemoryProperties();
         properties.getWorkingMemory().setRecentMessageCount(2);
-        properties.getWorkingMemory().setSummaryBatchSize(2);
+        properties.getWorkingMemory().setSummaryTriggerMessageCount(2);
         properties.getWorkingMemory().setMaxContextTokens(1000);
         properties.getWorkingMemory().setSummaryInputMaxTokens(1000);
         properties.getWorkingMemory().setSummaryMaxChars(200);
@@ -92,7 +92,7 @@ class SessionSummaryServiceTest {
         AiChatSession current = session(10L, 8001L, 0L, 3L, null);
         when(summaryGenerator.isAvailable()).thenReturn(true);
         when(chatSessionService.getById(10L)).thenReturn(current);
-        when(chatMessageService.listClosedMessages(10L, 0L, 3L, 104)).thenReturn(List.of(
+        when(chatMessageService.listClosedMessages(10L, 0L, 3L, 200)).thenReturn(List.of(
                 message(1L, "user", "消息一"),
                 message(2L, "assistant", "消息二"),
                 message(3L, "user", "消息三")
@@ -192,7 +192,7 @@ class SessionSummaryServiceTest {
         AiChatSession current = session(10L, 8001L, 0L, 4L, "旧摘要");
         when(summaryGenerator.isAvailable()).thenReturn(true);
         when(chatSessionService.getById(10L)).thenReturn(current);
-        when(chatMessageService.listClosedMessages(10L, 0L, 4L, 104)).thenReturn(fourMessages());
+        when(chatMessageService.listClosedMessages(10L, 0L, 4L, 200)).thenReturn(fourMessages());
         IllegalStateException failure = new IllegalStateException("model timeout");
         when(summaryGenerator.summarize(any())).thenThrow(failure);
 
@@ -224,7 +224,7 @@ class SessionSummaryServiceTest {
         AiChatSession current = session(10L, 8001L, 0L, 3L, null);
         when(summaryGenerator.isAvailable()).thenReturn(true);
         when(chatSessionService.getById(10L)).thenReturn(current);
-        when(chatMessageService.listClosedMessages(10L, 0L, 1L, 104)).thenReturn(List.of(
+        when(chatMessageService.listClosedMessages(10L, 0L, 1L, 200)).thenReturn(List.of(
                 message(1L, "user", "即将被上下文裁剪的消息")
         ));
         when(summaryGenerator.summarize(any())).thenReturn("预算兜底摘要");
@@ -251,7 +251,7 @@ class SessionSummaryServiceTest {
         when(summaryGenerator.isAvailable()).thenReturn(true);
         when(chatSessionService.getById(current.getId())).thenReturn(current);
         when(chatMessageService.listClosedMessages(
-                current.getId(), current.getLastSummaryMessageId(), current.getLastClosedMessageId(), 104))
+                current.getId(), current.getLastSummaryMessageId(), current.getLastClosedMessageId(), 200))
                 .thenReturn(messages);
         when(summaryGenerator.summarize(any())).thenReturn(generated);
         when(summaryGenerator.modelName()).thenReturn("summary-model");

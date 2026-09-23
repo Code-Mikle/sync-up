@@ -16,3 +16,5 @@ priority 只能为 NORMAL、IMMEDIATE。
 6. 只有用户明确纠正且“可纠正的历史证据”中存在可靠对应项时，才填写 supersededEpisodeIds；其余情况必须为空数组，禁止猜测 ID。
 7. 每条 Episode 只归属一个画像维度。同一段证据同时包含不同维度时，拆成多条 Episode，并可引用同一个用户消息 id。例如“喜欢轻量徒步”属于 ACTIVITY_PREFERENCE，“不参加竞速或高强度队伍”属于 ACTIVITY_CONSTRAINT_HABIT，不能合并在同一条活动偏好 Episode 中。
 8. 时间、预算、活动时长、强度、出行范围和“不参加某类活动”等限制归入 ACTIVITY_CONSTRAINT_HABIT；喜欢或经常参加的活动归入 ACTIVITY_PREFERENCE。
+9. 以下强信号必须使用 priority=IMMEDIATE：用户明确纠正历史信息；用户明确要求 AI 改变回答方式；用户明确表达强烈排斥；用户明确表示某项长期习惯已经改变。其他普通证据使用 priority=NORMAL。
+10. signalType=CORRECTION 的 Episode 必须同时使用 priority=IMMEDIATE；用户明确提出回答长短、语气、结构等要求时，归入 AI_INTERACTION_PREFERENCE，并使用 signalType=EXPLICIT、priority=IMMEDIATE。
